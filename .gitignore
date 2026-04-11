@@ -8,3 +8,33 @@ wheels/
 
 # Virtual environments
 .venv
+
+# uv
+.uv-cache/
+uv-cache/
+
+# Node.js dependencies
+node_modules/
+
+# Local runtime artifacts
+.runtime/
+
+# Local database configuration and runtime files
+backend/config/database.local.yaml
+backend/tests/.tmp/
+*.db
+*.sqlite
+*.sqlite3
+
+# Pytest cache / temporary directories
+.pytest_cache/
+pytest-cache-files-*/
+backend/pytest-cache-files-*/
+
+# Optional local notes / workflow docs
+项目知识库仓使用方式.md
+主工程仓 + 知识库仓如何联动更新的工作流规范.md
+双仓联动工作流规范_完整版.md
+
+# Optional scratch tests folder at project root
+tests/

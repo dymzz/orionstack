@@ -46,3 +46,23 @@ orionstack/
 - `backend/app/workflows/knowledge_assistant/` 中补 LangGraph 工作流
 - `backend/app/knowledge/` 中补文档接入、索引与检索实现
 - `frontend/src/pages/` 中补知识助手与文档管理页面
+
+## 运行手册
+
+统一运行与迁移流程见：
+
+- `docs/engineering/runbook.md`
+
+## 快速联调
+
+在仓库根目录执行：
+
+```powershell
+.\scripts\dev-up.ps1
+```
+
+停止：
+
+```powershell
+.\scripts\dev-down.ps1
+```

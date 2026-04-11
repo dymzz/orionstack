@@ -20,3 +20,18 @@
 - `app/integrations/`: 外部系统与模型集成
 - `app/governance/`: 日志、审计、反馈
 - `app/core/`: 配置、依赖注入、公共工具
+
+## 数据库配置
+
+- 默认读取 `backend/config/database.local.yaml`
+- 测试读取 `backend/config/database.test.yaml`（SQLite）
+- 可通过环境变量覆盖配置文件路径：
+  - `ORIONSTACK_DB_CONFIG=<yaml-path>`
+
+本地 PostgreSQL 配置建议从 `backend/config/database.local.yaml.example` 复制后修改。
+
+## 运行手册
+
+完整运行、测试与迁移命令见：
+
+- `../docs/engineering/runbook.md`

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
-from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse
+from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, QAHistoryResponse
 from app.services.qa_service import QAService
 
 router = APIRouter(tags=["qa"])
@@ -13,10 +14,14 @@ def ask_question(payload: AskQuestionRequest) -> AskQuestionResponse:
 
 
 @router.post("/qa/ask-stream")
-def ask_question_stream(payload: AskQuestionRequest) -> dict:
-    return {"message": "SSE placeholder", "session_id": payload.session_id}
+def ask_question_stream(payload: AskQuestionRequest) -> StreamingResponse:
+    return StreamingResponse(
+        service.ask_stream_events(payload),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
-@router.get("/qa/history/{session_id}")
-def get_qa_history(session_id: str) -> dict:
-    return {"session_id": session_id, "items": []}
+@router.get("/qa/history/{session_id}", response_model=QAHistoryResponse)
+def get_qa_history(session_id: str) -> QAHistoryResponse:
+    return service.list_history(session_id)

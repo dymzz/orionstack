@@ -16,6 +16,7 @@ param(
     [switch]$NoRead,
     [switch]$PersistUser,
     [switch]$RunRepomix,
+    [switch]$Easy,
     [switch]$Interactive,
     [switch]$CommitChanges,
     [switch]$StageAll
@@ -23,6 +24,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 
 function Write-Section([string]$Title) {
     Write-Host ""
@@ -81,6 +85,11 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
     [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
+function Get-PathLabel([string]$PathValue) {
+    $leaf = Split-Path $PathValue -Leaf
+    return [System.IO.Path]::GetFileNameWithoutExtension($leaf)
+}
+
 function Resolve-KbPath([string]$CandidatePath) {
     if (-not [string]::IsNullOrWhiteSpace($CandidatePath)) {
         return (Resolve-Path $CandidatePath).Path
@@ -95,11 +104,44 @@ function Resolve-KbPath([string]$CandidatePath) {
     throw "KB path not found. Pass -KbPath or set ORIONSTACK_KB_PATH."
 }
 
+function Invoke-ProcessCapture([string]$FilePath, [string[]]$ArgumentList) {
+    $resolvedCommand = Get-Command $FilePath -ErrorAction Stop
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $resolvedCommand.Source
+    $startInfo.WorkingDirectory = (Get-Location).Path
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+    $startInfo.Arguments = (
+        $ArgumentList |
+        ForEach-Object {
+            if ($_ -match '[\s"]') {
+                '"' + ($_ -replace '"', '\"') + '"'
+            }
+            else {
+                $_
+            }
+        }
+    ) -join " "
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    return [pscustomobject]@{
+        ExitCode = $process.ExitCode
+        StdOut   = $stdout
+        StdErr   = $stderr
+    }
+}
+
 function Get-CommandOutput([string]$FilePath, [string[]]$ArgumentList) {
     try {
-        $output = & $FilePath @ArgumentList 2>$null
-        if ($LASTEXITCODE -eq 0 -and $null -ne $output) {
-            return ($output | Out-String).Trim()
+        $result = Invoke-ProcessCapture -FilePath $FilePath -ArgumentList $ArgumentList
+        if ($result.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($result.StdOut)) {
+            return $result.StdOut.Trim()
         }
     }
     catch {}
@@ -107,7 +149,25 @@ function Get-CommandOutput([string]$FilePath, [string[]]$ArgumentList) {
     return $null
 }
 
+function Get-GitLines([string[]]$ArgumentList) {
+    $result = Invoke-ProcessCapture -FilePath "git" -ArgumentList $ArgumentList
+    if ($result.ExitCode -ne 0) {
+        return @()
+    }
+
+    return @(
+        $result.StdOut -split "`r?`n" |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim() }
+    )
+}
+
 function Get-MainRepoRoot() {
+    $scriptRepoRoot = Split-Path $PSScriptRoot -Parent
+    if (Test-Path (Join-Path $scriptRepoRoot ".git")) {
+        return $scriptRepoRoot
+    }
+
     $repoRoot = Get-CommandOutput "git" @("rev-parse", "--show-toplevel")
     if ([string]::IsNullOrWhiteSpace($repoRoot)) {
         throw "Not inside a git repository."
@@ -193,7 +253,7 @@ function Get-ChangedFiles([string]$Ref) {
     }
 
     if ($refExists -and $headExists) {
-        $sinceFiles = & git diff --name-only $Ref HEAD 2>$null
+        $sinceFiles = Get-GitLines @("diff", "--name-only", $Ref, "HEAD")
         foreach ($file in $sinceFiles) {
             if (-not [string]::IsNullOrWhiteSpace($file)) {
                 $null = $files.Add($file.Trim())
@@ -202,9 +262,9 @@ function Get-ChangedFiles([string]$Ref) {
     }
 
     $workingTreeFiles = @(
-        (& git diff --name-only 2>$null),
-        (& git diff --cached --name-only 2>$null),
-        (& git ls-files --others --exclude-standard 2>$null)
+        (Get-GitLines @("diff", "--name-only")),
+        (Get-GitLines @("diff", "--cached", "--name-only")),
+        (Get-GitLines @("ls-files", "--others", "--exclude-standard"))
     )
 
     foreach ($group in $workingTreeFiles) {
@@ -267,6 +327,61 @@ function Get-KbSuggestions([string[]]$ChangedFiles) {
     }
 
     return @($suggestions | Sort-Object)
+}
+
+function Get-DefaultUpdatedValue([string[]]$Suggestions) {
+    $labels = New-Object System.Collections.Generic.List[string]
+
+    foreach ($item in $Suggestions) {
+        $null = $labels.Add((Get-PathLabel $item))
+        if ($labels.Count -ge 4) {
+            break
+        }
+    }
+
+    if ($labels.Count -eq 0) {
+        return "project_index + repo_map"
+    }
+
+    return ($labels -join " + ")
+}
+
+function Get-DefaultTopic([string[]]$ChangedFiles, [string]$CurrentCommit) {
+    if ($CurrentCommit -eq "tbd" -and $ChangedFiles.Count -gt 10) {
+        return "bootstrap repo"
+    }
+
+    foreach ($file in $ChangedFiles) {
+        if ($file -match "^backend/app/api/") {
+            return "api updates"
+        }
+
+        if ($file -match "^backend/app/workflows/") {
+            return "workflow updates"
+        }
+
+        if ($file -match "^frontend/src/") {
+            return "frontend updates"
+        }
+
+        if ($file -match "^backend/app/knowledge/") {
+            return "knowledge updates"
+        }
+    }
+
+    return "project changes"
+}
+
+function Get-DefaultMainCommitSubject([string]$Topic, [string]$CurrentCommit) {
+    if ($CurrentCommit -eq "tbd" -and $Topic -eq "bootstrap repo") {
+        return "chore: bootstrap orionstack"
+    }
+
+    return "chore: sync $Topic"
+}
+
+function Get-DefaultKbCommitSubject([string]$Topic) {
+    return "docs: sync $Topic from orionstack"
 }
 
 function Build-CommitMessage(
@@ -433,6 +548,7 @@ function Invoke-GitCommit(
 }
 
 $mainRepoRoot = Get-MainRepoRoot
+Set-Location $mainRepoRoot
 $KbPath = Resolve-KbPath $KbPath
 
 if (-not (Test-Path (Join-Path $KbPath "context"))) {
@@ -449,10 +565,49 @@ $mainCommitMessage = $null
 $kbCommitMessage = $null
 $confirmCommit = $false
 $generateKbDraft = $false
+$mainRefs = Get-MainRefs
+$changes = Get-ChangedFiles $Since
+$suggestions = Get-KbSuggestions $changes.Files
+$defaultRefKb = if ($RefKb) { $RefKb } else { "context/project_index.md" }
+$defaultUpdatedKb = if ($UpdatedKb) { $UpdatedKb } else { Get-DefaultUpdatedValue $suggestions }
+$defaultTopic = Get-DefaultTopic -ChangedFiles $changes.Files -CurrentCommit $mainRefs.Commit
+$defaultMainCommitSubject = if ($CommitSubject) { $CommitSubject } else { Get-DefaultMainCommitSubject -Topic $defaultTopic -CurrentCommit $mainRefs.Commit }
+$defaultKbCommitSubject = if ($KbCommitSubject) { $KbCommitSubject } else { Get-DefaultKbCommitSubject -Topic $defaultTopic }
+$defaultKbUpdated = if ($KbUpdated) { $KbUpdated } else { $defaultUpdatedKb }
 
 $env:ORIONSTACK_KB_PATH = $KbPath
 if ($PersistUser) {
     [Environment]::SetEnvironmentVariable("ORIONSTACK_KB_PATH", $KbPath, "User")
+}
+
+if ($Easy -and -not $PSBoundParameters.ContainsKey("NoRead") -and [string]::IsNullOrWhiteSpace($Query)) {
+    $NoRead = $true
+}
+
+if ($Easy) {
+    Write-Section "EASY MODE"
+    Write-Host "Press Enter to accept the suggested default." -ForegroundColor DarkGray
+    Write-Host "current_version: $currentVersion"
+    Write-Host "suggested_ref_kb: $defaultRefKb"
+    Write-Host "suggested_updated: $defaultUpdatedKb"
+
+    $Version = Read-OptionalValue -Prompt "New version (leave blank to keep current)" -Default $Version
+
+    if (Read-YesNo -Prompt "Commit main repo now?" -Default $true) {
+        $CommitChanges = $true
+        $CommitSubject = Read-RequiredValue -Prompt "Main commit subject" -Default $defaultMainCommitSubject
+        $RefKb = Read-OptionalValue -Prompt "Main ref-kb" -Default $defaultRefKb
+        $UpdatedKb = Read-OptionalValue -Prompt "Main updated" -Default $defaultUpdatedKb
+        $StageAll = Read-YesNo -Prompt "Run git add -A?" -Default $true
+        $confirmCommit = Read-YesNo -Prompt "Run git commit now?" -Default $true
+    }
+
+    if (Read-YesNo -Prompt "Generate KB commit draft?" -Default $true) {
+        $generateKbDraft = $true
+        $KbCommitSubject = Read-RequiredValue -Prompt "KB commit subject" -Default $defaultKbCommitSubject
+        $KbUpdated = Read-OptionalValue -Prompt "KB updated" -Default $defaultKbUpdated
+        $RefMain = Read-OptionalValue -Prompt "ref-main override (leave blank to use latest main commit)" -Default $RefMain
+    }
 }
 
 if ($Interactive) {
@@ -498,10 +653,6 @@ if (-not [string]::IsNullOrWhiteSpace($CommitSubject)) {
 if (-not [string]::IsNullOrWhiteSpace($KbCommitSubject)) {
     $generateKbDraft = $true
 }
-
-$mainRefs = Get-MainRefs
-$changes = Get-ChangedFiles $Since
-$suggestions = Get-KbSuggestions $changes.Files
 
 if (-not $NoRead -or -not [string]::IsNullOrWhiteSpace($Query)) {
     & (Join-Path $PSScriptRoot "load-kb-context.ps1") `

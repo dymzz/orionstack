@@ -1,5 +1,179 @@
+import math
+
+from app.knowledge.embeddings.embedding_service import EmbeddingBatch, EmbeddingService
+from app.knowledge.retrieval.rerank_service import RerankService
+from app.repositories.chunk_repository import ChunkRepository
+from app.repositories.document_repository import DocumentRepository
+from app.repositories.embedding_repository import EmbeddingRepository
+from app.repositories.pgvector_repository import PgVectorRepository
+
+
 class RetrievalService:
     """Retrieve relevant chunks for a question."""
 
-    def retrieve(self, question: str, document_ids: list[str] | None = None, top_k: int = 5) -> list[dict]:
-        return []
+    def __init__(self) -> None:
+        self.document_repository = DocumentRepository()
+        self.chunk_repository = ChunkRepository()
+        self.embedding_repository = EmbeddingRepository()
+        self.pgvector_repository = PgVectorRepository()
+        self.embedding_service = EmbeddingService()
+        self.rerank_service = RerankService()
+
+    def retrieve(
+        self,
+        question: str,
+        document_ids: list[str] | None = None,
+        top_k: int = 5,
+        use_rerank: bool = True,
+    ) -> list[dict]:
+        documents = self.document_repository.list(document_ids=document_ids)
+        document_names = {document.document_id: document.name for document in documents}
+        chunks = self.chunk_repository.list(document_ids=document_ids)
+        candidate_top_k = max(top_k, min(top_k * 4, 20))
+        if chunks:
+            query_embedding = self.embedding_service.embed_texts([question])
+            if query_embedding.vectors:
+                pgvector_results = self.pgvector_repository.search(
+                    query_vector=query_embedding.vectors[0],
+                    embedding_model=query_embedding.model,
+                    top_k=candidate_top_k,
+                    document_ids=document_ids,
+                )
+                if pgvector_results:
+                    return self._finalize_results(
+                        question=question,
+                        candidates=pgvector_results,
+                        top_k=top_k,
+                        use_rerank=use_rerank,
+                    )
+
+            vector_results = self._retrieve_by_embeddings(
+                query_embedding=query_embedding,
+                chunks=chunks,
+                document_names=document_names,
+                top_k=candidate_top_k,
+            )
+            if vector_results:
+                return self._finalize_results(
+                    question=question,
+                    candidates=vector_results,
+                    top_k=top_k,
+                    use_rerank=use_rerank,
+                )
+
+        keyword_results = self._retrieve_by_keywords(
+            question=question,
+            documents=documents,
+            top_k=candidate_top_k,
+        )
+        return self._finalize_results(
+            question=question,
+            candidates=keyword_results,
+            top_k=top_k,
+            use_rerank=use_rerank,
+        )
+
+    def _retrieve_by_embeddings(
+        self,
+        *,
+        query_embedding: EmbeddingBatch,
+        chunks: list,
+        document_names: dict[str, str],
+        top_k: int,
+    ) -> list[dict]:
+        if not query_embedding.vectors:
+            return []
+
+        chunk_ids = [chunk.chunk_id for chunk in chunks]
+        stored_embeddings = self.embedding_repository.list_for_chunks(
+            chunk_ids,
+            embedding_model=query_embedding.model,
+        )
+        if not stored_embeddings:
+            return []
+
+        vectors_by_chunk_id = {
+            embedding.chunk_id: embedding.vector_json
+            for embedding in stored_embeddings
+            if embedding.vector_json
+        }
+
+        results: list[dict] = []
+        query_vector = query_embedding.vectors[0]
+        for chunk in chunks:
+            vector = vectors_by_chunk_id.get(chunk.chunk_id)
+            if not vector:
+                continue
+            score = self._cosine_similarity(query_vector, vector)
+            if score <= 0:
+                continue
+            results.append(
+                {
+                    "document_id": chunk.document_id,
+                    "document_name": document_names.get(chunk.document_id, ""),
+                    "chunk_id": chunk.chunk_id,
+                    "snippet": chunk.snippet,
+                    "score": score,
+                }
+            )
+
+        results.sort(key=lambda item: item["score"], reverse=True)
+        return results[:top_k]
+
+    def _finalize_results(
+        self,
+        *,
+        question: str,
+        candidates: list[dict],
+        top_k: int,
+        use_rerank: bool,
+    ) -> list[dict]:
+        if not candidates:
+            return []
+        if not use_rerank:
+            return candidates[:top_k]
+        return self.rerank_service.rerank(question=question, candidates=candidates, top_k=top_k)
+
+    def _retrieve_by_keywords(self, question: str, documents: list, top_k: int) -> list[dict]:
+        tokens = [token for token in question.lower().split() if token]
+        results: list[dict] = []
+        for document in documents:
+            for chunk in document.chunks_json:
+                content = str(chunk.get("content", ""))
+                score = self._score_chunk(content, tokens)
+                if score <= 0:
+                    continue
+                results.append(
+                    {
+                        "document_id": document.document_id,
+                        "document_name": document.name,
+                        "chunk_id": str(chunk.get("chunk_id", "")),
+                        "snippet": str(chunk.get("snippet", "")),
+                        "score": score,
+                    }
+                )
+
+        results.sort(key=lambda item: item["score"], reverse=True)
+        return results[:top_k]
+
+    def _cosine_similarity(self, left: list[float], right: list[float]) -> float:
+        if len(left) != len(right):
+            return 0.0
+
+        numerator = sum(a * b for a, b in zip(left, right, strict=False))
+        left_norm = math.sqrt(sum(value * value for value in left))
+        right_norm = math.sqrt(sum(value * value for value in right))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return numerator / (left_norm * right_norm)
+
+    def _score_chunk(self, content: str, tokens: list[str]) -> float:
+        if not tokens:
+            return 0.0
+
+        haystack = content.lower()
+        score = 0.0
+        for token in tokens:
+            if token in haystack:
+                score += haystack.count(token)
+        return score

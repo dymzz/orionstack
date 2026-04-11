@@ -12,3 +12,7 @@ class SessionResponse(BaseModel):
     title: str
     scene: str
     created_at: datetime
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionResponse]
