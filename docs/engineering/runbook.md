@@ -239,6 +239,23 @@ $env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\databas
 ..\.venv\Scripts\python.exe -m alembic stamp <revision_id>
 ```
 
+## 6.2 迁移升降级冒烟（推荐每次大改后执行）
+
+在 `backend` 目录执行：
+
+```powershell
+cd backend
+$env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\database.local.yaml"
+
+# 记录当前版本（应看到 head）
+..\.venv\Scripts\python.exe -m alembic current
+
+# 回滚一个版本再升回 head，验证 upgrade/downgrade 均可执行
+..\.venv\Scripts\python.exe -m alembic downgrade -1
+..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\python.exe -m alembic current
+```
+
 ## 7. 故障排查
 
 1. `psql` 命令不可用：
@@ -252,3 +269,40 @@ $env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\databas
 
 4. `uv` 缓存目录权限问题：
 - 设置 `UV_CACHE_DIR` 到项目内目录再执行。
+
+## 8. Step 3（权限与治理）最小使用说明
+
+当前最小用户隔离方式：
+
+- 通过请求头 `X-User-Id` 传入用户标识
+- 未传时默认使用 `demo-user`
+
+示例：
+
+```powershell
+curl -H "X-User-Id: user-a" http://127.0.0.1:8000/api/v1/sessions
+curl -H "X-User-Id: user-a" "http://127.0.0.1:8000/api/v1/audit/logs?limit=20&offset=0"
+```
+
+审计日志覆盖的关键事件（最小版）：
+
+- `session_created`
+- `document_uploaded` / `document_deleted` / `document_reindexed`
+- `qa_asked` / `qa_ask_failed` / `qa_stream_failed`
+- `feedback_submitted`
+
+### 8.1 Step 3 回归最小清单（建议提交前执行）
+
+在仓库根目录执行：
+
+```powershell
+# 使用项目内 uv 缓存目录，避免系统目录权限问题
+$env:UV_CACHE_DIR="D:\workspace\python\orionstack\.uv-cache"
+uv run pytest backend/tests -q
+```
+
+重点关注以下回归点：
+
+- 多用户隔离：`sessions/documents/qa/feedback/audit`
+- 问答失败回退契约：`/api/v1/qa/ask` 与 `/api/v1/qa/ask-stream`
+- Alembic：`upgrade -> downgrade -1 -> upgrade head`

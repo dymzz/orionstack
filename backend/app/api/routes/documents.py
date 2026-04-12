@@ -1,8 +1,10 @@
 import json
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from app.core.request_context import get_current_user_id
+from app.governance.audit_service import AuditService
 from app.api.schemas.document import (
     DeleteDocumentResponse,
     DocumentListResponse,
@@ -25,6 +27,7 @@ repository = DocumentRepository()
 index_job_repository = IndexJobRepository()
 ingestion_service = DocumentIngestionService()
 document_parser = DocumentParser()
+audit_service = AuditService()
 
 
 def build_index_job_response(job) -> IndexJobResponse | None:
@@ -57,10 +60,12 @@ def build_document_response(document) -> DocumentResponse:
 
 @router.post("/documents/upload", response_model=DocumentResponse)
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     source_type: str = Form(default="upload"),
 ) -> DocumentResponse:
+    owner_user_id = get_current_user_id(request)
     payload = await file.read()
     try:
         content = document_parser.parse(
@@ -69,36 +74,54 @@ async def upload_document(
             payload=payload,
         )
     except UnsupportedDocumentTypeError as exc:
+        audit_service.log(
+            owner_user_id=owner_user_id,
+            event_type="document_upload_rejected",
+            payload={"filename": file.filename or "", "reason": "unsupported_type"},
+        )
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     except MissingParserDependencyError as exc:
+        audit_service.log(
+            owner_user_id=owner_user_id,
+            event_type="document_upload_failed",
+            payload={"filename": file.filename or "", "reason": "missing_dependency"},
+        )
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     document = ingestion_service.register_upload(
         name=name or file.filename or "Untitled document",
         content=content,
         source_type=source_type,
+        owner_user_id=owner_user_id,
     )
     index_dispatcher.submit(document.document_id)
-    refreshed_document = repository.get(document.document_id)
+    refreshed_document = repository.get(document.document_id, owner_user_id=owner_user_id)
     if refreshed_document is None:
         raise HTTPException(status_code=500, detail="Document upload failed")
+    audit_service.log(
+        owner_user_id=owner_user_id,
+        event_type="document_uploaded",
+        payload={"document_id": refreshed_document.document_id, "source_type": refreshed_document.source_type},
+    )
 
     return build_document_response(refreshed_document)
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-def list_documents() -> DocumentListResponse:
+def list_documents(request: Request) -> DocumentListResponse:
+    owner_user_id = get_current_user_id(request)
     return DocumentListResponse(
         items=[
             build_document_response(document)
-            for document in repository.list()
+            for document in repository.list(owner_user_id=owner_user_id)
         ]
     )
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
-def get_document(document_id: str) -> DocumentResponse:
-    document = repository.get(document_id)
+def get_document(document_id: str, request: Request) -> DocumentResponse:
+    owner_user_id = get_current_user_id(request)
+    document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -106,8 +129,9 @@ def get_document(document_id: str) -> DocumentResponse:
 
 
 @router.get("/documents/{document_id}/index-job", response_model=IndexJobResponse)
-def get_latest_index_job(document_id: str) -> IndexJobResponse:
-    document = repository.get(document_id)
+def get_latest_index_job(document_id: str, request: Request) -> IndexJobResponse:
+    owner_user_id = get_current_user_id(request)
+    document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -118,17 +142,25 @@ def get_latest_index_job(document_id: str) -> IndexJobResponse:
 
 
 @router.get("/index-jobs/{job_id}", response_model=IndexJobResponse)
-def get_index_job(job_id: str) -> IndexJobResponse:
+def get_index_job(job_id: str, request: Request) -> IndexJobResponse:
+    owner_user_id = get_current_user_id(request)
     job = index_job_repository.get(job_id)
     if job is None:
+        raise HTTPException(status_code=404, detail="Index job not found")
+    document = repository.get(job.document_id, owner_user_id=owner_user_id)
+    if document is None:
         raise HTTPException(status_code=404, detail="Index job not found")
     return build_index_job_response(job)
 
 
 @router.get("/index-jobs/{job_id}/stream")
-def stream_index_job(job_id: str) -> StreamingResponse:
+def stream_index_job(job_id: str, request: Request) -> StreamingResponse:
+    owner_user_id = get_current_user_id(request)
     job = index_job_repository.get(job_id)
     if job is None:
+        raise HTTPException(status_code=404, detail="Index job not found")
+    document = repository.get(job.document_id, owner_user_id=owner_user_id)
+    if document is None:
         raise HTTPException(status_code=404, detail="Index job not found")
 
     def event_generator():
@@ -153,19 +185,31 @@ def stream_index_job(job_id: str) -> StreamingResponse:
 
 
 @router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
-def delete_document(document_id: str) -> DeleteDocumentResponse:
-    deleted = repository.delete(document_id)
+def delete_document(document_id: str, request: Request) -> DeleteDocumentResponse:
+    owner_user_id = get_current_user_id(request)
+    deleted = repository.delete(document_id, owner_user_id=owner_user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
+    audit_service.log(
+        owner_user_id=owner_user_id,
+        event_type="document_deleted",
+        payload={"document_id": document_id},
+    )
     return DeleteDocumentResponse(ok=True, document_id=document_id)
 
 
 @router.post("/documents/{document_id}/reindex", response_model=ReindexDocumentResponse)
-def reindex_document(document_id: str) -> ReindexDocumentResponse:
-    document = repository.get(document_id)
+def reindex_document(document_id: str, request: Request) -> ReindexDocumentResponse:
+    owner_user_id = get_current_user_id(request)
+    document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     job = index_dispatcher.submit(document_id)
+    audit_service.log(
+        owner_user_id=owner_user_id,
+        event_type="document_reindexed",
+        payload={"document_id": document_id, "job_id": job.job_id if job else ""},
+    )
     return ReindexDocumentResponse(
         document_id=document_id,
         status=job.status,

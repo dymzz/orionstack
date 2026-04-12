@@ -19,9 +19,11 @@ class SessionORM(Base):
     __tablename__ = "sessions"
     __table_args__ = (
         Index("ix_sessions_created_at", "created_at"),
+        Index("ix_sessions_owner_created_at", "owner_user_id", "created_at"),
     )
 
     session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_user_id: Mapped[str] = mapped_column(String(80), nullable=False, default="demo-user")
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     scene: Mapped[str] = mapped_column(String(100), nullable=False, default="knowledge_assistant")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -34,9 +36,11 @@ class DocumentORM(Base):
     __table_args__ = (
         Index("ix_documents_created_at", "created_at"),
         Index("ix_documents_status", "status"),
+        Index("ix_documents_owner_created_at", "owner_user_id", "created_at"),
     )
 
     document_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_user_id: Mapped[str] = mapped_column(String(80), nullable=False, default="demo-user")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False, default="upload")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="uploaded")
@@ -121,10 +125,12 @@ class QAHistoryORM(Base):
     __table_args__ = (
         CheckConstraint("latency_ms >= 0", name="ck_qa_history_latency_non_negative"),
         Index("ix_qa_history_session_created_at", "session_id", "created_at"),
+        Index("ix_qa_history_owner_created_at", "owner_user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner_user_id: Mapped[str] = mapped_column(String(80), nullable=False, default="demo-user")
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.session_id", ondelete="CASCADE"), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
@@ -145,11 +151,29 @@ class FeedbackORM(Base):
         CheckConstraint("rating IN ('up', 'down', 'neutral')", name="ck_feedback_rating_allowed"),
         Index("ix_feedback_session_created_at", "session_id", "created_at"),
         Index("ix_feedback_trace_id", "trace_id"),
+        Index("ix_feedback_owner_created_at", "owner_user_id", "created_at"),
     )
 
     feedback_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_user_id: Mapped[str] = mapped_column(String(80), nullable=False, default="demo-user")
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.session_id", ondelete="CASCADE"), nullable=False)
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
     rating: Mapped[str] = mapped_column(String(20), nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AuditLogORM(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_owner_created_at", "owner_user_id", "created_at"),
+        Index("ix_audit_logs_trace_id", "trace_id"),
+        Index("ix_audit_logs_event_type", "event_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[str] = mapped_column(String(80), nullable=False, default="demo-user")
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

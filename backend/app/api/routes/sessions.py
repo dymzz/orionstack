@@ -1,25 +1,35 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas.session import CreateSessionRequest, SessionListResponse, SessionResponse
+from app.core.request_context import get_current_user_id
+from app.governance.audit_service import AuditService
 from app.models.entities import SessionORM
 from app.repositories.session_repository import SessionRepository
 
 router = APIRouter(tags=["sessions"])
 repository = SessionRepository()
+audit_service = AuditService()
 
 
 @router.post("/sessions", response_model=SessionResponse)
-def create_session(payload: CreateSessionRequest) -> SessionResponse:
+def create_session(payload: CreateSessionRequest, request: Request) -> SessionResponse:
+    owner_user_id = get_current_user_id(request)
     session = repository.save(
         SessionORM(
             session_id=str(uuid4()),
+            owner_user_id=owner_user_id,
             title=payload.title,
             scene=payload.scene,
             created_at=datetime.now(UTC),
         )
+    )
+    audit_service.log(
+        owner_user_id=owner_user_id,
+        event_type="session_created",
+        payload={"session_id": session.session_id, "scene": session.scene},
     )
     return SessionResponse(
         session_id=session.session_id,
@@ -30,7 +40,8 @@ def create_session(payload: CreateSessionRequest) -> SessionResponse:
 
 
 @router.get("/sessions", response_model=SessionListResponse)
-def list_sessions() -> SessionListResponse:
+def list_sessions(request: Request) -> SessionListResponse:
+    owner_user_id = get_current_user_id(request)
     return SessionListResponse(
         items=[
             SessionResponse(
@@ -39,14 +50,15 @@ def list_sessions() -> SessionListResponse:
                 scene=session.scene,
                 created_at=session.created_at,
             )
-            for session in repository.list()
+            for session in repository.list(owner_user_id=owner_user_id)
         ]
     )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
-def get_session(session_id: str) -> SessionResponse:
-    session = repository.get(session_id)
+def get_session(session_id: str, request: Request) -> SessionResponse:
+    owner_user_id = get_current_user_id(request)
+    session = repository.get(session_id, owner_user_id=owner_user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 

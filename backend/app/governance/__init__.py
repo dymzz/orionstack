@@ -1,1 +1,1 @@
-"""Module placeholder."""
+"""Governance services."""

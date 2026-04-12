@@ -4,6 +4,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, CitationItem, QAHistoryItemResponse, QAHistoryResponse
+from app.governance.audit_service import AuditService
 from app.models.entities import QAHistoryORM
 from app.repositories.qa_history_repository import QAHistoryRepository
 from app.workflows.knowledge_assistant.workflow import KnowledgeAssistantWorkflow
@@ -13,38 +14,78 @@ class QAService:
     def __init__(self) -> None:
         self.workflow = KnowledgeAssistantWorkflow()
         self.history_repository = QAHistoryRepository()
+        self.audit_service = AuditService()
 
-    def ask(self, payload: AskQuestionRequest) -> AskQuestionResponse:
+    def ask(self, payload: AskQuestionRequest, *, owner_user_id: str) -> AskQuestionResponse:
         start = perf_counter()
         trace_id = str(uuid4())
-        workflow_state = self.workflow.run(self._build_state(payload, trace_id))
-        citations = self._citations_from_state(workflow_state)
-        answer = str(workflow_state.get("answer", "")).strip()
-        if not answer:
-            answer = self.workflow.build_fallback_answer(workflow_state)
-        answer_provider = self._resolve_answer_provider(
-            should_refuse=bool(workflow_state.get("should_refuse", False)),
-            has_answer=bool(answer),
+
+        try:
+            workflow_state = self.workflow.run(self._build_state(payload, trace_id))
+            citations = self._citations_from_state(workflow_state)
+            answer = str(workflow_state.get("answer", "")).strip()
+            if not answer:
+                answer = self.workflow.build_fallback_answer(workflow_state)
+            answer_provider = self._resolve_answer_provider(
+                should_refuse=bool(workflow_state.get("should_refuse", False)),
+                has_answer=bool(answer),
+            )
+            latency_ms = int((perf_counter() - start) * 1000)
+            response = AskQuestionResponse(
+                answer=answer,
+                citations=citations,
+                trace_id=trace_id,
+                latency_ms=latency_ms,
+                retrieval_confidence=float(workflow_state.get("retrieval_confidence", 0.0)),
+                refusal_reason=workflow_state.get("refusal_reason"),
+                need_human_review=bool(workflow_state.get("need_human_review", False)),
+                answer_provider=answer_provider,
+            )
+        except Exception:
+            latency_ms = int((perf_counter() - start) * 1000)
+            response = AskQuestionResponse(
+                answer="当前无法生成回答，请稍后重试。",
+                citations=[],
+                trace_id=trace_id,
+                latency_ms=latency_ms,
+                retrieval_confidence=0.0,
+                refusal_reason="system_error",
+                need_human_review=True,
+                answer_provider="error_fallback",
+            )
+            self.audit_service.log(
+                owner_user_id=owner_user_id,
+                event_type="qa_ask_failed",
+                trace_id=trace_id,
+                payload={"session_id": payload.session_id},
+            )
+
+        self._append_history(payload, response, owner_user_id=owner_user_id)
+        self.audit_service.log(
+            owner_user_id=owner_user_id,
+            event_type="qa_asked",
+            trace_id=response.trace_id,
+            payload={
+                "session_id": payload.session_id,
+                "citations_count": len(response.citations),
+                "answer_provider": response.answer_provider or "",
+                "stream": False,
+            },
         )
-        latency_ms = int((perf_counter() - start) * 1000)
-        response = AskQuestionResponse(
-            answer=answer,
-            citations=citations,
-            trace_id=trace_id,
-            latency_ms=latency_ms,
-            retrieval_confidence=float(workflow_state.get("retrieval_confidence", 0.0)),
-            refusal_reason=workflow_state.get("refusal_reason"),
-            need_human_review=bool(workflow_state.get("need_human_review", False)),
-            answer_provider=answer_provider,
-        )
-        self._append_history(payload, response)
         return response
 
-    def ask_stream_events(self, payload: AskQuestionRequest):
+    def ask_stream_events(self, payload: AskQuestionRequest, *, owner_user_id: str):
         start = perf_counter()
         trace_id = str(uuid4())
-        state = self.workflow.prepare(self._build_state(payload, trace_id))
-        citations = self._citations_from_state(state)
+        citations: list[CitationItem] = []
+        state: dict | None = None
+
+        try:
+            state = self.workflow.prepare(self._build_state(payload, trace_id))
+            citations = self._citations_from_state(state)
+        except Exception:
+            state = None
+
         yield self._sse_event(
             {
                 "type": "meta",
@@ -53,47 +94,113 @@ class QAService:
             }
         )
 
-        collected_answer: list[str] = []
-        stream_provider = "ollama_fallback"
+        if state is None:
+            fallback_answer = "当前无法生成回答，请稍后重试。"
+            for token in fallback_answer.split():
+                yield self._sse_event({"type": "token", "token": token + " "})
+            latency_ms = int((perf_counter() - start) * 1000)
+            final_response = AskQuestionResponse(
+                answer=fallback_answer,
+                citations=[],
+                trace_id=trace_id,
+                latency_ms=latency_ms,
+                retrieval_confidence=0.0,
+                refusal_reason="system_error",
+                need_human_review=True,
+                answer_provider="error_fallback",
+            )
+            self._append_history(payload, final_response, owner_user_id=owner_user_id)
+            self.audit_service.log(
+                owner_user_id=owner_user_id,
+                event_type="qa_stream_failed",
+                trace_id=trace_id,
+                payload={"session_id": payload.session_id},
+            )
+            yield self._sse_event({"type": "done", "stream_provider": "error_fallback", **final_response.model_dump()})
+            return
 
-        for token in self.workflow.stream_generate_tokens(state):
-            collected_answer.append(token)
-            yield self._sse_event({"type": "token", "token": token})
+        try:
+            collected_answer: list[str] = []
+            stream_provider = "ollama_fallback"
 
-        raw_answer = "".join(collected_answer).strip()
-        finalized_state = self.workflow.finalize(state, raw_answer)
-        answer = str(finalized_state.get("answer", "")).strip()
-        if not answer:
-            answer = self.workflow.build_fallback_answer(finalized_state)
-        if state.get("should_refuse"):
-            stream_provider = "guard_refusal"
-        elif raw_answer:
-            stream_provider = "langchain_or_ollama"
+            for token in self.workflow.stream_generate_tokens(state):
+                collected_answer.append(token)
+                yield self._sse_event({"type": "token", "token": token})
 
-        latency_ms = int((perf_counter() - start) * 1000)
-        final_response = AskQuestionResponse(
-            answer=answer,
-            citations=citations,
-            trace_id=trace_id,
-            latency_ms=latency_ms,
-            retrieval_confidence=float(finalized_state.get("retrieval_confidence", 0.0)),
-            refusal_reason=finalized_state.get("refusal_reason"),
-            need_human_review=bool(finalized_state.get("need_human_review", False)),
-            answer_provider=stream_provider,
+            raw_answer = "".join(collected_answer).strip()
+            finalized_state = self.workflow.finalize(state, raw_answer)
+            answer = str(finalized_state.get("answer", "")).strip()
+            if not answer:
+                answer = self.workflow.build_fallback_answer(finalized_state)
+            if state.get("should_refuse"):
+                stream_provider = "guard_refusal"
+            elif raw_answer:
+                stream_provider = "langchain_or_ollama"
+
+            latency_ms = int((perf_counter() - start) * 1000)
+            final_response = AskQuestionResponse(
+                answer=answer,
+                citations=citations,
+                trace_id=trace_id,
+                latency_ms=latency_ms,
+                retrieval_confidence=float(finalized_state.get("retrieval_confidence", 0.0)),
+                refusal_reason=finalized_state.get("refusal_reason"),
+                need_human_review=bool(finalized_state.get("need_human_review", False)),
+                answer_provider=stream_provider,
+            )
+        except Exception:
+            fallback_answer = "当前无法生成回答，请稍后重试。"
+            for token in fallback_answer.split():
+                yield self._sse_event({"type": "token", "token": token + " "})
+            latency_ms = int((perf_counter() - start) * 1000)
+            final_response = AskQuestionResponse(
+                answer=fallback_answer,
+                citations=citations,
+                trace_id=trace_id,
+                latency_ms=latency_ms,
+                retrieval_confidence=0.0,
+                refusal_reason="system_error",
+                need_human_review=True,
+                answer_provider="error_fallback",
+            )
+            self.audit_service.log(
+                owner_user_id=owner_user_id,
+                event_type="qa_stream_failed",
+                trace_id=trace_id,
+                payload={"session_id": payload.session_id},
+            )
+
+        self._append_history(payload, final_response, owner_user_id=owner_user_id)
+        self.audit_service.log(
+            owner_user_id=owner_user_id,
+            event_type="qa_asked",
+            trace_id=final_response.trace_id,
+            payload={
+                "session_id": payload.session_id,
+                "citations_count": len(final_response.citations),
+                "answer_provider": final_response.answer_provider or "",
+                "stream": True,
+            },
         )
-        self._append_history(payload, final_response)
         yield self._sse_event(
             {
                 "type": "done",
-                "stream_provider": stream_provider,
+                "stream_provider": final_response.answer_provider or "fallback",
                 **final_response.model_dump(),
             }
         )
 
-    def _append_history(self, payload: AskQuestionRequest, response: AskQuestionResponse) -> None:
+    def _append_history(
+        self,
+        payload: AskQuestionRequest,
+        response: AskQuestionResponse,
+        *,
+        owner_user_id: str,
+    ) -> None:
         self.history_repository.append(
             QAHistoryORM(
                 trace_id=response.trace_id,
+                owner_user_id=owner_user_id,
                 session_id=payload.session_id,
                 question=payload.question,
                 answer=response.answer,
@@ -111,6 +218,7 @@ class QAService:
         self,
         session_id: str,
         *,
+        owner_user_id: str,
         limit: int = 20,
         offset: int = 0,
         order: str = "desc",
@@ -118,12 +226,13 @@ class QAService:
         safe_limit = max(1, min(limit, 200))
         safe_offset = max(0, offset)
         normalized_order = "asc" if order == "asc" else "desc"
-        total = self.history_repository.count_by_session(session_id)
+        total = self.history_repository.count_by_session(session_id, owner_user_id=owner_user_id)
         rows = self.history_repository.list_by_session(
             session_id,
             limit=safe_limit,
             offset=safe_offset,
             order=normalized_order,
+            owner_user_id=owner_user_id,
         )
         items = [
             QAHistoryItemResponse(
