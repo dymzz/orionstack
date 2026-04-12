@@ -28,12 +28,17 @@ class DatabaseSettings(BaseModel):
         )
 
 
+class QASettings(BaseModel):
+    min_retrieval_score: float = Field(default=0.1, ge=0.0, le=1.0)
+
+
 class Settings(BaseModel):
     app_name: str = "OrionStack API"
     app_env: str = "dev"
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     vector_backend: str = "auto"
     vector_distance: str = "cosine"
+    qa: QASettings = Field(default_factory=QASettings)
 
 
 def _default_config_path() -> Path:
@@ -85,8 +90,22 @@ def _normalize_database_url(content: dict, config_path: Path) -> None:
 def get_settings() -> Settings:
     config_path = Path(os.getenv("ORIONSTACK_DB_CONFIG", str(_default_config_path())))
     raw = _load_yaml(config_path)
+    _apply_env_overrides(raw)
+    return Settings(**raw)
+
+
+def _apply_env_overrides(raw: dict) -> None:
     if "vector_backend" not in raw and os.getenv("ORIONSTACK_VECTOR_BACKEND"):
         raw["vector_backend"] = os.getenv("ORIONSTACK_VECTOR_BACKEND")
     if "vector_distance" not in raw and os.getenv("ORIONSTACK_VECTOR_DISTANCE"):
         raw["vector_distance"] = os.getenv("ORIONSTACK_VECTOR_DISTANCE")
-    return Settings(**raw)
+
+    qa_min_score = os.getenv("ORIONSTACK_QA_MIN_SCORE") or os.getenv("ORIONSTACK_QA_MIN_RETRIEVAL_SCORE")
+    if not qa_min_score:
+        return
+
+    qa = raw.get("qa")
+    if not isinstance(qa, dict):
+        qa = {}
+    qa["min_retrieval_score"] = float(qa_min_score)
+    raw["qa"] = qa

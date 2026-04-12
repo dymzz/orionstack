@@ -58,12 +58,22 @@
         trace_id: {{ lastAnswer.trace_id }} |
         latency: {{ lastAnswer.latency_ms }} ms
       </p>
+      <p class="muted">
+        召回置信度: {{ formatConfidence(lastAnswer.retrieval_confidence) }} |
+        答复策略: {{ formatProvider(lastAnswer.answer_provider) }}
+      </p>
+      <p v-if="lastAnswer.need_human_review" class="error">
+        当前答案可靠性偏低（{{ formatRefusalReason(lastAnswer.refusal_reason) }}），建议补充文档后重试。
+      </p>
     </div>
 
     <CitationList :citations="lastAnswer?.citations || []" />
 
     <div class="panel">
       <h2>历史问答</h2>
+      <p class="muted" v-if="historyTotal > 0">
+        已加载 {{ historyItems.length }} / {{ historyTotal }} 条（最新优先）
+      </p>
       <p v-if="historyLoading" class="muted">历史加载中...</p>
       <p v-else-if="!historyItems.length" class="muted">当前会话暂无历史。</p>
       <div v-else class="list">
@@ -73,7 +83,19 @@
           <p class="muted">
             {{ formatTime(item.created_at) }} | latency {{ item.latency_ms }} ms
           </p>
+          <p class="muted">
+            召回置信度: {{ formatConfidence(item.retrieval_confidence) }} |
+            答复策略: {{ formatProvider(item.answer_provider) }}
+          </p>
+          <p v-if="item.need_human_review" class="error">
+            低置信度保护（{{ formatRefusalReason(item.refusal_reason) }}）
+          </p>
         </article>
+      </div>
+      <div class="row" style="margin-top: 10px" v-if="historyHasMore">
+        <button class="secondary" :disabled="historyLoadingMore" @click="loadMoreHistory">
+          {{ historyLoadingMore ? "加载中..." : "加载更多" }}
+        </button>
       </div>
     </div>
   </section>
@@ -107,11 +129,35 @@ const streamMode = ref(true);
 const streamText = ref("");
 
 const historyLoading = ref(false);
+const historyLoadingMore = ref(false);
 const historyItems = ref([]);
+const historyTotal = ref(0);
+const historyHasMore = ref(false);
+const historyOffset = ref(0);
+const historyPageSize = 10;
+const historyOrder = "desc";
 
 function formatTime(isoString) {
   if (!isoString) return "-";
   return new Date(isoString).toLocaleString();
+}
+
+function formatConfidence(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return value.toFixed(3);
+}
+
+function formatRefusalReason(reason) {
+  if (reason === "no_citations") return "未检索到有效内容";
+  if (reason === "low_confidence") return "检索置信度不足";
+  return "上下文不足";
+}
+
+function formatProvider(provider) {
+  if (provider === "guard_refusal") return "低置信度保护";
+  if (provider === "langchain_or_ollama") return "LangChain/Ollama";
+  if (provider === "fallback") return "回退生成";
+  return "-";
 }
 
 async function loadSessions() {
@@ -189,6 +235,10 @@ async function handleAsk() {
                 citations: event.citations || [],
                 trace_id: event.trace_id,
                 latency_ms: event.latency_ms,
+                retrieval_confidence: event.retrieval_confidence,
+                refusal_reason: event.refusal_reason,
+                need_human_review: event.need_human_review,
+                answer_provider: event.answer_provider || event.stream_provider,
               };
             }
           },
@@ -204,7 +254,7 @@ async function handleAsk() {
       });
       lastAnswer.value = data;
     }
-    await loadHistory();
+    await loadHistory({ reset: true });
   } catch (error) {
     errorMessage.value = String(error.message || error);
   } finally {
@@ -212,29 +262,54 @@ async function handleAsk() {
   }
 }
 
-async function loadHistory() {
+async function loadHistory(options = { reset: true }) {
   if (!selectedSessionId.value) {
     historyItems.value = [];
+    historyTotal.value = 0;
+    historyHasMore.value = false;
+    historyOffset.value = 0;
     return;
   }
-  historyLoading.value = true;
+  const reset = options.reset ?? true;
+  if (reset) {
+    historyLoading.value = true;
+  } else {
+    historyLoadingMore.value = true;
+  }
   errorMessage.value = "";
   try {
-    const data = await getQaHistory(selectedSessionId.value);
-    historyItems.value = data.items || [];
+    const nextOffset = reset ? 0 : historyOffset.value;
+    const data = await getQaHistory(selectedSessionId.value, {
+      limit: historyPageSize,
+      offset: nextOffset,
+      order: historyOrder,
+    });
+    const items = data.items || [];
+    historyTotal.value = data.total || 0;
+    historyOffset.value = nextOffset + items.length;
+    historyHasMore.value = Boolean(data.has_more);
+    historyItems.value = reset ? items : [...historyItems.value, ...items];
   } catch (error) {
     errorMessage.value = String(error.message || error);
   } finally {
-    historyLoading.value = false;
+    if (reset) {
+      historyLoading.value = false;
+    } else {
+      historyLoadingMore.value = false;
+    }
   }
 }
 
+async function loadMoreHistory() {
+  await loadHistory({ reset: false });
+}
+
 watch(selectedSessionId, () => {
-  loadHistory();
+  loadHistory({ reset: true });
 });
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadDocumentsForSelection()]);
-  await loadHistory();
+  await loadHistory({ reset: true });
 });
 </script>

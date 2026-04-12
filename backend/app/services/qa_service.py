@@ -1,34 +1,41 @@
 from datetime import UTC, datetime
 import json
-import os
 from time import perf_counter
 from uuid import uuid4
 
-import httpx
 from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, CitationItem, QAHistoryItemResponse, QAHistoryResponse
-from app.knowledge.retrieval.retrieval_service import RetrievalService
 from app.models.entities import QAHistoryORM
 from app.repositories.qa_history_repository import QAHistoryRepository
+from app.workflows.knowledge_assistant.workflow import KnowledgeAssistantWorkflow
 
 
 class QAService:
     def __init__(self) -> None:
-        self.retrieval_service = RetrievalService()
+        self.workflow = KnowledgeAssistantWorkflow()
         self.history_repository = QAHistoryRepository()
-        self.ollama_base_url = os.getenv("ORIONSTACK_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-        self.ollama_model = os.getenv("ORIONSTACK_OLLAMA_MODEL", "gemma3:1b")
 
     def ask(self, payload: AskQuestionRequest) -> AskQuestionResponse:
         start = perf_counter()
         trace_id = str(uuid4())
-        citations = self._retrieve_citations(payload)
-        answer = self._generate_answer(payload.question, citations)
+        workflow_state = self.workflow.run(self._build_state(payload, trace_id))
+        citations = self._citations_from_state(workflow_state)
+        answer = str(workflow_state.get("answer", "")).strip()
+        if not answer:
+            answer = self.workflow.build_fallback_answer(workflow_state)
+        answer_provider = self._resolve_answer_provider(
+            should_refuse=bool(workflow_state.get("should_refuse", False)),
+            has_answer=bool(answer),
+        )
         latency_ms = int((perf_counter() - start) * 1000)
         response = AskQuestionResponse(
             answer=answer,
             citations=citations,
             trace_id=trace_id,
             latency_ms=latency_ms,
+            retrieval_confidence=float(workflow_state.get("retrieval_confidence", 0.0)),
+            refusal_reason=workflow_state.get("refusal_reason"),
+            need_human_review=bool(workflow_state.get("need_human_review", False)),
+            answer_provider=answer_provider,
         )
         self._append_history(payload, response)
         return response
@@ -36,7 +43,8 @@ class QAService:
     def ask_stream_events(self, payload: AskQuestionRequest):
         start = perf_counter()
         trace_id = str(uuid4())
-        citations = self._retrieve_citations(payload)
+        state = self.workflow.prepare(self._build_state(payload, trace_id))
+        citations = self._citations_from_state(state)
         yield self._sse_event(
             {
                 "type": "meta",
@@ -45,42 +53,22 @@ class QAService:
             }
         )
 
-        prompt = self._build_prompt(payload.question, citations)
         collected_answer: list[str] = []
-        stream_succeeded = False
+        stream_provider = "ollama_fallback"
 
-        try:
-            with httpx.stream(
-                "POST",
-                f"{self.ollama_base_url}/api/generate",
-                json={
-                    "model": self.ollama_model,
-                    "prompt": prompt,
-                    "stream": True,
-                },
-                timeout=45.0,
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    packet = json.loads(line)
-                    token = str(packet.get("response", ""))
-                    if token:
-                        collected_answer.append(token)
-                        yield self._sse_event({"type": "token", "token": token})
-                stream_succeeded = True
-        except Exception:
-            fallback_answer = self._build_answer(payload.question, citations)
-            for token in fallback_answer.split():
-                yield self._sse_event({"type": "token", "token": token + " "})
-            collected_answer = [fallback_answer]
+        for token in self.workflow.stream_generate_tokens(state):
+            collected_answer.append(token)
+            yield self._sse_event({"type": "token", "token": token})
 
-        answer = "".join(collected_answer).strip()
+        raw_answer = "".join(collected_answer).strip()
+        finalized_state = self.workflow.finalize(state, raw_answer)
+        answer = str(finalized_state.get("answer", "")).strip()
         if not answer:
-            answer = self._build_answer(payload.question, citations)
-        else:
-            answer = self._normalize_answer(answer, citations)
+            answer = self.workflow.build_fallback_answer(finalized_state)
+        if state.get("should_refuse"):
+            stream_provider = "guard_refusal"
+        elif raw_answer:
+            stream_provider = "langchain_or_ollama"
 
         latency_ms = int((perf_counter() - start) * 1000)
         final_response = AskQuestionResponse(
@@ -88,12 +76,16 @@ class QAService:
             citations=citations,
             trace_id=trace_id,
             latency_ms=latency_ms,
+            retrieval_confidence=float(finalized_state.get("retrieval_confidence", 0.0)),
+            refusal_reason=finalized_state.get("refusal_reason"),
+            need_human_review=bool(finalized_state.get("need_human_review", False)),
+            answer_provider=stream_provider,
         )
         self._append_history(payload, final_response)
         yield self._sse_event(
             {
                 "type": "done",
-                "stream_provider": "ollama" if stream_succeeded else "fallback",
+                "stream_provider": stream_provider,
                 **final_response.model_dump(),
             }
         )
@@ -106,32 +98,70 @@ class QAService:
                 question=payload.question,
                 answer=response.answer,
                 latency_ms=response.latency_ms,
+                retrieval_confidence=float(response.retrieval_confidence or 0.0),
+                refusal_reason=str(response.refusal_reason or ""),
+                need_human_review=bool(response.need_human_review),
+                answer_provider=str(response.answer_provider or ""),
                 created_at=datetime.now(UTC),
                 citations_json=[citation.model_dump() for citation in response.citations],
             )
         )
 
-    def list_history(self, session_id: str) -> QAHistoryResponse:
+    def list_history(
+        self,
+        session_id: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        order: str = "desc",
+    ) -> QAHistoryResponse:
+        safe_limit = max(1, min(limit, 200))
+        safe_offset = max(0, offset)
+        normalized_order = "asc" if order == "asc" else "desc"
+        total = self.history_repository.count_by_session(session_id)
+        rows = self.history_repository.list_by_session(
+            session_id,
+            limit=safe_limit,
+            offset=safe_offset,
+            order=normalized_order,
+        )
         items = [
             QAHistoryItemResponse(
                 trace_id=item.trace_id,
                 question=item.question,
                 answer=item.answer,
                 latency_ms=item.latency_ms,
+                retrieval_confidence=item.retrieval_confidence,
+                refusal_reason=item.refusal_reason or None,
+                need_human_review=item.need_human_review,
+                answer_provider=item.answer_provider or None,
                 created_at=item.created_at,
                 citations=[CitationItem(**citation) for citation in item.citations_json],
             )
-            for item in self.history_repository.list_by_session(session_id)
+            for item in rows
         ]
-        return QAHistoryResponse(session_id=session_id, items=items)
-
-    def _retrieve_citations(self, payload: AskQuestionRequest) -> list[CitationItem]:
-        chunks = self.retrieval_service.retrieve(
-            question=payload.question,
-            document_ids=payload.document_ids,
-            top_k=payload.top_k,
-            use_rerank=payload.use_rerank,
+        return QAHistoryResponse(
+            session_id=session_id,
+            total=total,
+            limit=safe_limit,
+            offset=safe_offset,
+            order=normalized_order,
+            has_more=(safe_offset + len(items)) < total,
+            items=items,
         )
+
+    def _build_state(self, payload: AskQuestionRequest, trace_id: str) -> dict:
+        return {
+            "trace_id": trace_id,
+            "session_id": payload.session_id,
+            "question": payload.question,
+            "document_ids": payload.document_ids,
+            "top_k": payload.top_k,
+            "use_rerank": payload.use_rerank,
+        }
+
+    def _citations_from_state(self, state: dict) -> list[CitationItem]:
+        chunks = state.get("citations", [])
         return [
             CitationItem(
                 document_id=item.get("document_id", ""),
@@ -143,63 +173,12 @@ class QAService:
             for item in chunks
         ]
 
-    def _generate_answer(self, question: str, citations: list[CitationItem]) -> str:
-        prompt = self._build_prompt(question, citations)
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    f"{self.ollama_base_url}/api/generate",
-                    json={
-                        "model": self.ollama_model,
-                        "prompt": prompt,
-                        "stream": False,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                answer = str(data.get("response", "")).strip()
-                if answer:
-                    return self._normalize_answer(answer, citations)
-        except Exception:
-            pass
-        return self._build_answer(question, citations)
-
-    def _build_prompt(self, question: str, citations: list[CitationItem]) -> str:
-        context_lines: list[str] = []
-        for idx, citation in enumerate(citations, start=1):
-            context_lines.append(
-                f"[{idx}] {citation.document_name}#{citation.chunk_id}: {citation.snippet}"
-            )
-
-        context_text = "\n".join(context_lines) if context_lines else "No indexed context available."
-        return (
-            "You are a concise enterprise knowledge assistant.\n"
-            "Answer in Chinese.\n"
-            "If context is insufficient, say so clearly.\n\n"
-            f"Question:\n{question}\n\n"
-            f"Context:\n{context_text}\n\n"
-            "Answer:"
-        )
-
-    def _build_answer(self, question: str, citations: list[CitationItem]) -> str:
-        if not citations:
-            return f'No relevant indexed content found for "{question}". Try uploading or reindexing a document first.'
-
-        top_citation = citations[0]
-        return (
-            f'Based on "{top_citation.document_name}", the most relevant passage is: '
-            f'{top_citation.snippet}'
-        )
-
-    def _normalize_answer(self, answer: str, citations: list[CitationItem]) -> str:
-        if not citations:
-            return answer
-
-        top_citation = citations[0]
-        if top_citation.document_name in answer:
-            return answer
-
-        return f'Based on "{top_citation.document_name}", {answer}'
-
     def _sse_event(self, payload: dict) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def _resolve_answer_provider(self, *, should_refuse: bool, has_answer: bool) -> str:
+        if should_refuse:
+            return "guard_refusal"
+        if has_answer:
+            return "langchain_or_ollama"
+        return "fallback"

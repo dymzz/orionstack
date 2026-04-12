@@ -1,6 +1,9 @@
 fastapi>=0.115
 uvicorn>=0.30
 pydantic>=2.7
+langchain>=0.3
+langchain-ollama>=0.3
+langgraph>=0.6
 python-multipart>=0.0.9
 pypdf>=6.1
 python-docx>=1.2

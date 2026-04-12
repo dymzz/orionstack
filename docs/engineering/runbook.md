@@ -43,6 +43,7 @@ print("OK")
 
 - `backend/config/database.local.yaml`
 - 模板：`backend/config/database.local.yaml.example`
+- 问答阈值可在 YAML 中配置：`qa.min_retrieval_score`
 
 ## 4. 启动后端
 
@@ -80,6 +81,25 @@ $env:ORIONSTACK_RERANK_MODEL="gemma3:1b"
 - `auto`：优先尝试 Ollama 模型重排，失败时回退规则重排
 - `lexical`：只用本地规则重排
 - `ollama`：强制要求 Ollama 模型重排
+
+如需调整低置信度保护阈值（越高越保守，越容易触发“建议补充文档”）：
+
+```powershell
+$env:ORIONSTACK_QA_MIN_SCORE="0.1"
+```
+
+也可在 `backend/config/database.local.yaml` 中配置：
+
+```yaml
+qa:
+  min_retrieval_score: 0.1
+```
+
+建议：
+
+- `0.05`：更偏向“尽量回答”，可能增加幻觉风险
+- `0.10`：默认平衡值
+- `0.20`：更偏向“谨慎拒答”，适合高准确性场景
 
 如需强制关闭 `pgvector`、只走可移植的内联向量存储：
 
@@ -192,6 +212,32 @@ $env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\databas
 - 升级后，历史文档建议执行一次 `POST /api/v1/documents/{document_id}/reindex`，把新表补齐
 - `CREATE EXTENSION IF NOT EXISTS vector` 已在 PostgreSQL Alembic 迁移里处理
 - 问答接口里的 `use_rerank` 现在已生效，默认会在召回候选上做一次混合重排
+
+## 6.1 迁移回滚（最小操作集）
+
+回滚一个版本（推荐优先使用）：
+
+```powershell
+cd backend
+$env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\database.local.yaml"
+..\.venv\Scripts\python.exe -m alembic downgrade -1
+```
+
+回滚到指定版本：
+
+```powershell
+cd backend
+$env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\database.local.yaml"
+..\.venv\Scripts\python.exe -m alembic downgrade <revision_id>
+```
+
+仅修正版本号（不执行 DDL，谨慎使用）：
+
+```powershell
+cd backend
+$env:ORIONSTACK_DB_CONFIG="D:\workspace\python\orionstack\backend\config\database.local.yaml"
+..\.venv\Scripts\python.exe -m alembic stamp <revision_id>
+```
 
 ## 7. 故障排查
 

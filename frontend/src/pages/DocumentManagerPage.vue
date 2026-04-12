@@ -37,8 +37,7 @@
                 进度: {{ doc.latest_index_job.progress_pct }}%
               </p>
               <p v-if="doc.latest_index_job?.error_message" class="error">
-                {{ doc.latest_index_job.error_code || "index_failed" }}:
-                {{ doc.latest_index_job.error_message }}
+                {{ formatIndexError(doc.latest_index_job) }}
               </p>
             </div>
             <div class="row">
@@ -69,6 +68,16 @@ const selectedFile = ref(null);
 const loading = ref(false);
 const submitting = ref(false);
 const errorMessage = ref("");
+const indexErrorHints = {
+  chunk_generation_failed: "切块失败",
+  chunk_persist_failed: "切块写入失败",
+  embedding_generation_failed: "向量生成失败",
+  embedding_persist_failed: "向量元数据写入失败",
+  vector_sync_failed: "向量库同步失败",
+  document_snapshot_failed: "文档快照写入失败",
+  document_missing: "文档不存在",
+  indexing_failed: "索引失败",
+};
 
 function onFileChange(event) {
   const file = event.target.files?.[0] || null;
@@ -81,6 +90,14 @@ function onFileChange(event) {
 function formatTime(isoString) {
   if (!isoString) return "-";
   return new Date(isoString).toLocaleString();
+}
+
+function formatIndexError(job) {
+  if (!job) return "";
+  const code = job.error_code || "indexing_failed";
+  const hint = indexErrorHints[code] || "索引异常";
+  const details = job.error_message || "请检查后端日志。";
+  return `${hint}（${code}）：${details}`;
 }
 
 async function loadDocuments() {
@@ -138,7 +155,7 @@ async function waitForIndexing(documentId, jobId) {
     await loadDocuments();
     const latestJob = current.latest_index_job;
     if (latestJob?.status === "failed" && latestJob.error_message) {
-      errorMessage.value = latestJob.error_message;
+      errorMessage.value = formatIndexError(latestJob);
       return;
     }
     if (current.status === "indexed" || current.status === "failed") {
@@ -163,7 +180,7 @@ async function waitForIndexingStream(documentId, jobId) {
       documents.value = currentList;
 
       if (event.status === "failed" && event.error_message) {
-        errorMessage.value = event.error_message;
+        errorMessage.value = formatIndexError(event);
       }
     },
   });

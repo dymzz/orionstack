@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -129,6 +129,10 @@ class QAHistoryORM(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    retrieval_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    refusal_reason: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    need_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    answer_provider: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     citations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
 

@@ -189,8 +189,20 @@ export async function askQuestionStream(
   }
 }
 
-export function getQaHistory(sessionId: string) {
-  return request(`/qa/history/${sessionId}`);
+export function getQaHistory(
+  sessionId: string,
+  params?: {
+    limit?: number;
+    offset?: number;
+    order?: "asc" | "desc";
+  }
+) {
+  const query = new URLSearchParams();
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (typeof params?.offset === "number") query.set("offset", String(params.offset));
+  if (params?.order) query.set("order", params.order);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return request(`/qa/history/${sessionId}${suffix}`);
 }
 
 export const api = {

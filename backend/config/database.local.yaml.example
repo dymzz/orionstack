@@ -8,3 +8,5 @@ database:
   password: postgres
   database: orionstack
   echo: false
+qa:
+  min_retrieval_score: 0.1
