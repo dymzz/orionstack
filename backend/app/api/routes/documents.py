@@ -3,9 +3,6 @@ import json
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from app.core.request_context import get_current_user_context
-from app.governance.authorization import require_permission
-from app.governance.audit_service import AuditService
 from app.api.schemas.document import (
     DeleteDocumentResponse,
     DocumentListResponse,
@@ -13,7 +10,10 @@ from app.api.schemas.document import (
     IndexJobResponse,
     ReindexDocumentResponse,
 )
-from app.knowledge.indexing.index_dispatcher import index_dispatcher
+from app.core.request_context import get_current_user_context
+from app.governance.authorization import require_permission
+from app.governance.activity_service import ActivityService
+from app.knowledge.indexing.index_dispatcher import IndexDispatcher
 from app.knowledge.ingestion.document_ingestion_service import DocumentIngestionService
 from app.knowledge.ingestion.document_parser import (
     DocumentParser,
@@ -28,7 +28,7 @@ repository = DocumentRepository()
 index_job_repository = IndexJobRepository()
 ingestion_service = DocumentIngestionService()
 document_parser = DocumentParser()
-audit_service = AuditService()
+activity_service = ActivityService()
 
 
 def build_index_job_response(job) -> IndexJobResponse | None:
@@ -77,14 +77,14 @@ async def upload_document(
             payload=payload,
         )
     except UnsupportedDocumentTypeError as exc:
-        audit_service.log(
+        activity_service.record_event(
             owner_user_id=owner_user_id,
             event_type="document_upload_rejected",
             payload={"filename": file.filename or "", "reason": "unsupported_type"},
         )
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     except MissingParserDependencyError as exc:
-        audit_service.log(
+        activity_service.record_event(
             owner_user_id=owner_user_id,
             event_type="document_upload_failed",
             payload={"filename": file.filename or "", "reason": "missing_dependency"},
@@ -101,7 +101,7 @@ async def upload_document(
     refreshed_document = repository.get(document.document_id, owner_user_id=owner_user_id)
     if refreshed_document is None:
         raise HTTPException(status_code=500, detail="Document upload failed")
-    audit_service.log(
+    activity_service.record_event(
         owner_user_id=owner_user_id,
         event_type="document_uploaded",
         payload={"document_id": refreshed_document.document_id, "source_type": refreshed_document.source_type},
@@ -185,7 +185,7 @@ def stream_index_job(job_id: str, request: Request) -> StreamingResponse:
                     yield ": heartbeat\n\n"
                     continue
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                if event.get("status") in {"indexed", "failed", "missing"}:
+                if event.get("status") in {"indexed", "failed", "missing"} or event.get("finished_at"):
                     break
         finally:
             index_dispatcher.unsubscribe(job_id, queue)
@@ -205,7 +205,7 @@ def delete_document(document_id: str, request: Request) -> DeleteDocumentRespons
     deleted = repository.delete(document_id, owner_user_id=owner_user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
-    audit_service.log(
+    activity_service.record_event(
         owner_user_id=owner_user_id,
         event_type="document_deleted",
         payload={"document_id": document_id},
@@ -222,7 +222,7 @@ def reindex_document(document_id: str, request: Request) -> ReindexDocumentRespo
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     job = index_dispatcher.submit(document_id)
-    audit_service.log(
+    activity_service.record_event(
         owner_user_id=owner_user_id,
         event_type="document_reindexed",
         payload={"document_id": document_id, "job_id": job.job_id if job else ""},

@@ -6,7 +6,7 @@ import math
 import os
 from typing import Iterable
 
-import httpx
+from app.integrations.model_gateway import ModelGateway
 
 
 @dataclass
@@ -20,11 +20,11 @@ class EmbeddingBatch:
 class EmbeddingService:
     def __init__(self) -> None:
         self.provider = os.getenv("ORIONSTACK_EMBEDDING_PROVIDER", "ollama")
-        self.ollama_base_url = os.getenv("ORIONSTACK_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
         self.ollama_model = os.getenv("ORIONSTACK_EMBEDDING_MODEL", "bge-m3")
         self.batch_size = max(1, int(os.getenv("ORIONSTACK_EMBEDDING_BATCH_SIZE", "8")))
         self.fallback_model = "local-hash-v1"
         self.fallback_dimension = 256
+        self.model_gateway = ModelGateway()
 
     def embed_texts(self, texts: Iterable[str], provider_override: str | None = None) -> EmbeddingBatch:
         items = [str(text) for text in texts]
@@ -67,18 +67,12 @@ class EmbeddingService:
         return batches
 
     def _embed_with_ollama(self, texts: list[str]) -> EmbeddingBatch:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{self.ollama_base_url}/api/embed",
-                json={"model": self.ollama_model, "input": texts},
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        vectors = data.get("embeddings")
-        if not isinstance(vectors, list) or not vectors:
-            raise ValueError("Ollama did not return embeddings")
-
+        vectors = self.model_gateway.embed_texts(
+            provider="ollama",
+            model=self.ollama_model,
+            texts=texts,
+            timeout=30.0,
+        )
         normalized_vectors = [self._normalize_vector(vector) for vector in vectors]
         dimension = len(normalized_vectors[0])
         return EmbeddingBatch(

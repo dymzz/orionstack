@@ -2,11 +2,11 @@ from fastapi import APIRouter, Query, Request
 
 from app.api.schemas.audit import AuditLogListResponse
 from app.core.request_context import get_current_user_context
+from app.governance.activity_service import ActivityService
 from app.governance.authorization import require_permission
-from app.governance.audit_service import AuditService
 
 router = APIRouter(tags=["audit"])
-service = AuditService()
+service = ActivityService()
 
 @router.get("/audit/logs", response_model=AuditLogListResponse)
 def list_audit_logs(
@@ -17,4 +17,4 @@ def list_audit_logs(
     user_context = get_current_user_context(request)
     owner_user_id = user_context.user_id
     require_permission(user_context, resource="audit", action="read")
-    return service.list_logs(owner_user_id=owner_user_id, limit=limit, offset=offset)
+    return service.list_audit_logs(owner_user_id=owner_user_id, limit=limit, offset=offset)

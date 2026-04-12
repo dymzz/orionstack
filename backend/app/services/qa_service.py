@@ -4,30 +4,40 @@ from time import perf_counter
 from uuid import uuid4
 
 from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, CitationItem, QAHistoryItemResponse, QAHistoryResponse
-from app.governance.audit_service import AuditService
+from app.governance.activity_service import ActivityService
 from app.governance.user_context import UserContext
 from app.models.entities import QAHistoryORM
 from app.repositories.qa_history_repository import QAHistoryRepository
-from app.workflows.knowledge_assistant.workflow import KnowledgeAssistantWorkflow
+from app.workflows.registry import WorkflowRegistry
 
 
 class QAService:
     def __init__(self) -> None:
-        self.workflow = KnowledgeAssistantWorkflow()
+        self.workflow_registry = WorkflowRegistry()
         self.history_repository = QAHistoryRepository()
-        self.audit_service = AuditService()
+        self.activity_service = ActivityService()
 
-    def ask(self, payload: AskQuestionRequest, *, user_context: UserContext) -> AskQuestionResponse:
+    def supports_scene(self, scene: str | None) -> bool:
+        return self.workflow_registry.is_supported(scene)
+
+    def ask(
+        self,
+        payload: AskQuestionRequest,
+        *,
+        user_context: UserContext,
+        scene: str = "knowledge_assistant",
+    ) -> AskQuestionResponse:
         start = perf_counter()
         trace_id = str(uuid4())
         owner_user_id = user_context.user_id
+        workflow = self.workflow_registry.resolve(scene)
 
         try:
-            workflow_state = self.workflow.run(self._build_state(payload, trace_id, user_context))
+            workflow_state = workflow.run(self._build_state(payload, trace_id, user_context))
             citations = self._citations_from_state(workflow_state)
             answer = str(workflow_state.get("answer", "")).strip()
             if not answer:
-                answer = self.workflow.build_fallback_answer(workflow_state)
+                answer = workflow.build_fallback_answer(workflow_state)
             answer_provider = self._resolve_answer_provider(
                 should_refuse=bool(workflow_state.get("should_refuse", False)),
                 has_answer=bool(answer),
@@ -55,7 +65,7 @@ class QAService:
                 need_human_review=True,
                 answer_provider="error_fallback",
             )
-            self.audit_service.log(
+            self.activity_service.record_event(
                 owner_user_id=owner_user_id,
                 event_type="qa_ask_failed",
                 trace_id=trace_id,
@@ -63,7 +73,7 @@ class QAService:
             )
 
         self._append_history(payload, response, owner_user_id=owner_user_id)
-        self.audit_service.log(
+        self.activity_service.record_event(
             owner_user_id=owner_user_id,
             event_type="qa_asked",
             trace_id=response.trace_id,
@@ -76,15 +86,22 @@ class QAService:
         )
         return response
 
-    def ask_stream_events(self, payload: AskQuestionRequest, *, user_context: UserContext):
+    def ask_stream_events(
+        self,
+        payload: AskQuestionRequest,
+        *,
+        user_context: UserContext,
+        scene: str = "knowledge_assistant",
+    ):
         start = perf_counter()
         trace_id = str(uuid4())
         citations: list[CitationItem] = []
         state: dict | None = None
         owner_user_id = user_context.user_id
+        workflow = self.workflow_registry.resolve(scene)
 
         try:
-            state = self.workflow.prepare(self._build_state(payload, trace_id, user_context))
+            state = workflow.prepare(self._build_state(payload, trace_id, user_context))
             citations = self._citations_from_state(state)
         except Exception:
             state = None
@@ -113,7 +130,7 @@ class QAService:
                 answer_provider="error_fallback",
             )
             self._append_history(payload, final_response, owner_user_id=owner_user_id)
-            self.audit_service.log(
+            self.activity_service.record_event(
                 owner_user_id=owner_user_id,
                 event_type="qa_stream_failed",
                 trace_id=trace_id,
@@ -126,15 +143,15 @@ class QAService:
             collected_answer: list[str] = []
             stream_provider = "ollama_fallback"
 
-            for token in self.workflow.stream_generate_tokens(state):
+            for token in workflow.stream_generate_tokens(state):
                 collected_answer.append(token)
                 yield self._sse_event({"type": "token", "token": token})
 
             raw_answer = "".join(collected_answer).strip()
-            finalized_state = self.workflow.finalize(state, raw_answer)
+            finalized_state = workflow.finalize(state, raw_answer)
             answer = str(finalized_state.get("answer", "")).strip()
             if not answer:
-                answer = self.workflow.build_fallback_answer(finalized_state)
+                answer = workflow.build_fallback_answer(finalized_state)
             if state.get("should_refuse"):
                 stream_provider = "guard_refusal"
             elif raw_answer:
@@ -166,7 +183,7 @@ class QAService:
                 need_human_review=True,
                 answer_provider="error_fallback",
             )
-            self.audit_service.log(
+            self.activity_service.record_event(
                 owner_user_id=owner_user_id,
                 event_type="qa_stream_failed",
                 trace_id=trace_id,
@@ -174,7 +191,7 @@ class QAService:
             )
 
         self._append_history(payload, final_response, owner_user_id=owner_user_id)
-        self.audit_service.log(
+        self.activity_service.record_event(
             owner_user_id=owner_user_id,
             event_type="qa_asked",
             trace_id=final_response.trace_id,

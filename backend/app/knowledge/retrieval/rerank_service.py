@@ -4,7 +4,7 @@ import json
 import os
 import re
 
-import httpx
+from app.integrations.model_gateway import ModelGateway
 
 
 class RerankService:
@@ -15,11 +15,10 @@ class RerankService:
         *,
         provider: str | None = None,
         model: str | None = None,
-        ollama_base_url: str | None = None,
     ) -> None:
         self.provider = (provider or os.getenv("ORIONSTACK_RERANK_PROVIDER", "auto")).lower()
         self.model = model or os.getenv("ORIONSTACK_RERANK_MODEL") or os.getenv("ORIONSTACK_OLLAMA_MODEL", "gemma3:1b")
-        self.ollama_base_url = ollama_base_url or os.getenv("ORIONSTACK_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        self.model_gateway = ModelGateway()
 
     def rerank(self, question: str, candidates: list[dict], top_k: int) -> list[dict]:
         if not candidates:
@@ -106,29 +105,22 @@ class RerankService:
             + "\n".join(candidate_lines)
         )
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{self.ollama_base_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": {
-                        "type": "object",
-                        "properties": {
-                            "ranked_chunk_ids": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            }
-                        },
-                        "required": ["ranked_chunk_ids"],
-                    },
+        content = self.model_gateway.generate(
+            provider="ollama",
+            model=self.model,
+            prompt=prompt,
+            response_format={
+                "type": "object",
+                "properties": {
+                    "ranked_chunk_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
                 },
-            )
-            response.raise_for_status()
-            payload = response.json()
-
-        content = str(payload.get("response", "")).strip()
+                "required": ["ranked_chunk_ids"],
+            },
+            timeout=30.0,
+        )
         return self._extract_ranked_chunk_ids(content)
 
     def _extract_ranked_chunk_ids(self, content: str) -> list[str]:

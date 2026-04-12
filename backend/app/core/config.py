@@ -30,6 +30,7 @@ class DatabaseSettings(BaseModel):
 
 class QASettings(BaseModel):
     min_retrieval_score: float = Field(default=0.1, ge=0.0, le=1.0)
+    retrieval_backend: str = Field(default="default", min_length=1)
 
 
 class Settings(BaseModel):
@@ -100,12 +101,16 @@ def _apply_env_overrides(raw: dict) -> None:
     if "vector_distance" not in raw and os.getenv("ORIONSTACK_VECTOR_DISTANCE"):
         raw["vector_distance"] = os.getenv("ORIONSTACK_VECTOR_DISTANCE")
 
-    qa_min_score = os.getenv("ORIONSTACK_QA_MIN_SCORE") or os.getenv("ORIONSTACK_QA_MIN_RETRIEVAL_SCORE")
-    if not qa_min_score:
-        return
-
     qa = raw.get("qa")
     if not isinstance(qa, dict):
         qa = {}
-    qa["min_retrieval_score"] = float(qa_min_score)
+
+    retrieval_backend = os.getenv("ORIONSTACK_QA_RETRIEVAL_BACKEND") or os.getenv("ORIONSTACK_RETRIEVAL_BACKEND")
+    if retrieval_backend:
+        qa["retrieval_backend"] = retrieval_backend
+
+    qa_min_score = os.getenv("ORIONSTACK_QA_MIN_SCORE") or os.getenv("ORIONSTACK_QA_MIN_RETRIEVAL_SCORE")
+    if qa_min_score:
+        qa["min_retrieval_score"] = float(qa_min_score)
+
     raw["qa"] = qa

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-import json
 import os
-
-import httpx
 
 from app.core.config import get_settings
 from app.governance.user_context import Permission, UserContext
 from app.integrations.builtin_tools import register_builtin_tools
+from app.integrations.model_gateway import ModelGateway
 from app.integrations.tool_gateway import ToolCallRequest, ToolGateway
-from app.knowledge.retrieval.retrieval_service import RetrievalService
+from app.knowledge.retrieval.registry import RetrievalRegistry, RetrievalRuntime
 from app.workflows.knowledge_assistant.state import KnowledgeAssistantState
 
 try:
@@ -33,9 +31,13 @@ except Exception:  # pragma: no cover - optional dependency fallback
 class KnowledgeAssistantWorkflow:
     """Knowledge assistant orchestration with LangGraph/LangChain and safe fallbacks."""
 
-    def __init__(self) -> None:
+    def __init__(self, retrieval_runtime: RetrievalRuntime | None = None) -> None:
         self.settings = get_settings()
-        self.retrieval_service = RetrievalService()
+        self.retrieval_backend = self.settings.qa.retrieval_backend
+        self.retrieval_registry = RetrievalRegistry()
+        self.retrieval_runtime = retrieval_runtime or self.retrieval_registry.resolve(self.retrieval_backend)
+        self.model_gateway = ModelGateway()
+        self.model_provider = "ollama"
         self.tool_gateway = ToolGateway()
         register_builtin_tools(self.tool_gateway)
         self.ollama_base_url = os.getenv("ORIONSTACK_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
@@ -183,7 +185,7 @@ class KnowledgeAssistantWorkflow:
     def _retrieve(self, state: KnowledgeAssistantState) -> KnowledgeAssistantState:
         current = dict(state)
         user_context = self._user_context_from_state(current)
-        chunks = self.retrieval_service.retrieve(
+        chunks = self.retrieval_runtime.retrieve(
             question=str(current.get("question", "")),
             document_ids=current.get("document_ids", []),
             top_k=int(current.get("top_k", 5)),
@@ -352,20 +354,14 @@ class KnowledgeAssistantWorkflow:
     def _generate_with_ollama(self, state: KnowledgeAssistantState) -> str:
         prompt = self._ollama_prompt(state)
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    f"{self.ollama_base_url}/api/generate",
-                    json={
-                        "model": self.ollama_model,
-                        "prompt": prompt,
-                        "stream": False,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                answer = str(data.get("response", "")).strip()
-                if answer:
-                    return answer
+            answer = self.model_gateway.generate(
+                provider=self.model_provider,
+                model=self.ollama_model,
+                prompt=prompt,
+                timeout=30.0,
+            )
+            if answer:
+                return answer
         except Exception:
             pass
         return self._fallback_answer(state)
@@ -373,25 +369,13 @@ class KnowledgeAssistantWorkflow:
     def _stream_with_ollama(self, state: KnowledgeAssistantState) -> Iterator[str]:
         prompt = self._ollama_prompt(state)
         try:
-            with httpx.stream(
-                "POST",
-                f"{self.ollama_base_url}/api/generate",
-                json={
-                    "model": self.ollama_model,
-                    "prompt": prompt,
-                    "stream": True,
-                },
+            yield from self.model_gateway.stream_generate(
+                provider=self.model_provider,
+                model=self.ollama_model,
+                prompt=prompt,
                 timeout=45.0,
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    packet = json.loads(line)
-                    token = str(packet.get("response", ""))
-                    if token:
-                        yield token
-                return
+            )
+            return
         except Exception:
             pass
 
