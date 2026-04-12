@@ -1,5 +1,6 @@
 import math
 
+from app.governance.user_context import UserContext
 from app.knowledge.embeddings.embedding_service import EmbeddingBatch, EmbeddingService
 from app.knowledge.retrieval.rerank_service import RerankService
 from app.repositories.chunk_repository import ChunkRepository
@@ -25,10 +26,21 @@ class RetrievalService:
         document_ids: list[str] | None = None,
         top_k: int = 5,
         use_rerank: bool = True,
+        user_context: UserContext | None = None,
     ) -> list[dict]:
-        documents = self.document_repository.list(document_ids=document_ids)
+        allowed_document_ids = self._resolve_allowed_document_ids(
+            requested_document_ids=document_ids,
+            user_context=user_context,
+        )
+        if allowed_document_ids == []:
+            return []
+
+        documents = self.document_repository.list(
+            document_ids=allowed_document_ids,
+            owner_user_id=user_context.user_id if user_context is not None else None,
+        )
         document_names = {document.document_id: document.name for document in documents}
-        chunks = self.chunk_repository.list(document_ids=document_ids)
+        chunks = self.chunk_repository.list(document_ids=[document.document_id for document in documents])
         candidate_top_k = max(top_k, min(top_k * 4, 20))
         if chunks:
             query_embedding = self.embedding_service.embed_texts([question])
@@ -37,7 +49,7 @@ class RetrievalService:
                     query_vector=query_embedding.vectors[0],
                     embedding_model=query_embedding.model,
                     top_k=candidate_top_k,
-                    document_ids=document_ids,
+                    document_ids=[document.document_id for document in documents],
                 )
                 if pgvector_results:
                     return self._finalize_results(
@@ -133,6 +145,24 @@ class RetrievalService:
         if not use_rerank:
             return candidates[:top_k]
         return self.rerank_service.rerank(question=question, candidates=candidates, top_k=top_k)
+
+    def _resolve_allowed_document_ids(
+        self,
+        *,
+        requested_document_ids: list[str] | None,
+        user_context: UserContext | None,
+    ) -> list[str] | None:
+        if user_context is None:
+            return requested_document_ids
+
+        if not user_context.has_permission(resource="document", action="read"):
+            return []
+
+        documents = self.document_repository.list(
+            document_ids=requested_document_ids,
+            owner_user_id=user_context.user_id,
+        )
+        return [document.document_id for document in documents]
 
     def _retrieve_by_keywords(self, question: str, documents: list, top_k: int) -> list[dict]:
         tokens = [token for token in question.lower().split() if token]

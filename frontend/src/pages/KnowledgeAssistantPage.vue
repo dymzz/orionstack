@@ -22,6 +22,20 @@
     <div class="panel">
       <h2>提问</h2>
       <textarea v-model.trim="question" placeholder="输入问题..." />
+      <div class="quick-actions">
+        <button class="secondary" type="button" @click="applyQuickQuestion('我有哪些文档？')">
+          查看我的文档
+        </button>
+        <button class="secondary" type="button" @click="applyQuickQuestion('文档列表里有哪些内容？')">
+          文档列表
+        </button>
+        <button class="secondary" type="button" @click="applyQuickQuestion('请总结一下我当前可见的文档。')">
+          总结可见文档
+        </button>
+      </div>
+      <p class="muted quick-hint">
+        “查看我的文档 / 文档列表”会优先走只读工具查询，更适合快速确认当前可见数据。
+      </p>
       <h3>限定文档（可选）</h3>
       <div v-if="documents.length" class="checkbox-grid">
         <label v-for="doc in documents" :key="doc.document_id" class="checkbox-item">
@@ -53,6 +67,9 @@
 
     <div class="panel" v-if="lastAnswer">
       <h2>最新回答</h2>
+      <div v-if="isToolStyleAnswer" class="tool-result-banner">
+        当前结果来自权限受控的只读工具查询，适合确认“我能看到什么”这类信息。
+      </div>
       <p style="white-space: pre-wrap">{{ lastAnswer.answer }}</p>
       <p class="muted">
         trace_id: {{ lastAnswer.trace_id }} |
@@ -102,7 +119,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import CitationList from "../components/CitationList.vue";
 import {
   askQuestion,
@@ -136,6 +153,14 @@ const historyHasMore = ref(false);
 const historyOffset = ref(0);
 const historyPageSize = 10;
 const historyOrder = "desc";
+const toolQuestionKeywords = ["我有哪些文档", "文档列表", "我的文档", "可见文档"];
+
+const isToolStyleAnswer = computed(() => {
+  if (!lastAnswer.value?.answer) return false;
+  const hasCitations = Array.isArray(lastAnswer.value.citations) && lastAnswer.value.citations.length > 0;
+  if (hasCitations) return false;
+  return isToolQuestion(question.value) || lastAnswer.value.answer.includes("当前你可见的文档有");
+});
 
 function formatTime(isoString) {
   if (!isoString) return "-";
@@ -158,6 +183,15 @@ function formatProvider(provider) {
   if (provider === "langchain_or_ollama") return "LangChain/Ollama";
   if (provider === "fallback") return "回退生成";
   return "-";
+}
+
+function applyQuickQuestion(text) {
+  question.value = text;
+}
+
+function isToolQuestion(text) {
+  const normalized = String(text || "").trim();
+  return toolQuestionKeywords.some((keyword) => normalized.includes(keyword));
 }
 
 async function loadSessions() {

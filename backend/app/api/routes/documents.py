@@ -3,7 +3,8 @@ import json
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from app.core.request_context import get_current_user_id
+from app.core.request_context import get_current_user_context
+from app.governance.authorization import require_permission
 from app.governance.audit_service import AuditService
 from app.api.schemas.document import (
     DeleteDocumentResponse,
@@ -65,7 +66,9 @@ async def upload_document(
     name: str = Form(...),
     source_type: str = Form(default="upload"),
 ) -> DocumentResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="write")
     payload = await file.read()
     try:
         content = document_parser.parse(
@@ -109,7 +112,9 @@ async def upload_document(
 
 @router.get("/documents", response_model=DocumentListResponse)
 def list_documents(request: Request) -> DocumentListResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="read")
     return DocumentListResponse(
         items=[
             build_document_response(document)
@@ -120,7 +125,9 @@ def list_documents(request: Request) -> DocumentListResponse:
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
 def get_document(document_id: str, request: Request) -> DocumentResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="read")
     document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -130,7 +137,9 @@ def get_document(document_id: str, request: Request) -> DocumentResponse:
 
 @router.get("/documents/{document_id}/index-job", response_model=IndexJobResponse)
 def get_latest_index_job(document_id: str, request: Request) -> IndexJobResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="read")
     document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -143,7 +152,9 @@ def get_latest_index_job(document_id: str, request: Request) -> IndexJobResponse
 
 @router.get("/index-jobs/{job_id}", response_model=IndexJobResponse)
 def get_index_job(job_id: str, request: Request) -> IndexJobResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="read")
     job = index_job_repository.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Index job not found")
@@ -155,7 +166,9 @@ def get_index_job(job_id: str, request: Request) -> IndexJobResponse:
 
 @router.get("/index-jobs/{job_id}/stream")
 def stream_index_job(job_id: str, request: Request) -> StreamingResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="read")
     job = index_job_repository.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Index job not found")
@@ -186,7 +199,9 @@ def stream_index_job(job_id: str, request: Request) -> StreamingResponse:
 
 @router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
 def delete_document(document_id: str, request: Request) -> DeleteDocumentResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="write")
     deleted = repository.delete(document_id, owner_user_id=owner_user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -200,7 +215,9 @@ def delete_document(document_id: str, request: Request) -> DeleteDocumentRespons
 
 @router.post("/documents/{document_id}/reindex", response_model=ReindexDocumentResponse)
 def reindex_document(document_id: str, request: Request) -> ReindexDocumentResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
+    require_permission(user_context, resource="document", action="write")
     document = repository.get(document_id, owner_user_id=owner_user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")

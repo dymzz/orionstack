@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, CitationItem, QAHistoryItemResponse, QAHistoryResponse
 from app.governance.audit_service import AuditService
+from app.governance.user_context import UserContext
 from app.models.entities import QAHistoryORM
 from app.repositories.qa_history_repository import QAHistoryRepository
 from app.workflows.knowledge_assistant.workflow import KnowledgeAssistantWorkflow
@@ -16,12 +17,13 @@ class QAService:
         self.history_repository = QAHistoryRepository()
         self.audit_service = AuditService()
 
-    def ask(self, payload: AskQuestionRequest, *, owner_user_id: str) -> AskQuestionResponse:
+    def ask(self, payload: AskQuestionRequest, *, user_context: UserContext) -> AskQuestionResponse:
         start = perf_counter()
         trace_id = str(uuid4())
+        owner_user_id = user_context.user_id
 
         try:
-            workflow_state = self.workflow.run(self._build_state(payload, trace_id))
+            workflow_state = self.workflow.run(self._build_state(payload, trace_id, user_context))
             citations = self._citations_from_state(workflow_state)
             answer = str(workflow_state.get("answer", "")).strip()
             if not answer:
@@ -74,14 +76,15 @@ class QAService:
         )
         return response
 
-    def ask_stream_events(self, payload: AskQuestionRequest, *, owner_user_id: str):
+    def ask_stream_events(self, payload: AskQuestionRequest, *, user_context: UserContext):
         start = perf_counter()
         trace_id = str(uuid4())
         citations: list[CitationItem] = []
         state: dict | None = None
+        owner_user_id = user_context.user_id
 
         try:
-            state = self.workflow.prepare(self._build_state(payload, trace_id))
+            state = self.workflow.prepare(self._build_state(payload, trace_id, user_context))
             citations = self._citations_from_state(state)
         except Exception:
             state = None
@@ -218,7 +221,7 @@ class QAService:
         self,
         session_id: str,
         *,
-        owner_user_id: str,
+        user_context: UserContext,
         limit: int = 20,
         offset: int = 0,
         order: str = "desc",
@@ -226,6 +229,7 @@ class QAService:
         safe_limit = max(1, min(limit, 200))
         safe_offset = max(0, offset)
         normalized_order = "asc" if order == "asc" else "desc"
+        owner_user_id = user_context.user_id
         total = self.history_repository.count_by_session(session_id, owner_user_id=owner_user_id)
         rows = self.history_repository.list_by_session(
             session_id,
@@ -259,14 +263,18 @@ class QAService:
             items=items,
         )
 
-    def _build_state(self, payload: AskQuestionRequest, trace_id: str) -> dict:
+    def _build_state(self, payload: AskQuestionRequest, trace_id: str, user_context: UserContext) -> dict:
         return {
             "trace_id": trace_id,
+            "user_id": user_context.user_id,
             "session_id": payload.session_id,
             "question": payload.question,
             "document_ids": payload.document_ids,
             "top_k": payload.top_k,
             "use_rerank": payload.use_rerank,
+            "user_context": user_context.to_state_payload(),
+            "tool_plan": [],
+            "tool_results": [],
         }
 
     def _citations_from_state(self, state: dict) -> list[CitationItem]:

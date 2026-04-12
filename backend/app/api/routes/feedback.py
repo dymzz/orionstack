@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas.feedback import FeedbackRequest, FeedbackResponse
-from app.core.request_context import get_current_user_id
+from app.core.request_context import get_current_user_context
 from app.governance.audit_service import AuditService
 from app.models.entities import FeedbackORM
 from app.repositories.feedback_repository import FeedbackRepository
@@ -18,7 +18,8 @@ audit_service = AuditService()
 
 @router.post("/feedback", response_model=FeedbackResponse)
 def submit_feedback(payload: FeedbackRequest, request: Request) -> FeedbackResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
     session = session_repository.get(payload.session_id, owner_user_id=owner_user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")

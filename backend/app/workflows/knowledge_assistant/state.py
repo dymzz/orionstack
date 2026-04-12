@@ -9,6 +9,9 @@ class KnowledgeAssistantState(TypedDict, total=False):
     document_ids: List[str]
     top_k: int
     use_rerank: bool
+    user_context: Dict[str, Any]
+    tool_plan: List[Dict[str, Any]]
+    tool_results: List[Dict[str, Any]]
     retrieved_chunks: List[Dict[str, Any]]
     citations: List[Dict[str, Any]]
     answer: str

@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas.qa import AskQuestionRequest, AskQuestionResponse, QAHistoryResponse
-from app.core.request_context import get_current_user_id
+from app.core.request_context import get_current_user_context
+from app.governance.user_context import UserContext
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.qa_service import QAService
@@ -15,7 +16,8 @@ session_repository = SessionRepository()
 document_repository = DocumentRepository()
 
 
-def _prepare_owner_scoped_payload(payload: AskQuestionRequest, owner_user_id: str) -> AskQuestionRequest:
+def _prepare_owner_scoped_payload(payload: AskQuestionRequest, user_context: UserContext) -> AskQuestionRequest:
+    owner_user_id = user_context.user_id
     session = session_repository.get(payload.session_id, owner_user_id=owner_user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -32,17 +34,17 @@ def _prepare_owner_scoped_payload(payload: AskQuestionRequest, owner_user_id: st
 
 @router.post("/qa/ask", response_model=AskQuestionResponse)
 def ask_question(payload: AskQuestionRequest, request: Request) -> AskQuestionResponse:
-    owner_user_id = get_current_user_id(request)
-    scoped_payload = _prepare_owner_scoped_payload(payload, owner_user_id)
-    return service.ask(scoped_payload, owner_user_id=owner_user_id)
+    user_context = get_current_user_context(request)
+    scoped_payload = _prepare_owner_scoped_payload(payload, user_context)
+    return service.ask(scoped_payload, user_context=user_context)
 
 
 @router.post("/qa/ask-stream")
 def ask_question_stream(payload: AskQuestionRequest, request: Request) -> StreamingResponse:
-    owner_user_id = get_current_user_id(request)
-    scoped_payload = _prepare_owner_scoped_payload(payload, owner_user_id)
+    user_context = get_current_user_context(request)
+    scoped_payload = _prepare_owner_scoped_payload(payload, user_context)
     return StreamingResponse(
-        service.ask_stream_events(scoped_payload, owner_user_id=owner_user_id),
+        service.ask_stream_events(scoped_payload, user_context=user_context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
@@ -56,13 +58,14 @@ def get_qa_history(
     offset: int = Query(default=0, ge=0),
     order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> QAHistoryResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
     session = session_repository.get(session_id, owner_user_id=owner_user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return service.list_history(
         session_id,
-        owner_user_id=owner_user_id,
+        user_context=user_context,
         limit=limit,
         offset=offset,
         order=order,

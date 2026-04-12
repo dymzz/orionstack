@@ -171,6 +171,27 @@ button.danger {
   align-items: center;
 }
 
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.quick-hint {
+  margin: 10px 0 0;
+}
+
+.tool-result-banner {
+  margin-bottom: 10px;
+  border: 1px solid #b6e0d8;
+  background: #edf9f6;
+  color: #0b5b55;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 14px 10px 24px;

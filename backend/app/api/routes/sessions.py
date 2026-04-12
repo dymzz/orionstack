@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas.session import CreateSessionRequest, SessionListResponse, SessionResponse
-from app.core.request_context import get_current_user_id
+from app.core.request_context import get_current_user_context
 from app.governance.audit_service import AuditService
 from app.models.entities import SessionORM
 from app.repositories.session_repository import SessionRepository
@@ -16,7 +16,8 @@ audit_service = AuditService()
 
 @router.post("/sessions", response_model=SessionResponse)
 def create_session(payload: CreateSessionRequest, request: Request) -> SessionResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
     session = repository.save(
         SessionORM(
             session_id=str(uuid4()),
@@ -41,7 +42,8 @@ def create_session(payload: CreateSessionRequest, request: Request) -> SessionRe
 
 @router.get("/sessions", response_model=SessionListResponse)
 def list_sessions(request: Request) -> SessionListResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
     return SessionListResponse(
         items=[
             SessionResponse(
@@ -57,7 +59,8 @@ def list_sessions(request: Request) -> SessionListResponse:
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
 def get_session(session_id: str, request: Request) -> SessionResponse:
-    owner_user_id = get_current_user_id(request)
+    user_context = get_current_user_context(request)
+    owner_user_id = user_context.user_id
     session = repository.get(session_id, owner_user_id=owner_user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
