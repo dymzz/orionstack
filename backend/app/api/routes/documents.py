@@ -13,7 +13,7 @@ from app.api.schemas.document import (
 from app.core.request_context import get_current_user_context
 from app.governance.authorization import require_permission
 from app.governance.activity_service import ActivityService
-from app.knowledge.indexing.index_dispatcher import IndexDispatcher
+from app.knowledge.indexing.index_dispatcher import index_dispatcher
 from app.knowledge.ingestion.document_ingestion_service import DocumentIngestionService
 from app.knowledge.ingestion.document_parser import (
     DocumentParser,

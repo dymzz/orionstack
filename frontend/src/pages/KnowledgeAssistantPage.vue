@@ -256,7 +256,7 @@ async function handleAsk() {
           question: question.value,
           document_ids: selectedDocumentIds.value,
           top_k: 5,
-          use_rerank: true,
+          use_rerank: false,
         },
         {
           onEvent: (event) => {
@@ -284,7 +284,7 @@ async function handleAsk() {
         question: question.value,
         document_ids: selectedDocumentIds.value,
         top_k: 5,
-        use_rerank: true,
+        use_rerank: false,
       });
       lastAnswer.value = data;
     }

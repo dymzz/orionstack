@@ -5,6 +5,7 @@ import os
 import re
 
 from app.integrations.model_gateway import ModelGateway
+from app.knowledge.retrieval.query_tokenizer import build_query_features, build_text_features, lexical_score
 
 
 class RerankService:
@@ -44,25 +45,22 @@ class RerankService:
         return lexical_results[:top_k]
 
     def _lexical_rerank(self, question: str, candidates: list[dict], top_k: int) -> list[dict]:
-        normalized_question = " ".join(question.lower().split())
-        tokens = [token for token in normalized_question.split() if token]
+        query_features = build_query_features(question)
 
         rescored: list[dict] = []
         for index, candidate in enumerate(candidates):
             snippet = str(candidate.get("snippet", ""))
-            normalized_snippet = " ".join(snippet.lower().split())
-            lexical_score = self._lexical_score(
-                normalized_question=normalized_question,
-                normalized_snippet=normalized_snippet,
-                tokens=tokens,
+            lexical_score_value = lexical_score(
+                query=query_features,
+                candidate=build_text_features(snippet),
             )
             vector_score = float(candidate.get("score", 0.0))
-            rerank_score = (vector_score * 0.7) + (lexical_score * 0.3)
+            rerank_score = (vector_score * 0.7) + (lexical_score_value * 0.3)
 
             updated = dict(candidate)
             updated["score"] = rerank_score
             updated["vector_score"] = vector_score
-            updated["lexical_score"] = lexical_score
+            updated["lexical_score"] = lexical_score_value
             updated["rerank_provider"] = "lexical"
             updated["_original_index"] = index
             rescored.append(updated)
@@ -191,32 +189,3 @@ class RerankService:
             ordered.append(item)
 
         return ordered[:top_k]
-
-    def _lexical_score(
-        self,
-        *,
-        normalized_question: str,
-        normalized_snippet: str,
-        tokens: list[str],
-    ) -> float:
-        if not normalized_snippet:
-            return 0.0
-
-        token_hits = 0.0
-        for token in tokens:
-            if token in normalized_snippet:
-                token_hits += 1.0 + (normalized_snippet.count(token) * 0.1)
-
-        phrase_bonus = 0.0
-        if normalized_question and normalized_question in normalized_snippet:
-            phrase_bonus += 2.0
-
-        ordered_bonus = 0.0
-        if len(tokens) >= 2:
-            for left, right in zip(tokens, tokens[1:], strict=False):
-                pair = f"{left} {right}"
-                if pair in normalized_snippet:
-                    ordered_bonus += 0.4
-
-        coverage_bonus = (token_hits / len(tokens)) if tokens else 0.0
-        return token_hits + phrase_bonus + ordered_bonus + coverage_bonus

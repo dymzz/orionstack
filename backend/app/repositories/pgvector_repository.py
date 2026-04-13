@@ -83,6 +83,7 @@ class PgVectorRepository:
                 d.name AS document_name,
                 c.chunk_id AS chunk_id,
                 c.snippet AS snippet,
+                c.content AS content,
                 1 - (p.embedding <=> CAST(:query_vector AS vector)) AS score
             FROM chunk_embeddings e
             JOIN document_chunks c ON c.chunk_id = e.chunk_id

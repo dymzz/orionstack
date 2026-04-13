@@ -17,6 +17,11 @@ class QAService:
         self.history_repository = QAHistoryRepository()
         self.activity_service = ActivityService()
 
+    @property
+    def workflow(self):
+        """Compatibility shim for tests and the default knowledge assistant scene."""
+        return self.workflow_registry.resolve("knowledge_assistant")
+
     def supports_scene(self, scene: str | None) -> bool:
         return self.workflow_registry.is_supported(scene)
 
@@ -41,6 +46,7 @@ class QAService:
             answer_provider = self._resolve_answer_provider(
                 should_refuse=bool(workflow_state.get("should_refuse", False)),
                 has_answer=bool(answer),
+                lightweight_path=bool(workflow_state.get("lightweight_path", False)),
             )
             latency_ms = int((perf_counter() - start) * 1000)
             response = AskQuestionResponse(
@@ -141,7 +147,7 @@ class QAService:
 
         try:
             collected_answer: list[str] = []
-            stream_provider = "ollama_fallback"
+            stream_provider = "retrieval_direct" if bool(state.get("lightweight_path", False)) else "ollama_fallback"
 
             for token in workflow.stream_generate_tokens(state):
                 collected_answer.append(token)
@@ -154,6 +160,8 @@ class QAService:
                 answer = workflow.build_fallback_answer(finalized_state)
             if state.get("should_refuse"):
                 stream_provider = "guard_refusal"
+            elif bool(finalized_state.get("lightweight_path", state.get("lightweight_path", False))):
+                stream_provider = "retrieval_direct"
             elif raw_answer:
                 stream_provider = "langchain_or_ollama"
 
@@ -310,9 +318,11 @@ class QAService:
     def _sse_event(self, payload: dict) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-    def _resolve_answer_provider(self, *, should_refuse: bool, has_answer: bool) -> str:
+    def _resolve_answer_provider(self, *, should_refuse: bool, has_answer: bool, lightweight_path: bool) -> str:
         if should_refuse:
             return "guard_refusal"
+        if lightweight_path and has_answer:
+            return "retrieval_direct"
         if has_answer:
             return "langchain_or_ollama"
         return "fallback"

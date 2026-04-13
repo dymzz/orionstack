@@ -100,6 +100,11 @@ function formatIndexError(job) {
   return `${hint}（${code}）：${details}`;
 }
 
+function isFinishedJobFailure(job) {
+  if (!job?.finished_at) return false;
+  return job.status !== "indexed";
+}
+
 async function loadDocuments() {
   loading.value = true;
   errorMessage.value = "";
@@ -154,11 +159,11 @@ async function waitForIndexing(documentId, jobId) {
     const current = await getDocument(documentId);
     await loadDocuments();
     const latestJob = current.latest_index_job;
-    if (latestJob?.status === "failed" && latestJob.error_message) {
+    if (isFinishedJobFailure(latestJob)) {
       errorMessage.value = formatIndexError(latestJob);
       return;
     }
-    if (current.status === "indexed" || current.status === "failed") {
+    if (current.status === "indexed" || current.status === "failed" || current.status === "missing") {
       return;
     }
     await new Promise((resolve) => window.setTimeout(resolve, 1000));
@@ -179,7 +184,7 @@ async function waitForIndexingStream(documentId, jobId) {
       );
       documents.value = currentList;
 
-      if (event.status === "failed" && event.error_message) {
+      if (isFinishedJobFailure(event)) {
         errorMessage.value = formatIndexError(event);
       }
     },

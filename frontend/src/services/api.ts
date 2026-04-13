@@ -124,7 +124,7 @@ export function askQuestion(payload: {
       question: payload.question,
       document_ids: payload.document_ids || [],
       top_k: payload.top_k || 5,
-      use_rerank: payload.use_rerank ?? true,
+      use_rerank: payload.use_rerank ?? false,
     }),
   });
 }
@@ -150,7 +150,7 @@ export async function askQuestionStream(
       question: payload.question,
       document_ids: payload.document_ids || [],
       top_k: payload.top_k || 5,
-      use_rerank: payload.use_rerank ?? true,
+      use_rerank: payload.use_rerank ?? false,
     }),
     signal: handlers.signal,
   });

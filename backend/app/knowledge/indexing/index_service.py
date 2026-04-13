@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 from typing import Callable
 
@@ -133,16 +134,73 @@ class IndexService:
         self._report(progress_callback, "indexed", 100)
         return self.repository.get(document_id)
 
-    def _build_chunks(self, content: str, chunk_size: int = 280) -> list[dict]:
-        normalized = " ".join(content.split())
-        if not normalized:
-            normalized = "Document uploaded without extractable text."
+    def _build_chunks(
+        self,
+        content: str,
+        chunk_size: int = 360,
+        min_chunk_size: int = 140,
+    ) -> list[dict]:
+        paragraphs = self._normalize_paragraphs(content)
+        if not paragraphs:
+            paragraphs = ["Document uploaded without extractable text."]
 
         chunks: list[dict] = []
-        start = 0
-        while start < len(normalized):
-            chunk_text = normalized[start : start + chunk_size].strip()
-            if chunk_text:
+        paragraph_offset = 0
+        for paragraph_index, paragraph in enumerate(paragraphs):
+            if len(paragraph) <= chunk_size:
+                chunks.append(
+                    {
+                        "chunk_id": str(uuid4()),
+                        "ordinal": len(chunks),
+                        "snippet": paragraph[:160],
+                        "content": paragraph,
+                        "metadata_json": {
+                            "start_offset": paragraph_offset,
+                            "end_offset": paragraph_offset + len(paragraph),
+                            "paragraph_index": paragraph_index,
+                        },
+                    }
+                )
+                paragraph_offset += len(paragraph) + 2
+                continue
+
+            units = self._split_paragraph_units(paragraph, max_unit_size=chunk_size)
+            current_parts: list[str] = []
+            current_start_offset = paragraph_offset
+            current_end_offset = paragraph_offset
+
+            for unit_text, unit_start, unit_end in units:
+                addition_length = len(unit_text) if not current_parts else len(unit_text) + 1
+                current_text = " ".join(current_parts)
+                should_flush = (
+                    bool(current_parts)
+                    and (len(current_text) + addition_length) > chunk_size
+                    and len(current_text) >= min_chunk_size
+                )
+                if should_flush:
+                    chunk_text = current_text.strip()
+                    chunks.append(
+                        {
+                            "chunk_id": str(uuid4()),
+                            "ordinal": len(chunks),
+                            "snippet": chunk_text[:160],
+                            "content": chunk_text,
+                            "metadata_json": {
+                                "start_offset": current_start_offset,
+                                "end_offset": current_end_offset,
+                                "paragraph_index": paragraph_index,
+                            },
+                        }
+                    )
+                    current_parts = []
+
+                if not current_parts:
+                    current_start_offset = paragraph_offset + unit_start
+                current_parts.append(unit_text)
+                current_end_offset = paragraph_offset + unit_end
+
+            if current_parts:
+                chunk_text = " ".join(current_parts).strip()
                 chunks.append(
                     {
                         "chunk_id": str(uuid4()),
@@ -150,24 +208,118 @@ class IndexService:
                         "snippet": chunk_text[:160],
                         "content": chunk_text,
                         "metadata_json": {
-                            "start_offset": start,
-                            "end_offset": min(start + chunk_size, len(normalized)),
+                            "start_offset": current_start_offset,
+                            "end_offset": current_end_offset,
+                            "paragraph_index": paragraph_index,
                         },
                     }
                 )
-            start += chunk_size
+
+            paragraph_offset += len(paragraph) + 2
 
         if not chunks:
+            normalized = paragraphs[0]
             chunks.append(
                 {
                     "chunk_id": str(uuid4()),
                     "ordinal": 0,
                     "snippet": normalized[:160],
                     "content": normalized,
-                    "metadata_json": {"start_offset": 0, "end_offset": len(normalized)},
+                    "metadata_json": {"start_offset": 0, "end_offset": len(normalized), "paragraph_index": 0},
                 }
             )
         return chunks
+
+    def _normalize_paragraphs(self, content: str) -> list[str]:
+        normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+        paragraphs: list[str] = []
+        current_lines: list[str] = []
+        for raw_line in normalized.split("\n"):
+            line = " ".join(raw_line.split()).strip()
+            if not line:
+                if current_lines:
+                    paragraphs.append("\n".join(current_lines).strip())
+                    current_lines = []
+                continue
+            if self._starts_structured_block(line) and current_lines:
+                paragraphs.append("\n".join(current_lines).strip())
+                current_lines = []
+            current_lines.append(line)
+        if current_lines:
+            paragraphs.append("\n".join(current_lines).strip())
+        return paragraphs
+
+    def _starts_structured_block(self, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped:
+            return False
+        if re.match(r"^#{1,6}\s+", stripped):
+            return True
+        if re.match(r"^(?:q|question|问)\s*[:：]", stripped, flags=re.IGNORECASE):
+            return True
+        if re.match(r"^(?:\d+[.)、]|[-*•])\s+", stripped):
+            return True
+        if re.match(r"^【[^】]+】$", stripped):
+            return True
+        if stripped.endswith(("？", "?")):
+            return True
+        if len(stripped) <= 80 and any(token in stripped for token in ["如何", "怎么", "怎样", "怎么办", "哪里", "哪儿", "是否", "能否", "多久", "为什么", "是什么"]):
+            return True
+        return False
+
+    def _split_paragraph_units(self, paragraph: str, *, max_unit_size: int) -> list[tuple[str, int, int]]:
+        sentence_matches = list(re.finditer(r"[^。！？!?；;]+[。！？!?；;]?", paragraph))
+        if not sentence_matches:
+            return [(paragraph, 0, len(paragraph))]
+
+        units: list[tuple[str, int, int]] = []
+        for match in sentence_matches:
+            raw_text = match.group(0)
+            stripped = raw_text.strip()
+            if not stripped:
+                continue
+            leading_ws = len(raw_text) - len(raw_text.lstrip())
+            trailing_ws = len(raw_text) - len(raw_text.rstrip())
+            start = match.start() + leading_ws
+            end = match.end() - trailing_ws
+            if len(stripped) <= max_unit_size:
+                units.append((stripped, start, end))
+                continue
+            units.extend(self._split_long_unit(stripped, start_offset=start, max_unit_size=max_unit_size))
+        return units or [(paragraph, 0, len(paragraph))]
+
+    def _split_long_unit(self, text: str, *, start_offset: int, max_unit_size: int) -> list[tuple[str, int, int]]:
+        secondary_matches = list(re.finditer(r"[^，,、：:]+[，,、：:]?", text))
+        if len(secondary_matches) <= 1:
+            return self._hard_split_unit(text, start_offset=start_offset, max_unit_size=max_unit_size)
+
+        units: list[tuple[str, int, int]] = []
+        for match in secondary_matches:
+            raw_text = match.group(0)
+            stripped = raw_text.strip()
+            if not stripped:
+                continue
+            leading_ws = len(raw_text) - len(raw_text.lstrip())
+            trailing_ws = len(raw_text) - len(raw_text.rstrip())
+            start = start_offset + match.start() + leading_ws
+            end = start_offset + match.end() - trailing_ws
+            if len(stripped) <= max_unit_size:
+                units.append((stripped, start, end))
+                continue
+            units.extend(self._hard_split_unit(stripped, start_offset=start, max_unit_size=max_unit_size))
+        return units
+
+    def _hard_split_unit(self, text: str, *, start_offset: int, max_unit_size: int) -> list[tuple[str, int, int]]:
+        units: list[tuple[str, int, int]] = []
+        start = 0
+        while start < len(text):
+            end = min(start + max_unit_size, len(text))
+            chunk = text[start:end].strip()
+            if chunk:
+                leading_ws = len(text[start:end]) - len(text[start:end].lstrip())
+                units.append((chunk, start_offset + start + leading_ws, start_offset + end))
+            start = end
+        return units
 
     def _report(self, progress_callback: Callable[[str, int], None] | None, status: str, progress_pct: int) -> None:
         if progress_callback is not None:
