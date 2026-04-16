@@ -185,6 +185,7 @@ textarea {
 .record-panel-subtitle,
 .record-panel-message,
 .record-meta,
+.record-summary,
 .record-empty {
   margin: 0;
   color: #4b5563;
@@ -239,6 +240,30 @@ textarea {
 .record-query {
   margin: 0;
   font-weight: 600;
+  word-break: break-word;
+}
+
+.record-summary,
+.record-trace-line {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.record-trace-line code,
+.record-details .record-meta {
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+}
+
+.record-details summary {
+  cursor: pointer;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.record-details .record-meta {
+  margin-top: 8px;
   word-break: break-word;
 }
 

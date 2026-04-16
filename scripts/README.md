@@ -122,3 +122,39 @@
 - 如果当前没有可提交变更，脚本会直接停止
 - 如果使用 `-SkipPush`，提交与 tag 只保留在本地
 - 如果只想检查参数和版本摘要，可使用 `-CheckOnly`
+
+### `clean-local-records.ps1`
+
+用途：
+
+- 清理本地问答记录文件
+- 仅作用于本地 `chat_records.jsonl` 与 `feedback_records.jsonl`
+
+参数：
+
+- `-ChatOnly`
+- `-FeedbackOnly`
+- `-CheckOnly`
+- `-WhatIf`
+
+示例：
+
+```powershell
+.\scripts\clean-local-records.ps1 -CheckOnly
+.\scripts\clean-local-records.ps1 -WhatIf
+.\scripts\clean-local-records.ps1
+.\scripts\clean-local-records.ps1 -ChatOnly
+.\scripts\clean-local-records.ps1 -FeedbackOnly
+```
+
+执行结果：
+
+1. 输出当前本地记录文件路径、行数与大小
+2. 根据参数选择清理 ask 记录或 feedback 记录
+3. 删除目标本地记录文件
+
+注意事项：
+
+- 该脚本只清理本地记录文件，不清理文档上传数据
+- `-WhatIf` 只预演，不实际删除
+- `-CheckOnly` 只检查当前文件状态，不执行清理

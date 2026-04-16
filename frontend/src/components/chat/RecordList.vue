@@ -27,14 +27,16 @@
             <code class="record-trace">{{ record.trace_id }}</code>
           </div>
           <p class="record-query">{{ record.raw_query }}</p>
-          <p class="record-meta">
+          <p class="record-summary">
             {{ formatTime(record.created_at) }}
             <span v-if="record.feedback_label"> · feedback: {{ record.feedback_label }}</span>
+            <span> · chunks: {{ record.retrieved_chunk_ids.length }}</span>
           </p>
-          <p class="record-meta">
-            chunks:
-            {{ record.retrieved_chunk_ids.length > 0 ? record.retrieved_chunk_ids.join(', ') : '无' }}
-          </p>
+          <p class="record-trace-line">trace_id: <code>{{ record.trace_id }}</code></p>
+          <details v-if="record.retrieved_chunk_ids.length > 0" class="record-details">
+            <summary>查看命中 chunk</summary>
+            <p class="record-meta">{{ record.retrieved_chunk_ids.join(', ') }}</p>
+          </details>
         </li>
       </ul>
     </div>
@@ -52,7 +54,7 @@
             <code class="record-trace">{{ item.trace_id }}</code>
           </div>
           <p class="record-query">{{ item.raw_query }}</p>
-          <p class="record-meta">{{ formatTime(item.created_at) }} · response: {{ item.response_status }}</p>
+          <p class="record-summary">{{ formatTime(item.created_at) }} · response: {{ item.response_status }}</p>
         </li>
       </ul>
     </div>
