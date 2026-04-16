@@ -19,6 +19,9 @@ node_modules/
 # Local runtime artifacts
 .runtime/
 
+# Environment files
+.env
+
 # Local database configuration and runtime files
 backend/config/database.local.yaml
 backend/tests/.tmp/

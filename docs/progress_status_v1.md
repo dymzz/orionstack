@@ -191,7 +191,19 @@
 - 已在 `settings.py` 增加最小记录保留数量配置项
 - 已在两个 repo 的保存方法中增加保留边界截断逻辑
 - 已在 `scripts/README.md` 补充保留策略说明
-- 当前下一片可围绕长尾收口或新业务目标继续
+- 当前下一片应进入生产配置调优收口
+
+### 4.11 生产配置调优收口阶段
+
+状态：**完成**
+
+说明：
+
+- 已在 `settings.py` 增加 `cors_origins` 配置项，支持环境变量覆盖
+- 已新增 `.env.example` 作为全量配置参考
+- 已新增 `scripts/start-backend.ps1` 生产启动脚本
+- 已在 `scripts/README.md` 补充生产配置说明
+- 当前系统已具备最小生产配置调优与启动方式区分能力
 
 ---
 
@@ -199,13 +211,204 @@
 
 当前尚未完成的内容，已不再属于 FAQ Demo 收口，也不再属于 P6 / P7 / P8 / P9 / P10 当前片内未完成项，而主要属于新的后续片：
 
-当前已完成 P6、P7、P8、P9、P10：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本与记录摘要收口，并完成当前阶段最小测试与文档同步。
+当前已完成 P6、P7、P8、P9、P10、P11、P12：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口，并完成当前阶段最小测试与文档同步。
 
 当前下一阶段主要剩余问题为：
 
 1. 当前记录保留策略已配置化，但长期运行下的边界校验仍需真实环境验证
 2. 当前仍缺少面向非开发用户的部署与运维最小说明
-3. 当前还没围绕生产环境的配置调优与预留配置做完整收口
+
+---
+
+## 16. P11 之后规划：P12 生产配置调优收口片
+
+### 16.1 P12 目标
+
+把当前系统从：
+
+```text
+配置散落在代码默认值与脚本参数中
+-> 缺少生产环境最小可调配置边界
+-> 缺少配置参考与启动方式区分
+```
+
+推进到：
+
+```text
+配置有最小环境变量承载位
+-> CORS 来源可按部署域名调优
+-> 生产启动方式有明确区分
+-> 配置差异有明确文档
+```
+
+### 16.2 P12 范围
+
+P12 只做以下 4 类工作：
+
+1. CORS 来源可配置化，支持环境变量 `ORIONSTACK_CORS_ORIGINS`
+2. 新增 `.env.example` 作为配置参考文件
+3. 新增生产启动脚本 `scripts/start-backend.ps1`（不带 `--reload`，支持多 worker）
+4. 更新脚本说明、进度文档与文件职责文档
+
+### 16.3 P12 不做的内容
+
+P12 明确不做：
+
+1. 不做 Docker / 容器化配置
+2. 不做 Nginx / 反向代理配置
+3. 不做 HTTPS / 证书配置
+4. 不做数据库化存储
+5. 不做 CI/CD 流水线
+6. 不做复杂运维监控平台
+
+### 16.4 P12 建议实现顺序
+
+#### 第一步：CORS 来源可配置化
+
+目标：
+
+- 在 `settings.py` 中增加 `cors_origins` 配置项
+- 默认值保持当前开发来源 `http://localhost:5173` 与 `http://127.0.0.1:5173`
+- 生产环境可通过 `ORIONSTACK_CORS_ORIGINS` 环境变量设置实际部署域名
+- `main.py` 中 CORS 中间件从 `settings` 读取 `cors_origins`
+
+当前状态：
+
+- `settings.py` 已增加 `cors_origins` 配置项与 `_resolve_cors_origins` 辅助函数
+- `ORIONSTACK_CORS_ORIGINS` 支持逗号分隔的多来源值
+- `main.py` 已从 `settings.cors_origins` 读取 CORS 来源
+- `backend/tests/test_chat_flow.py` 已补齐 CORS 配置默认值与环境变量覆盖验证
+
+#### 第二步：配置参考文件
+
+目标：
+
+- 新增 `.env.example` 列出所有可用环境变量及其默认值
+- 为生产部署提供最小配置参考
+
+当前状态：
+
+- `.env.example` 已创建，包含所有 `ORIONSTACK_*` 环境变量及其说明
+
+#### 第三步：生产启动脚本
+
+目标：
+
+- 新增 `scripts/start-backend.ps1`，以生产配置启动后端
+- 与 `dev-backend.ps1` 的差异：不带 `--reload`，默认 `prod` 模式，支持 `-Workers` 参数
+
+当前状态：
+
+- `scripts/start-backend.ps1` 已创建
+- 默认 `prod` 模式，不带 `--reload`
+- 支持 `-Workers` 参数启动多 worker 进程
+
+#### 第四步：文档收口
+
+目标：
+
+- 更新 `scripts/README.md` 补充生产配置说明、环境变量参考表与启动脚本说明
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- `scripts/README.md` 已补充 `start-backend.ps1` 说明、生产配置说明、环境变量参考表与 CORS 来源说明
+- `progress_status_v1.md` 已同步 P12 当前状态
+- `file_responsibilities_v1.md` 已同步 `settings.py`、`start-backend.ps1` 与 `.env.example` 职责变化
+
+### 16.5 P12 对应的文件级任务方向
+
+#### 后端配置方向
+
+- `backend/app/config/settings.py`
+- `backend/main.py`
+
+#### 配置与脚本方向
+
+- `.env.example`
+- `scripts/start-backend.ps1`
+- `scripts/README.md`
+
+#### 测试与文档方向
+
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 16.6 P12 可开工配置清单
+
+#### 16.6.1 CORS 来源配置项
+
+配置项：
+
+- `ORIONSTACK_CORS_ORIGINS`
+
+默认值（不设置时）：
+
+- `http://localhost:5173,http://127.0.0.1:5173`
+
+设置方式：
+
+```powershell
+$env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com,https://admin.example.com"
+```
+
+#### 16.6.2 生产启动参数
+
+脚本：
+
+- `scripts/start-backend.ps1`
+
+关键参数：
+
+- `-AppMode prod`（默认）
+- `-Workers 1`（默认）
+- 不带 `--reload`
+
+#### 16.6.3 环境变量参考
+
+参见 `.env.example` 文件。
+
+### 16.7 P12 可开工测试清单
+
+#### 16.7.1 后端最小验证清单
+
+应完成以下最小验证：
+
+1. CORS 来源默认值包含开发环境来源
+2. CORS 来源通过环境变量可自定义
+3. CORS 来源为空时回退到默认开发来源
+4. 生产启动脚本可正常启动（`-CheckOnly` 模式）
+
+#### 16.7.2 文档要求
+
+应同步以下内容：
+
+1. `scripts/README.md` 补充生产配置与启动脚本说明
+2. `progress_status_v1.md` 更新 P12 实际状态
+3. `file_responsibilities_v1.md` 更新配置与脚本职责变化
+
+### 16.8 P12 阶段结论目标
+
+P12 完成后，应达成以下结论：
+
+1. 生产环境 CORS 来源可通过环境变量配置，不再硬编码
+2. 所有环境变量有明确参考文件与默认值
+3. 生产启动方式与开发启动方式有明确区分
+4. 配置差异（demo/dev/prod）有明确文档
+
+### 16.9 P12 当前结论
+
+当前 P12 的真实结论为：
+
+1. `settings.py` 已增加 `cors_origins` 配置项，支持环境变量 `ORIONSTACK_CORS_ORIGINS` 覆盖
+2. `.env.example` 已列出所有环境变量及其默认值与说明
+3. `scripts/start-backend.ps1` 已提供生产启动入口，默认 `prod` 模式，不带 `--reload`
+4. `scripts/README.md` 已补充生产配置说明、环境变量参考表与 CORS 来源说明
+
+一句话总结：
+
+**P12 计划范围已完成，当前系统已具备最小生产配置调优与启动方式区分能力。**
 
 ---
 
@@ -461,11 +664,13 @@ P6 预计会直接新增或修改以下文件附近：
 - 已进入 P8，并完成当前计划范围：ask 记录落盘、feedback 按 trace_id 关联、demo/dev 记录查看接口与最小测试收口
 - 已进入 P9，并完成当前计划范围：前端最近记录区、开发态单页回看、前端构建与文档同步
 - 已进入 P10，并完成当前计划范围：本地记录清理脚本、脚本说明、记录摘要收口与文档同步
-- 如继续推进，下一片应进入 P11：本地记录维护策略配置化片
+- 已进入 P10，并完成当前计划范围：本地记录清理脚本、记录摘要收口与策略配置化
+- 已进入 P11，并完成当前计划范围：本地记录维护策略配置化与自动截断
+- 已进入 P12，并完成当前计划范围：CORS 来源可配置化、配置参考文件、生产启动脚本与配置说明收口
 
 一句话总结就是：
 
-**当前不再继续扩设计，FAQ Demo 到本地记录维护闭环链路已经跑通；当前 P6、P7、P8、P9、P10 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
+**当前不再继续扩设计，FAQ Demo 到生产配置调优闭环链路已经跑通；当前 P6、P7、P8、P9、P10、P11、P12 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
 
 ---
 

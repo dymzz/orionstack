@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def _resolve_app_mode() -> str:
@@ -7,12 +7,20 @@ def _resolve_app_mode() -> str:
     return value if value in {"demo", "dev", "prod"} else "demo"
 
 
+def _resolve_cors_origins() -> tuple[str, ...]:
+    raw = os.getenv("ORIONSTACK_CORS_ORIGINS", "").strip()
+    if raw:
+        return tuple(origin.strip() for origin in raw.split(",") if origin.strip())
+    return ("http://localhost:5173", "http://127.0.0.1:5173")
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("ORIONSTACK_APP_NAME", "OrionStack Demo")
     host: str = os.getenv("ORIONSTACK_HOST", "127.0.0.1")
     port: int = int(os.getenv("ORIONSTACK_PORT", "8000"))
-    app_mode: str = _resolve_app_mode()
+    app_mode: str = field(default_factory=_resolve_app_mode)
+    cors_origins: tuple[str, ...] = field(default_factory=_resolve_cors_origins)
     route_confidence_threshold: float = float(
         os.getenv("ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", "0.6")
     )

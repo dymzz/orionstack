@@ -397,6 +397,32 @@ def test_feedback_repo_truncates_oldest_records(tmp_path) -> None:
     assert records[2]["trace_id"] == "trace-4"
 
 
+def test_cors_origins_default_includes_dev_origins() -> None:
+    default_settings = Settings()
+    assert "http://localhost:5173" in default_settings.cors_origins
+    assert "http://127.0.0.1:5173" in default_settings.cors_origins
+
+
+def test_cors_origins_can_be_configured_via_env(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "ORIONSTACK_CORS_ORIGINS", "https://example.com,https://app.example.com"
+    )
+    custom_settings = Settings()
+    assert custom_settings.cors_origins == (
+        "https://example.com",
+        "https://app.example.com",
+    )
+
+
+def test_cors_origins_empty_env_falls_back_to_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ORIONSTACK_CORS_ORIGINS", raising=False)
+    default_settings = Settings()
+    assert default_settings.cors_origins == (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
+
+
 def test_record_repo_does_not_truncate_when_max_count_is_zero(tmp_path) -> None:
     from app.storage.repositories.chat_record_repo import ChatRecordRepository
 

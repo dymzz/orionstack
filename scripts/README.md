@@ -159,6 +159,87 @@
 - `-WhatIf` 只预演，不实际删除
 - `-CheckOnly` 只检查当前文件状态，不执行清理
 
+### `start-backend.ps1`
+
+用途：
+
+- 以生产配置启动后端服务（不带 `--reload`）
+
+参数：
+
+- `-AppMode prod|demo|dev`
+- `-BackendHost 127.0.0.1`
+- `-Port 8000`
+- `-Workers 1`
+- `-CheckOnly`
+
+示例：
+
+```powershell
+.\scripts\start-backend.ps1
+.\scripts\start-backend.ps1 -AppMode prod -BackendHost 0.0.0.0 -Port 8000 -Workers 2
+.\scripts\start-backend.ps1 -CheckOnly
+```
+
+与 `dev-backend.ps1` 的差异：
+
+- 不带 `--reload`：生产启动不做热重载
+- 支持 `-Workers` 参数：可启动多 worker 进程
+- 默认 `-AppMode prod`：关闭 Debug 信息与记录查看接口
+
+## 生产配置说明
+
+### 环境变量
+
+后端通过环境变量读取所有配置。可用变量参见仓库根目录 `.env.example`。
+
+关键配置项：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `ORIONSTACK_APP_MODE` | `demo` | `demo` / `dev` / `prod` |
+| `ORIONSTACK_HOST` | `127.0.0.1` | 监听地址，生产环境可改为 `0.0.0.0` |
+| `ORIONSTACK_PORT` | `8000` | 监听端口 |
+| `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 允许的前端来源，逗号分隔 |
+| `ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD` | `0.6` | 路由置信度阈值 |
+| `ORIONSTACK_RETRIEVAL_MIN_SCORE` | `2` | 检索最低分 |
+| `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
+| `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
+
+### `prod` 模式行为
+
+将 `ORIONSTACK_APP_MODE` 设为 `prod` 时：
+
+- `debug_info` 不会返回给前端，即使请求带了 `debug=true`
+- `/api/chat/records` 与 `/api/chat/feedback` 接口返回 `404`
+- 前端 `canDebug` 为 `false`，不展示 Debug 面板与最近记录区
+
+### CORS 来源
+
+生产环境必须将 `ORIONSTACK_CORS_ORIGINS` 设为实际部署域名，否则前端无法跨域请求后端。
+
+示例：
+
+```powershell
+$env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com"
+```
+
+不设置时默认为开发来源：
+
+- `http://localhost:5173`
+- `http://127.0.0.1:5173`
+
+### 前端生产构建
+
+```powershell
+cd frontend
+npm run build
+```
+
+构建产物在 `frontend/dist/`，可直接通过 Nginx 或其他静态文件服务提供。
+
+前端生产模式下 `canDebug` 为 `false`，不展示 Debug 面板与最近记录区。
+
 ## 记录保留策略
 
 后端在保存记录时会自动截断最旧记录，默认保留数量为 200 条。
