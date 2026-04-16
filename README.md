@@ -29,3 +29,31 @@ orionstack/
 ├── backend/
 ├── docs/
 └── README.md
+```
+
+## 本地启动
+
+最短路径启动 Demo：
+
+```powershell
+.\scripts\dev-demo.ps1
+```
+
+只检查脚本和环境，不实际拉起服务：
+
+```powershell
+.\scripts\dev-demo.ps1 -CheckOnly
+```
+
+分别启动前后端：
+
+```powershell
+.\scripts\dev-backend.ps1 -AppMode dev -BackendHost 127.0.0.1
+.\scripts\dev-frontend.ps1
+```
+
+补充说明：
+
+- `dev-demo.ps1` 会先启动后端，并等待 `GET /healthz` 就绪后再启动前端。
+- `dev-backend.ps1` 默认优先使用仓库根目录下的 `.venv\Scripts\python.exe`。
+- `dev-frontend.ps1` 默认只在 `node_modules` 缺失时安装依赖；如需强制刷新依赖，可使用 `-Install`。

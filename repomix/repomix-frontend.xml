@@ -1,0 +1,909 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: frontend/**/*
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+frontend/index.html
+frontend/package.json
+frontend/src/App.vue
+frontend/src/components/chat/AnswerCard.vue
+frontend/src/components/chat/ChatInput.vue
+frontend/src/components/chat/CitationList.vue
+frontend/src/main.ts
+frontend/src/pages/chat/ChatPage.vue
+frontend/src/services/api.ts
+frontend/src/services/chat.ts
+frontend/src/styles/index.css
+frontend/src/types/chat.ts
+frontend/src/vite-env.d.ts
+frontend/vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="frontend/src/components/chat/AnswerCard.vue">
+<template>
+  <section class="card answer-card">
+    <div class="meta-row">
+      <span class="badge">{{ responseStatus }}</span>
+      <span class="trace-id">trace_id: {{ traceId }}</span>
+    </div>
+    <p class="answer-text">{{ answer }}</p>
+    <div class="feedback-row">
+      <span class="feedback-label">这条回答是否有帮助？</span>
+      <div class="feedback-actions">
+        <button
+          class="ghost-button feedback-button"
+          :class="{ 'feedback-button-active': selectedFeedback === 'up' }"
+          :disabled="feedbackSubmitting"
+          @click="$emit('feedback', 'up')"
+        >
+          👍 有帮助
+        </button>
+        <button
+          class="ghost-button feedback-button"
+          :class="{ 'feedback-button-active': selectedFeedback === 'down' }"
+          :disabled="feedbackSubmitting"
+          @click="$emit('feedback', 'down')"
+        >
+          👎 没帮助
+        </button>
+      </div>
+    </div>
+    <p v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</p>
+  </section>
+</template>
+
+<script setup lang="ts">
+import type { FeedbackLabel } from '../../types/chat'
+
+defineEmits<{
+  (e: 'feedback', value: FeedbackLabel): void
+}>()
+
+defineProps<{
+  answer: string
+  responseStatus: string
+  traceId: string
+  feedbackSubmitting: boolean
+  selectedFeedback: FeedbackLabel | null
+  feedbackMessage: string
+}>()
+</script>
+</file>
+
+<file path="frontend/src/components/chat/ChatInput.vue">
+<template>
+  <section class="card">
+    <label class="label" for="chat-input">请输入问题</label>
+    <textarea
+      id="chat-input"
+      v-model="draft"
+      class="input-area"
+      rows="4"
+      placeholder="例如：如何上传文档？"
+      @keydown.ctrl.enter.prevent="submit"
+    />
+    <div class="actions">
+      <button class="primary-button" :disabled="loading || !draft.trim()" @click="submit">
+        {{ loading ? '发送中...' : '提交问题' }}
+      </button>
+    </div>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const props = defineProps<{ loading: boolean }>()
+const emit = defineEmits<{ (e: 'submit', value: string): void }>()
+const draft = ref('如何上传文档？')
+
+function submit() {
+  const value = draft.value.trim()
+  if (!value || props.loading) return
+  emit('submit', value)
+}
+</script>
+</file>
+
+<file path="frontend/src/components/chat/CitationList.vue">
+<template>
+  <section class="card">
+    <h2>引用</h2>
+    <ul class="citation-list">
+      <li v-for="citation in citations" :key="citation.citation_id">
+        <div class="citation-head">
+          <strong>{{ citation.source_label }}</strong>
+          <span class="citation-id">{{ citation.citation_id }}</span>
+        </div>
+        <p class="locator">{{ citation.source_locator }}</p>
+        <p class="citation-snippet">{{ citation.snippet }}</p>
+      </li>
+    </ul>
+  </section>
+</template>
+
+<script setup lang="ts">
+import type { CitationItem } from '../../types/chat'
+
+defineProps<{ citations: CitationItem[] }>()
+</script>
+</file>
+
+<file path="frontend/src/main.ts">
+import { createApp } from 'vue'
+import App from './App.vue'
+import './styles/index.css'
+
+createApp(App).mount('#app')
+</file>
+
+<file path="frontend/src/pages/chat/ChatPage.vue">
+<template>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <h1>OrionStack Demo</h1>
+        <p>最小可运行 FAQ / 知识问答闭环</p>
+      </div>
+      <button v-if="canDebug" class="ghost-button" @click="debugOpen = !debugOpen">
+        {{ debugOpen ? '隐藏 Debug' : '显示 Debug' }}
+      </button>
+    </header>
+
+    <main class="app-main">
+      <ChatInput :loading="loading" @submit="handleSubmit" />
+
+      <section v-if="errorMessage" class="error-box">
+        {{ errorMessage }}
+      </section>
+
+      <AnswerCard
+        v-if="response"
+        :answer="response.answer"
+        :response-status="response.response_status"
+        :trace-id="response.trace_id"
+        :feedback-submitting="feedbackSubmitting"
+        :selected-feedback="selectedFeedback"
+        :feedback-message="feedbackMessage"
+        @feedback="handleFeedback"
+      />
+
+      <CitationList
+        v-if="response && response.citations.length > 0"
+        :citations="response.citations"
+      />
+
+      <section v-if="debugOpen && response?.debug_info" class="card debug-panel">
+        <div class="debug-head">
+          <div>
+            <h2>Debug</h2>
+            <p class="debug-subtitle">开发态最小调试上下文</p>
+          </div>
+          <button class="ghost-button" @click="copyDebugContext">
+            {{ copyFeedback || '复制调试上下文' }}
+          </button>
+        </div>
+
+        <dl class="debug-grid">
+          <div class="debug-item">
+            <dt>trace_id</dt>
+            <dd>{{ response.trace_id }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>response_status</dt>
+            <dd>{{ response.response_status }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>normalized_query</dt>
+            <dd>{{ response.debug_info.normalized_query }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>route_result</dt>
+            <dd>{{ response.debug_info.route_result }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>router_used</dt>
+            <dd>{{ response.debug_info.router_used }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>route_confidence</dt>
+            <dd>{{ formatOptionalNumber(response.debug_info.route_confidence) }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>retrieval_score</dt>
+            <dd>{{ formatOptionalNumber(response.debug_info.retrieval_score) }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>fallback_reason</dt>
+            <dd>{{ formatOptionalText(response.debug_info.fallback_reason) }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>retrieved_chunks</dt>
+            <dd>
+              <ul v-if="response.debug_info.retrieved_chunks.length > 0" class="debug-list">
+                <li v-for="chunkId in response.debug_info.retrieved_chunks" :key="chunkId">
+                  <code>{{ chunkId }}</code>
+                </li>
+              </ul>
+              <span v-else class="debug-empty">无</span>
+            </dd>
+          </div>
+        </dl>
+
+        <details class="debug-raw">
+          <summary>原始 JSON</summary>
+          <pre>{{ debugInfoJson }}</pre>
+        </details>
+      </section>
+    </main>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onBeforeUnmount } from 'vue'
+import ChatInput from '../../components/chat/ChatInput.vue'
+import AnswerCard from '../../components/chat/AnswerCard.vue'
+import CitationList from '../../components/chat/CitationList.vue'
+import { askQuestion, submitFeedback } from '../../services/chat'
+import type { ChatAskResponse, FeedbackLabel } from '../../types/chat'
+
+const canDebug = import.meta.env.MODE !== 'production'
+const loading = ref(false)
+const debugOpen = ref(canDebug)
+const response = ref<ChatAskResponse | null>(null)
+const errorMessage = ref('')
+const copyFeedback = ref('')
+const feedbackSubmitting = ref(false)
+const selectedFeedback = ref<FeedbackLabel | null>(null)
+const feedbackMessage = ref('')
+const lastSubmittedQuery = ref('')
+
+const debugInfoJson = computed(() => {
+  if (!response.value?.debug_info) {
+    return ''
+  }
+
+  return JSON.stringify(response.value.debug_info, null, 2)
+})
+
+let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+
+async function handleSubmit(rawQuery: string) {
+  loading.value = true
+  errorMessage.value = ''
+  feedbackMessage.value = ''
+  selectedFeedback.value = null
+  lastSubmittedQuery.value = rawQuery
+  try {
+    response.value = await askQuestion(rawQuery, canDebug)
+  } catch (error) {
+    response.value = null
+    const message = error instanceof Error ? error.message : '请求失败'
+    errorMessage.value = message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleFeedback(label: FeedbackLabel) {
+  if (!response.value || !lastSubmittedQuery.value || feedbackSubmitting.value) {
+    return
+  }
+
+  feedbackSubmitting.value = true
+  feedbackMessage.value = ''
+
+  try {
+    await submitFeedback({
+      trace_id: response.value.trace_id,
+      raw_query: lastSubmittedQuery.value,
+      answer_text: response.value.answer,
+      feedback_label: label,
+      response_status: response.value.response_status,
+      retrieved_chunk_ids: response.value.citations.map((citation) => citation.citation_id),
+      normalized_query: response.value.debug_info?.normalized_query,
+      router_used: response.value.debug_info?.router_used,
+      route_result: response.value.debug_info?.route_result,
+      fallback_reason: response.value.debug_info?.fallback_reason,
+    })
+    selectedFeedback.value = label
+    feedbackMessage.value = label === 'up' ? '已记录：有帮助' : '已记录：没帮助'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '反馈提交失败'
+    feedbackMessage.value = message
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+function formatOptionalNumber(value?: number | null) {
+  if (value === undefined || value === null) {
+    return '无'
+  }
+
+  return value.toFixed(2)
+}
+
+function formatOptionalText(value?: string | null) {
+  return value && value.trim() ? value : '无'
+}
+
+function buildDebugContext() {
+  if (!response.value?.debug_info) {
+    return ''
+  }
+
+  const { debug_info: debugInfo } = response.value
+
+  return [
+    `trace_id: ${response.value.trace_id}`,
+    `response_status: ${response.value.response_status}`,
+    `normalized_query: ${debugInfo.normalized_query}`,
+    `route_result: ${debugInfo.route_result}`,
+    `router_used: ${debugInfo.router_used}`,
+    `route_confidence: ${formatOptionalNumber(debugInfo.route_confidence)}`,
+    `retrieval_score: ${formatOptionalNumber(debugInfo.retrieval_score)}`,
+    `fallback_reason: ${formatOptionalText(debugInfo.fallback_reason)}`,
+    `retrieved_chunks: ${debugInfo.retrieved_chunks.length > 0 ? debugInfo.retrieved_chunks.join(', ') : '无'}`,
+  ].join('\n')
+}
+
+function setCopyFeedback(message: string) {
+  copyFeedback.value = message
+
+  if (copyFeedbackTimer) {
+    clearTimeout(copyFeedbackTimer)
+  }
+
+  copyFeedbackTimer = setTimeout(() => {
+    copyFeedback.value = ''
+  }, 2000)
+}
+
+function fallbackCopyText(text: string) {
+  const textArea = document.createElement('textarea')
+  textArea.value = text
+  textArea.setAttribute('readonly', 'true')
+  textArea.style.position = 'fixed'
+  textArea.style.opacity = '0'
+  document.body.appendChild(textArea)
+  textArea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textArea)
+  return copied
+}
+
+async function copyDebugContext() {
+  const debugContext = buildDebugContext()
+  if (!debugContext) {
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(debugContext)
+    setCopyFeedback('已复制')
+  } catch {
+    if (fallbackCopyText(debugContext)) {
+      setCopyFeedback('已复制')
+      return
+    }
+
+    setCopyFeedback('复制失败')
+  }
+}
+
+onBeforeUnmount(() => {
+  if (copyFeedbackTimer) {
+    clearTimeout(copyFeedbackTimer)
+  }
+})
+</script>
+</file>
+
+<file path="frontend/src/services/chat.ts">
+import { postJson } from './api'
+import type { ChatAskRequest, ChatAskResponse, ChatFeedbackRequest, ChatFeedbackResponse } from '../types/chat'
+
+export async function askQuestion(rawQuery: string, debug = import.meta.env.DEV): Promise<ChatAskResponse> {
+  const payload: ChatAskRequest = { raw_query: rawQuery, debug }
+  return await postJson<ChatAskResponse>('/api/chat/ask', payload)
+}
+
+export async function submitFeedback(payload: ChatFeedbackRequest): Promise<ChatFeedbackResponse> {
+  return await postJson<ChatFeedbackResponse>('/api/chat/feedback', payload)
+}
+</file>
+
+<file path="frontend/src/styles/index.css">
+:root {
+  color-scheme: light;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background: #f6f7fb;
+  color: #1f2937;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.app-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.app-header p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.app-main {
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.input-area {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.primary-button,
+.ghost-button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: #111827;
+  color: #ffffff;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ghost-button {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.trace-id,
+.locator {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.answer-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.feedback-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.feedback-label {
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.feedback-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feedback-button {
+  border: 1px solid transparent;
+}
+
+.feedback-button-active {
+  border-color: #4338ca;
+  background: #e0e7ff;
+}
+
+.feedback-message {
+  margin: 12px 0 0;
+  color: #4338ca;
+  font-size: 13px;
+}
+
+.citation-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.citation-list li + li {
+  margin-top: 14px;
+}
+
+.citation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.citation-id {
+  color: #6b7280;
+  font-size: 12px;
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+}
+
+.citation-snippet {
+  margin: 8px 0 0;
+}
+
+.debug-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.debug-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.debug-head h2 {
+  margin: 0;
+}
+
+.debug-subtitle {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.debug-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.debug-item dt {
+  margin: 0 0 6px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.debug-item dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.debug-item code {
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+}
+
+.debug-item-wide {
+  grid-column: 1 / -1;
+}
+
+.debug-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.debug-list li + li {
+  margin-top: 6px;
+}
+
+.debug-empty {
+  color: #6b7280;
+}
+
+.debug-raw summary {
+  cursor: pointer;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.debug-raw pre {
+  overflow: auto;
+  margin: 12px 0 0;
+  background: #111827;
+  color: #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.error-box {
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    flex-direction: column;
+  }
+
+  .debug-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</file>
+
+<file path="frontend/src/types/chat.ts">
+export interface ChatAskRequest {
+  raw_query: string
+  debug?: boolean
+}
+
+export type FeedbackLabel = 'up' | 'down'
+
+export interface CitationItem {
+  citation_id: string
+  source_label: string
+  source_locator: string
+  snippet: string
+}
+
+export interface DebugInfo {
+  normalized_query: string
+  route_result: string
+  router_used: string
+  retrieved_chunks: string[]
+  route_confidence?: number
+  retrieval_score?: number
+  fallback_reason?: string
+}
+
+export interface ChatAskResponse {
+  response_status: 'ok' | 'refused' | 'fallback' | 'system_error'
+  trace_id: string
+  answer: string
+  citations: CitationItem[]
+  debug_info?: DebugInfo
+}
+
+export interface ChatFeedbackRequest {
+  trace_id: string
+  raw_query: string
+  answer_text: string
+  feedback_label: FeedbackLabel
+  response_status: ChatAskResponse['response_status']
+  retrieved_chunk_ids: string[]
+  normalized_query?: string
+  router_used?: string
+  route_result?: string
+  fallback_reason?: string
+}
+
+export interface ChatFeedbackResponse {
+  status: 'recorded'
+}
+</file>
+
+<file path="frontend/src/vite-env.d.ts">
+/// <reference types="vite/client" />
+</file>
+
+<file path="frontend/vite.config.ts">
+import { defineConfig } from 'vite'
+import { loadEnv } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, '.', '')
+  const backendOrigin = env.ORIONSTACK_BACKEND_ORIGIN || 'http://127.0.0.1:8000'
+
+  return {
+    plugins: [vue()],
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: backendOrigin,
+          changeOrigin: true,
+        },
+        '/healthz': {
+          target: backendOrigin,
+          changeOrigin: true,
+        },
+      },
+    },
+  }
+})
+</file>
+
+<file path="frontend/index.html">
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OrionStack Demo</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="frontend/src/App.vue">
+<template>
+  <ChatPage />
+</template>
+
+<script setup lang="ts">
+import ChatPage from './pages/chat/ChatPage.vue'
+</script>
+</file>
+
+<file path="frontend/package.json">
+{
+  "name": "orionstack-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^5.4.19"
+  }
+}
+</file>
+
+<file path="frontend/src/services/api.ts">
+export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  return (await response.json()) as T
+}
+</file>
+
+</files>

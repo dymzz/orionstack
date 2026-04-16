@@ -1,0 +1,810 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: backend/**/*
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/app/api/routes/chat.py
+backend/app/api/routes/health.py
+backend/app/config/settings.py
+backend/app/guardrails/normalize.py
+backend/app/retrieval/citation_mapper.py
+backend/app/retrieval/retriever.py
+backend/app/routing/contracts.py
+backend/app/routing/resolver.py
+backend/app/routing/rule_parser.py
+backend/app/runtime/trace.py
+backend/app/schemas/request.py
+backend/app/schemas/response.py
+backend/app/services/chat_service.py
+backend/app/storage/feedback/feedback_records.jsonl
+backend/app/storage/repositories/faq_repo.py
+backend/app/storage/repositories/feedback_repo.py
+backend/app/storage/seed/mock_faq.json
+backend/main.py
+backend/tests/test_chat_flow.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/app/api/routes/chat.py">
+from fastapi import APIRouter
+
+from app.config.settings import settings
+from app.runtime.trace import new_trace_id
+from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
+from app.schemas.response import ChatAskResponse, ChatFeedbackResponse, DebugInfo
+from app.services.chat_service import ChatService
+from app.storage.repositories.feedback_repo import FeedbackRepository
+
+router = APIRouter(prefix="/api/chat", tags=["chat"])
+service = ChatService()
+feedback_repository = FeedbackRepository()
+
+
+@router.post("/ask", response_model=ChatAskResponse)
+def ask_chat(payload: ChatAskRequest) -> ChatAskResponse:
+    trace_id = new_trace_id()
+    debug_enabled = payload.debug and settings.debug_response_enabled
+    try:
+        return service.ask(payload, trace_id=trace_id, debug_enabled=debug_enabled)
+    except Exception as error:  # pragma: no cover - minimal demo fallback
+        debug_info = None
+        if debug_enabled:
+            debug_info = DebugInfo(
+                normalized_query=payload.raw_query.strip(),
+                route_result="system_error",
+                router_used="rule_parser",
+                retrieved_chunks=[],
+                route_confidence=0.0,
+                fallback_reason=error.__class__.__name__,
+            )
+
+        return ChatAskResponse(
+            response_status="system_error",
+            trace_id=trace_id,
+            answer="系统暂时不可用，请稍后重试。",
+            citations=[],
+            debug_info=debug_info,
+        )
+
+
+@router.post("/feedback", response_model=ChatFeedbackResponse)
+def submit_feedback(payload: ChatFeedbackRequest) -> ChatFeedbackResponse:
+    feedback_repository.save(
+        {
+            "trace_id": payload.trace_id,
+            "raw_query": payload.raw_query,
+            "retrieved_chunk_ids": payload.retrieved_chunk_ids,
+            "answer_text": payload.answer_text,
+            "feedback_label": payload.feedback_label,
+            "token_input": 0,
+            "token_output": 0,
+            "total_latency_ms": 0,
+            "response_status": payload.response_status,
+            "normalized_query": payload.normalized_query,
+            "router_used": payload.router_used,
+            "route_result": payload.route_result,
+            "fallback_reason": payload.fallback_reason,
+        }
+    )
+    return ChatFeedbackResponse(status="recorded")
+</file>
+
+<file path="backend/app/api/routes/health.py">
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+</file>
+
+<file path="backend/app/config/settings.py">
+import os
+from dataclasses import dataclass
+
+
+def _resolve_app_mode() -> str:
+    value = os.getenv("ORIONSTACK_APP_MODE", "demo").strip().lower()
+    return value if value in {"demo", "dev", "prod"} else "demo"
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_name: str = os.getenv("ORIONSTACK_APP_NAME", "OrionStack Demo")
+    host: str = os.getenv("ORIONSTACK_HOST", "127.0.0.1")
+    port: int = int(os.getenv("ORIONSTACK_PORT", "8000"))
+    app_mode: str = _resolve_app_mode()
+    route_confidence_threshold: float = float(os.getenv("ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", "0.6"))
+    retrieval_min_score: int = int(os.getenv("ORIONSTACK_RETRIEVAL_MIN_SCORE", "2"))
+
+    @property
+    def debug_response_enabled(self) -> bool:
+        return self.app_mode in {"demo", "dev"}
+
+
+settings = Settings()
+</file>
+
+<file path="backend/app/guardrails/normalize.py">
+import re
+
+
+def normalize_query(raw_query: str) -> str:
+    value = re.sub(r"\s+", " ", raw_query).strip()
+    return value
+</file>
+
+<file path="backend/app/retrieval/citation_mapper.py">
+from app.schemas.response import CitationItem
+
+
+def map_citation(item: dict) -> CitationItem:
+    return CitationItem(
+        citation_id=item["id"],
+        source_label=item.get("source_label", "FAQ"),
+        source_locator=item.get("source_locator", item["id"]),
+        snippet=item.get("snippet", item["question"]),
+    )
+</file>
+
+<file path="backend/app/retrieval/retriever.py">
+from dataclasses import dataclass
+from typing import Any
+
+from app.storage.repositories.faq_repo import FAQRepository
+
+
+@dataclass(frozen=True)
+class RetrievalHit:
+    item: dict[str, Any]
+    score: int
+    matched_terms: tuple[str, ...]
+
+
+class Retriever:
+    def __init__(self, faq_repo: FAQRepository) -> None:
+        self._faq_repo = faq_repo
+
+    def search(self, query: str) -> RetrievalHit | None:
+        tokens = self._tokenize(query)
+        if not tokens:
+            return None
+
+        compact_query = "".join(tokens)
+        best_hit: RetrievalHit | None = None
+        best_score = 0
+
+        for item in self._faq_repo.list_all():
+            question = str(item["question"]).lower()
+            keywords = [str(keyword).lower() for keyword in item.get("keywords", [])]
+            haystack = " ".join(
+                [
+                    question,
+                    str(item["answer"]).lower(),
+                    " ".join(keywords),
+                ]
+            ).lower()
+            matched_terms = tuple(sorted({token for token in tokens if token in haystack}))
+            score = len(matched_terms)
+
+            if compact_query and len(compact_query) >= 3 and compact_query in question.replace(" ", ""):
+                score += 2
+
+            if compact_query and any(compact_query == keyword.replace(" ", "") for keyword in keywords):
+                score += 1
+
+            if score > best_score:
+                best_score = score
+                best_hit = RetrievalHit(item=item, score=score, matched_terms=matched_terms)
+
+        return best_hit if best_hit is not None and best_hit.score > 0 else None
+
+    @staticmethod
+    def _tokenize(query: str) -> list[str]:
+        query = query.lower().replace("？", " ").replace("?", " ").replace("，", " ").replace(",", " ")
+        tokens = [token.strip() for token in query.split() if token.strip()]
+        if tokens:
+            return tokens
+        # fallback for Chinese no-space short query
+        return [query.strip()] if query.strip() else []
+</file>
+
+<file path="backend/app/routing/contracts.py">
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class IntentDecision(BaseModel):
+    route: Literal["faq_qa", "fallback"]
+    confidence: float
+    query_for_search: str
+</file>
+
+<file path="backend/app/routing/resolver.py">
+from app.routing.contracts import IntentDecision
+from app.routing.rule_parser import RuleParser
+
+
+class RouteResolver:
+    def __init__(self) -> None:
+        self._rule_parser = RuleParser()
+
+    def resolve(self, raw_query: str) -> IntentDecision:
+        return self._rule_parser.parse(raw_query)
+</file>
+
+<file path="backend/app/routing/rule_parser.py">
+import re
+
+from app.routing.contracts import IntentDecision
+
+
+class RuleParser:
+    _FAQ_HINTS = (
+        "faq",
+        "文档",
+        "知识",
+        "引用",
+        "来源",
+        "定位",
+        "上传",
+        "检索",
+        "索引",
+        "demo",
+        "模式",
+        "mock",
+        "trace",
+        "healthz",
+        "接口",
+    )
+    _QUESTION_HINTS = (
+        "如何",
+        "怎么",
+        "怎样",
+        "查看",
+        "进入",
+        "是否",
+        "什么",
+        "哪里",
+        "可以",
+        "?",
+        "？",
+    )
+    _NON_FAQ_INPUTS = {"hi", "hello", "你好", "您好", "测试"}
+
+    def parse(self, raw_query: str) -> IntentDecision:
+        normalized = re.sub(r"\s+", " ", raw_query).strip().lower()
+        if not normalized:
+            return IntentDecision(route="fallback", confidence=0.0, query_for_search="")
+
+        if normalized in self._NON_FAQ_INPUTS:
+            return IntentDecision(route="fallback", confidence=0.2, query_for_search=normalized)
+
+        confidence = 0.0
+        if any(term in normalized for term in self._FAQ_HINTS):
+            confidence += 0.45
+        if any(term in normalized for term in self._QUESTION_HINTS):
+            confidence += 0.35
+        if len(normalized) >= 2:
+            confidence += 0.15
+        if len(normalized) > 80:
+            confidence -= 0.15
+
+        confidence = max(0.0, min(confidence, 1.0))
+        route = "faq_qa" if confidence >= 0.45 else "fallback"
+        return IntentDecision(route=route, confidence=confidence, query_for_search=normalized)
+</file>
+
+<file path="backend/app/runtime/trace.py">
+from uuid import uuid4
+
+
+def new_trace_id() -> str:
+    return uuid4().hex
+</file>
+
+<file path="backend/app/schemas/request.py">
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class ChatAskRequest(BaseModel):
+    raw_query: str = Field(min_length=1, max_length=500)
+    debug: bool = False
+
+
+class ChatFeedbackRequest(BaseModel):
+    trace_id: str = Field(min_length=1, max_length=64)
+    raw_query: str = Field(min_length=1, max_length=500)
+    answer_text: str = Field(min_length=1, max_length=4000)
+    feedback_label: Literal["up", "down"]
+    response_status: Literal["ok", "refused", "fallback", "system_error"]
+    retrieved_chunk_ids: list[str] = Field(default_factory=list)
+    normalized_query: str | None = Field(default=None, max_length=500)
+    router_used: str | None = Field(default=None, max_length=100)
+    route_result: str | None = Field(default=None, max_length=100)
+    fallback_reason: str | None = Field(default=None, max_length=200)
+</file>
+
+<file path="backend/app/schemas/response.py">
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class CitationItem(BaseModel):
+    citation_id: str
+    source_label: str
+    source_locator: str
+    snippet: str
+
+
+class DebugInfo(BaseModel):
+    normalized_query: str
+    route_result: str
+    router_used: str
+    retrieved_chunks: list[str]
+    route_confidence: float | None = None
+    retrieval_score: float | None = None
+    fallback_reason: str | None = None
+
+
+class ChatAskResponse(BaseModel):
+    response_status: Literal["ok", "refused", "fallback", "system_error"]
+    trace_id: str
+    answer: str
+    citations: list[CitationItem]
+    debug_info: DebugInfo | None = None
+
+
+class ChatFeedbackResponse(BaseModel):
+    status: Literal["recorded"]
+</file>
+
+<file path="backend/app/services/chat_service.py">
+from app.config.settings import settings
+from app.guardrails.normalize import normalize_query
+from app.retrieval.citation_mapper import map_citation
+from app.retrieval.retriever import Retriever
+from app.routing.resolver import RouteResolver
+from app.schemas.request import ChatAskRequest
+from app.schemas.response import ChatAskResponse, DebugInfo
+from app.storage.repositories.faq_repo import FAQRepository
+
+
+class ChatService:
+    _REFUSAL_TERMS = {
+        "unsafe_request": (
+            "炸弹",
+            "爆炸物",
+            "攻击系统",
+            "木马",
+            "勒索",
+            "窃取密码",
+            "毒品",
+            "伪造证件",
+            "自杀",
+        )
+    }
+
+    def __init__(self) -> None:
+        self._faq_repo = FAQRepository()
+        self._retriever = Retriever(self._faq_repo)
+        self._resolver = RouteResolver()
+
+    def ask(self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool) -> ChatAskResponse:
+        normalized_query = normalize_query(payload.raw_query)
+        if not normalized_query:
+            return ChatAskResponse(
+                response_status="refused",
+                trace_id=trace_id,
+                answer="请输入更明确的问题后再试。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="refused",
+                    chunk_ids=[],
+                    route_confidence=0.0,
+                    fallback_reason="empty_after_normalization",
+                ),
+            )
+
+        refusal_reason = self._match_refusal_reason(normalized_query)
+        if refusal_reason is not None:
+            return ChatAskResponse(
+                response_status="refused",
+                trace_id=trace_id,
+                answer="当前请求超出 FAQ 知识问答的安全边界，暂不提供回答。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="refused",
+                    chunk_ids=[],
+                    route_confidence=0.0,
+                    fallback_reason=refusal_reason,
+                ),
+            )
+
+        decision = self._resolver.resolve(normalized_query)
+
+        if decision.route != "faq_qa" or decision.confidence < settings.route_confidence_threshold:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前请求未进入标准 FAQ 路径，请先尝试更直接的提问方式。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result=decision.route,
+                    chunk_ids=[],
+                    route_confidence=decision.confidence,
+                    fallback_reason="route_not_confident_enough",
+                ),
+            )
+
+        hit = self._retriever.search(decision.query_for_search)
+        if hit is None or hit.score < settings.retrieval_min_score:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result=decision.route,
+                    chunk_ids=[] if hit is None else [hit.item["id"]],
+                    route_confidence=decision.confidence,
+                    retrieval_score=None if hit is None else float(hit.score),
+                    fallback_reason="retrieval_score_below_threshold" if hit is not None else "retrieval_no_hit",
+                ),
+            )
+
+        citation = map_citation(hit.item)
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer=hit.item["answer"],
+            citations=[citation],
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result=decision.route,
+                chunk_ids=[hit.item["id"]],
+                route_confidence=decision.confidence,
+                retrieval_score=float(hit.score),
+            ),
+        )
+
+    @staticmethod
+    def _match_refusal_reason(normalized_query: str) -> str | None:
+        lowered_query = normalized_query.lower()
+        for reason, terms in ChatService._REFUSAL_TERMS.items():
+            if any(term in lowered_query for term in terms):
+                return reason
+        return None
+
+    @staticmethod
+    def _build_debug_info(
+        enabled: bool,
+        normalized_query: str,
+        route_result: str,
+        chunk_ids: list[str],
+        *,
+        route_confidence: float | None,
+        retrieval_score: float | None = None,
+        fallback_reason: str | None = None,
+    ) -> DebugInfo | None:
+        if not enabled:
+            return None
+        return DebugInfo(
+            normalized_query=normalized_query,
+            route_result=route_result,
+            router_used="rule_parser",
+            retrieved_chunks=chunk_ids,
+            route_confidence=route_confidence,
+            retrieval_score=retrieval_score,
+            fallback_reason=fallback_reason,
+        )
+</file>
+
+<file path="backend/app/storage/feedback/feedback_records.jsonl">
+{"trace_id": "d2a6250d167e4bcaadd60a3f246d3c59", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "up", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa", "fallback_reason": null, "created_at": "2026-04-15T21:12:30.081179+00:00"}
+</file>
+
+<file path="backend/app/storage/repositories/faq_repo.py">
+import json
+from pathlib import Path
+from typing import Any
+
+
+class FAQRepository:
+    def __init__(self) -> None:
+        self._path = Path(__file__).resolve().parents[1] / "seed" / "mock_faq.json"
+
+    def list_all(self) -> list[dict[str, Any]]:
+        return json.loads(self._path.read_text(encoding="utf-8"))
+</file>
+
+<file path="backend/app/storage/repositories/feedback_repo.py">
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class FeedbackRepository:
+    def __init__(self) -> None:
+        self._path = Path(__file__).resolve().parents[1] / "feedback" / "feedback_records.jsonl"
+
+    def save(self, record: dict[str, Any]) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        enriched_record = {
+            **record,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(enriched_record, ensure_ascii=False) + "\n")
+</file>
+
+<file path="backend/app/storage/seed/mock_faq.json">
+[
+  {
+    "id": "faq-001",
+    "question": "如何上传文档？",
+    "answer": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。",
+    "keywords": [
+      "上传",
+      "文档",
+      "文件",
+      "解析",
+      "索引"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-001",
+    "snippet": "进入文档页后点击上传按钮，选择文件并提交。"
+  },
+  {
+    "id": "faq-002",
+    "question": "如何查看引用信息？",
+    "answer": "回答卡片下方会显示 citation 列表，点击来源定位信息可进一步跳转到原始内容位置。",
+    "keywords": [
+      "引用",
+      "citation",
+      "来源",
+      "定位"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-002",
+    "snippet": "回答卡片下方会显示 citation 列表。"
+  },
+  {
+    "id": "faq-003",
+    "question": "如何进入 Demo 模式？",
+    "answer": "使用开发脚本启动 Demo 模式后，系统会自动加载 mock_faq.json 并提供最小可运行闭环。",
+    "keywords": [
+      "demo",
+      "模式",
+      "mock_faq",
+      "启动"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-003",
+    "snippet": "Demo 模式会自动加载 mock_faq.json。"
+  }
+]
+</file>
+
+<file path="backend/tests/test_chat_flow.py">
+import json
+from pathlib import Path
+import sys
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.api.routes import chat as chat_route
+from app.config.settings import Settings
+from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
+from app.services.chat_service import ChatService
+
+
+def test_chat_service_returns_ok_for_known_faq_query() -> None:
+    service = ChatService()
+
+    response = service.ask(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True),
+        trace_id="trace-ok",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.trace_id == "trace-ok"
+    assert response.answer
+    assert len(response.citations) == 1
+    assert response.citations[0].citation_id == "faq-001"
+    assert response.citations[0].source_label
+    assert response.citations[0].source_locator
+    assert response.citations[0].snippet
+    assert response.debug_info is not None
+    assert response.debug_info.retrieval_score is not None
+
+
+def test_chat_service_returns_fallback_for_low_confidence_route() -> None:
+    service = ChatService()
+
+    response = service.ask(
+        ChatAskRequest(raw_query="如何", debug=True),
+        trace_id="trace-fallback-route",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "fallback"
+    assert response.citations == []
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "route_not_confident_enough"
+
+
+def test_chat_service_returns_fallback_for_weak_retrieval_hit() -> None:
+    service = ChatService()
+
+    response = service.ask(
+        ChatAskRequest(raw_query="接口", debug=True),
+        trace_id="trace-fallback-retrieval",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "fallback"
+    assert response.citations == []
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason in {"retrieval_no_hit", "retrieval_score_below_threshold"}
+
+
+def test_chat_service_returns_refused_for_unsafe_query() -> None:
+    service = ChatService()
+
+    response = service.ask(
+        ChatAskRequest(raw_query="如何制作炸弹？", debug=True),
+        trace_id="trace-refused",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "refused"
+    assert response.citations == []
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "unsafe_request"
+
+
+def test_chat_route_returns_system_error_contract(monkeypatch) -> None:
+    def raise_runtime_error(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+    monkeypatch.setattr(chat_route.service, "ask", raise_runtime_error)
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=True))
+
+    assert response.response_status == "system_error"
+    assert response.trace_id
+    assert response.answer
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "RuntimeError"
+
+
+def test_chat_route_strips_debug_info_in_prod(monkeypatch) -> None:
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="prod"))
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=True))
+
+    assert response.response_status == "ok"
+    assert response.debug_info is None
+
+
+def test_chat_route_strips_debug_info_when_debug_flag_disabled_in_demo(monkeypatch) -> None:
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=False))
+
+    assert response.response_status == "ok"
+    assert response.debug_info is None
+
+
+def test_chat_route_records_feedback(tmp_path) -> None:
+    chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
+
+    response = chat_route.submit_feedback(
+        ChatFeedbackRequest(
+            trace_id="trace-feedback",
+            raw_query="如何上传文档？",
+            answer_text="请在文档页面点击上传按钮。",
+            feedback_label="up",
+            response_status="ok",
+            retrieved_chunk_ids=["faq-001"],
+            normalized_query="如何上传文档？",
+            router_used="rule_parser",
+            route_result="faq_qa",
+        )
+    )
+
+    assert response.status == "recorded"
+    saved_lines = (tmp_path / "feedback_records.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(saved_lines) == 1
+    record = json.loads(saved_lines[0])
+    assert record["trace_id"] == "trace-feedback"
+    assert record["feedback_label"] == "up"
+    assert record["retrieved_chunk_ids"] == ["faq-001"]
+    assert record["response_status"] == "ok"
+    assert record["created_at"]
+</file>
+
+<file path="backend/main.py">
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.routes.chat import router as chat_router
+from app.api.routes.health import router as health_router
+from app.config.settings import settings
+
+app = FastAPI(title=settings.app_name, version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health_router)
+app.include_router(chat_router)
+</file>
+
+</files>

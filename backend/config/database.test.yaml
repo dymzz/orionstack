@@ -1,5 +1,0 @@
-app_name: OrionStack API
-app_env: test
-database:
-  url: sqlite+pysqlite:///./tests/.tmp/orionstack_test.db
-  echo: false

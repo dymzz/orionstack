@@ -1,0 +1,144 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: AGENTS.md, pyproject.toml, README.md
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+pyproject.toml
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="pyproject.toml">
+[project]
+name = "orionstack"
+version = "0.1.2"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.4",
+    "fastapi>=0.135.3",
+    "httpx>=0.28.1",
+    "langchain>=0.3.27",
+    "langchain-ollama>=0.3.10",
+    "langgraph>=0.6.11",
+    "pypdf>=6.1.1",
+    "psycopg[binary]>=3.3.3",
+    "pydantic>=2.12.5",
+    "pytest>=9.0.3",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.26",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2.0.49",
+    "uvicorn>=0.44.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-p no:cacheprovider"
+norecursedirs = ["*pytest-cache-files-*"]
+</file>
+
+<file path="README.md">
+# OrionStack
+
+企业 AI 应用底座仓库。
+
+## 当前定位
+
+本仓库当前承载 OrionStack 首期 MVP：**企业知识助手 / 文档问答**。
+
+当前主线聚焦：
+
+- 文档上传与解析
+- 索引构建
+- 检索问答
+- 引用返回
+- 会话、日志与反馈基础链路
+
+当前不追求：
+
+- 大而全平台化
+- 多 Agent 协同
+- 自动审批与自动写入旧系统
+- 以替代 ERP / OA / 权限系统为目标的重构工程
+
+## 目录概览
+
+```text
+orionstack/
+├── frontend/
+├── backend/
+├── docs/
+└── README.md
+```
+
+## 本地启动
+
+最短路径启动 Demo：
+
+```powershell
+.\scripts\dev-demo.ps1
+```
+
+只检查脚本和环境，不实际拉起服务：
+
+```powershell
+.\scripts\dev-demo.ps1 -CheckOnly
+```
+
+分别启动前后端：
+
+```powershell
+.\scripts\dev-backend.ps1 -AppMode dev -BackendHost 127.0.0.1
+.\scripts\dev-frontend.ps1
+```
+
+补充说明：
+
+- `dev-demo.ps1` 会先启动后端，并等待 `GET /healthz` 就绪后再启动前端。
+- `dev-backend.ps1` 默认优先使用仓库根目录下的 `.venv\Scripts\python.exe`。
+- `dev-frontend.ps1` 默认只在 `node_modules` 缺失时安装依赖；如需强制刷新依赖，可使用 `-Install`。
+</file>
+
+</files>

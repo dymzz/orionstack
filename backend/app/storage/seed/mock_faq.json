@@ -1,0 +1,45 @@
+[
+  {
+    "id": "faq-001",
+    "question": "如何上传文档？",
+    "answer": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。",
+    "keywords": [
+      "上传",
+      "文档",
+      "文件",
+      "解析",
+      "索引"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-001",
+    "snippet": "进入文档页后点击上传按钮，选择文件并提交。"
+  },
+  {
+    "id": "faq-002",
+    "question": "如何查看引用信息？",
+    "answer": "回答卡片下方会显示 citation 列表，点击来源定位信息可进一步跳转到原始内容位置。",
+    "keywords": [
+      "引用",
+      "citation",
+      "来源",
+      "定位"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-002",
+    "snippet": "回答卡片下方会显示 citation 列表。"
+  },
+  {
+    "id": "faq-003",
+    "question": "如何进入 Demo 模式？",
+    "answer": "使用开发脚本启动 Demo 模式后，系统会自动加载 mock_faq.json 并提供最小可运行闭环。",
+    "keywords": [
+      "demo",
+      "模式",
+      "mock_faq",
+      "启动"
+    ],
+    "source_label": "Mock FAQ",
+    "source_locator": "mock_faq.json#faq-003",
+    "snippet": "Demo 模式会自动加载 mock_faq.json。"
+  }
+]

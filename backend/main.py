@@ -1,37 +1,21 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes.sessions import router as sessions_router
+from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
-from app.api.routes.qa import router as qa_router
-from app.api.routes.feedback import router as feedback_router
-from app.api.routes.audit import router as audit_router
-from app.knowledge.indexing.index_dispatcher import index_dispatcher
+from app.api.routes.health import router as health_router
+from app.config.settings import settings
 
+app = FastAPI(title=settings.app_name, version="0.1.0")
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    try:
-        yield
-    finally:
-        index_dispatcher.shutdown()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
-def create_app() -> FastAPI:
-    app = FastAPI(title="OrionStack API", version="0.1.0", lifespan=lifespan)
-
-    app.include_router(sessions_router, prefix="/api/v1")
-    app.include_router(documents_router, prefix="/api/v1")
-    app.include_router(qa_router, prefix="/api/v1")
-    app.include_router(feedback_router, prefix="/api/v1")
-    app.include_router(audit_router, prefix="/api/v1")
-
-    @app.get("/healthz")
-    def healthz() -> dict[str, str]:
-        return {"status": "ok"}
-
-    return app
-
-
-app = create_app()
+app.include_router(health_router)
+app.include_router(chat_router)
+app.include_router(documents_router)

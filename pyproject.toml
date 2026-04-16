@@ -1,24 +1,17 @@
 [project]
 name = "orionstack"
 version = "0.1.2"
-description = "Add your description here"
+description = "Minimal FAQ and document QA demo for OrionStack"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "alembic>=1.18.4",
     "fastapi>=0.135.3",
     "httpx>=0.28.1",
-    "langchain>=0.3.27",
-    "langchain-ollama>=0.3.10",
-    "langgraph>=0.6.11",
-    "pypdf>=6.1.1",
-    "psycopg[binary]>=3.3.3",
     "pydantic>=2.12.5",
+    "pypdf>=6.1.1",
     "pytest>=9.0.3",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.26",
-    "pyyaml>=6.0.3",
-    "sqlalchemy>=2.0.49",
     "uvicorn>=0.44.0",
 ]
 

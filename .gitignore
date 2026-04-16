@@ -37,4 +37,7 @@ backend/pytest-cache-files-*/
 双仓联动工作流规范_完整版.md
 
 # Optional scratch tests folder at project root
-tests/
+# tests/
+.history/
+.runtime/
+.uv-cache/

@@ -1,1 +1,0 @@
-"""Knowledge assistant workflow package."""
