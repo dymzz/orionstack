@@ -347,3 +347,71 @@ def test_chat_route_hides_record_endpoints_in_prod(monkeypatch) -> None:
         assert getattr(error, "status_code", None) == 404
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("expected feedback endpoint to be hidden in prod")
+
+
+def test_chat_record_repo_truncates_oldest_records(tmp_path) -> None:
+    from app.storage.repositories.chat_record_repo import ChatRecordRepository
+
+    repo = ChatRecordRepository(max_count=3)
+    repo._path = tmp_path / "chat_records.jsonl"
+
+    for index in range(5):
+        repo.save(
+            {
+                "trace_id": f"trace-{index}",
+                "raw_query": f"q{index}",
+                "response_status": "ok",
+                "retrieved_chunk_ids": [],
+            }
+        )
+
+    lines = (tmp_path / "chat_records.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3
+    records = [json.loads(line) for line in lines if line.strip()]
+    assert records[0]["trace_id"] == "trace-2"
+    assert records[2]["trace_id"] == "trace-4"
+
+
+def test_feedback_repo_truncates_oldest_records(tmp_path) -> None:
+    from app.storage.repositories.feedback_repo import FeedbackRepository
+
+    repo = FeedbackRepository(max_count=3)
+    repo._path = tmp_path / "feedback_records.jsonl"
+
+    for index in range(5):
+        repo.save(
+            {
+                "trace_id": f"trace-{index}",
+                "raw_query": f"q{index}",
+                "feedback_label": "up",
+                "response_status": "ok",
+            }
+        )
+
+    lines = (
+        (tmp_path / "feedback_records.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(lines) == 3
+    records = [json.loads(line) for line in lines if line.strip()]
+    assert records[0]["trace_id"] == "trace-2"
+    assert records[2]["trace_id"] == "trace-4"
+
+
+def test_record_repo_does_not_truncate_when_max_count_is_zero(tmp_path) -> None:
+    from app.storage.repositories.chat_record_repo import ChatRecordRepository
+
+    repo = ChatRecordRepository(max_count=0)
+    repo._path = tmp_path / "chat_records.jsonl"
+
+    for index in range(5):
+        repo.save(
+            {
+                "trace_id": f"trace-{index}",
+                "raw_query": f"q{index}",
+                "response_status": "ok",
+                "retrieved_chunk_ids": [],
+            }
+        )
+
+    lines = (tmp_path / "chat_records.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 5

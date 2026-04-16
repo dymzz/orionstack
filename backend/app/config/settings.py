@@ -17,6 +17,12 @@ class Settings:
         os.getenv("ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", "0.6")
     )
     retrieval_min_score: int = int(os.getenv("ORIONSTACK_RETRIEVAL_MIN_SCORE", "2"))
+    chat_record_max_count: int = int(
+        os.getenv("ORIONSTACK_CHAT_RECORD_MAX_COUNT", "200")
+    )
+    feedback_record_max_count: int = int(
+        os.getenv("ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT", "200")
+    )
 
     @property
     def debug_response_enabled(self) -> bool:

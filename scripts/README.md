@@ -158,3 +158,25 @@
 - 该脚本只清理本地记录文件，不清理文档上传数据
 - `-WhatIf` 只预演，不实际删除
 - `-CheckOnly` 只检查当前文件状态，不执行清理
+
+## 记录保留策略
+
+后端在保存记录时会自动截断最旧记录，默认保留数量为 200 条。
+
+配置项：
+
+- `ORIONSTACK_CHAT_RECORD_MAX_COUNT`：问答记录保留数量上限，默认 `200`
+- `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`：反馈记录保留数量上限，默认 `200`
+
+设置方式：
+
+```powershell
+$env:ORIONSTACK_CHAT_RECORD_MAX_COUNT = "50"
+$env:ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT = "50"
+```
+
+行为说明：
+
+- 每次保存新记录后检查当前记录总数
+- 如果超出 `max_count`，自动删除最旧记录
+- 设置为 `0` 或不配置时保留默认上限 200 条

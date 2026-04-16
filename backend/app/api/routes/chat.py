@@ -18,8 +18,8 @@ from app.storage.repositories.feedback_repo import FeedbackRepository
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 service = ChatService()
-feedback_repository = FeedbackRepository()
-chat_record_repository = ChatRecordRepository()
+feedback_repository = FeedbackRepository(max_count=settings.feedback_record_max_count)
+chat_record_repository = ChatRecordRepository(max_count=settings.chat_record_max_count)
 
 
 @router.post("/ask", response_model=ChatAskResponse)
