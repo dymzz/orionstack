@@ -13,6 +13,15 @@
     <main class="app-main">
       <DocumentUpload :uploading="documentUploading" :upload-message="documentUploadMessage" @upload="handleDocumentUpload" />
 
+      <RecordList
+        v-if="canDebug"
+        :records="chatRecords"
+        :feedback-items="feedbackRecords"
+        :loading="recordPanelLoading"
+        :message="recordPanelMessage"
+        @refresh="refreshRecordPanel()"
+      />
+
       <section class="card document-library">
         <div class="document-library-head">
           <div>
@@ -158,9 +167,10 @@ import ChatInput from '../../components/chat/ChatInput.vue'
 import AnswerCard from '../../components/chat/AnswerCard.vue'
 import CitationList from '../../components/chat/CitationList.vue'
 import DocumentUpload from '../../components/chat/DocumentUpload.vue'
-import { askQuestion, submitFeedback } from '../../services/chat'
+import RecordList from '../../components/chat/RecordList.vue'
+import { askQuestion, listChatRecords, listFeedbackRecords, submitFeedback } from '../../services/chat'
 import { deleteDocument, listDocuments, uploadDocument } from '../../services/documents'
-import type { ChatAskResponse, FeedbackLabel } from '../../types/chat'
+import type { ChatAskResponse, ChatRecordItem, FeedbackLabel, FeedbackRecordItem } from '../../types/chat'
 import type { DocumentListItem } from '../../types/document'
 
 const canDebug = import.meta.env.MODE !== 'production'
@@ -180,6 +190,10 @@ const documentsLoading = ref(false)
 const documentLibraryMessage = ref('')
 const deletingDocumentId = ref('')
 const selectedDocumentIds = ref<string[]>([])
+const chatRecords = ref<ChatRecordItem[]>([])
+const feedbackRecords = ref<FeedbackRecordItem[]>([])
+const recordPanelLoading = ref(false)
+const recordPanelMessage = ref('')
 
 const debugInfoJson = computed(() => {
   if (!response.value?.debug_info) {
@@ -199,6 +213,9 @@ async function handleSubmit(rawQuery: string) {
   lastSubmittedQuery.value = rawQuery
   try {
     response.value = await askQuestion(rawQuery, canDebug, selectedDocumentIds.value)
+    if (canDebug) {
+      await refreshRecordPanel()
+    }
   } catch (error) {
     response.value = null
     const message = error instanceof Error ? error.message : '请求失败'
@@ -247,6 +264,34 @@ async function refreshDocuments(successMessage = '') {
   }
 }
 
+async function refreshRecordPanel(successMessage = '') {
+  if (!canDebug) {
+    return
+  }
+
+  recordPanelLoading.value = true
+  if (!successMessage) {
+    recordPanelMessage.value = ''
+  }
+
+  try {
+    const [recordsResult, feedbackResult] = await Promise.all([
+      listChatRecords(20),
+      listFeedbackRecords(20),
+    ])
+    chatRecords.value = recordsResult.items
+    feedbackRecords.value = feedbackResult.items
+    if (successMessage) {
+      recordPanelMessage.value = successMessage
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '最近记录加载失败'
+    recordPanelMessage.value = message
+  } finally {
+    recordPanelLoading.value = false
+  }
+}
+
 async function handleDocumentDelete(documentId: string) {
   if (deletingDocumentId.value) {
     return
@@ -290,6 +335,7 @@ async function handleFeedback(label: FeedbackLabel) {
     })
     selectedFeedback.value = label
     feedbackMessage.value = label === 'up' ? '已记录：有帮助' : '已记录：没帮助'
+    await refreshRecordPanel('最近记录已刷新。')
   } catch (error) {
     const message = error instanceof Error ? error.message : '反馈提交失败'
     feedbackMessage.value = message
@@ -388,5 +434,6 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   void refreshDocuments()
+  void refreshRecordPanel()
 })
 </script>

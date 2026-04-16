@@ -31,6 +31,31 @@ export interface ChatAskResponse {
   debug_info?: DebugInfo
 }
 
+export interface ChatRecordItem {
+  trace_id: string
+  raw_query: string
+  response_status: ChatAskResponse['response_status'] | string
+  retrieved_chunk_ids: string[]
+  created_at: string
+  feedback_label?: FeedbackLabel | string | null
+}
+
+export interface ChatRecordListResponse {
+  items: ChatRecordItem[]
+}
+
+export interface FeedbackRecordItem {
+  trace_id: string
+  raw_query: string
+  feedback_label: FeedbackLabel | string
+  response_status: ChatAskResponse['response_status'] | string
+  created_at: string
+}
+
+export interface FeedbackRecordListResponse {
+  items: FeedbackRecordItem[]
+}
+
 export interface ChatFeedbackRequest {
   trace_id: string
   raw_query: string

@@ -163,6 +163,115 @@ textarea {
   white-space: nowrap;
 }
 
+.record-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.record-panel-head,
+.record-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.record-panel-head h2,
+.record-section-head h3 {
+  margin: 0;
+}
+
+.record-panel-subtitle,
+.record-panel-message,
+.record-meta,
+.record-empty {
+  margin: 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.record-panel-message {
+  color: #4338ca;
+}
+
+.record-section {
+  display: grid;
+  gap: 12px;
+}
+
+.record-count {
+  min-width: 32px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.record-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.record-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.record-query {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.record-trace {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.record-feedback-badge {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.record-status-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.record-status-refused {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.record-status-fallback {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.record-status-system {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .actions {
   margin-top: 12px;
   display: flex;
@@ -428,6 +537,10 @@ textarea {
 
   .document-delete-button {
     align-self: flex-end;
+  }
+
+  .record-item-head {
+    align-items: flex-start;
   }
 
   .debug-grid {
