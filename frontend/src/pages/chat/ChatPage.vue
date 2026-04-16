@@ -13,6 +13,57 @@
     <main class="app-main">
       <DocumentUpload :uploading="documentUploading" :upload-message="documentUploadMessage" @upload="handleDocumentUpload" />
 
+      <section class="card document-library">
+        <div class="document-library-head">
+          <div>
+            <h2>文档库</h2>
+            <p class="document-library-subtitle">上传后的文档可在此选择问答范围或执行删除。</p>
+          </div>
+          <button class="ghost-button" :disabled="documentsLoading" @click="refreshDocuments()">
+            {{ documentsLoading ? '刷新中...' : '刷新列表' }}
+          </button>
+        </div>
+
+        <p class="document-scope-hint">
+          {{
+            selectedDocumentIds.length > 0
+              ? `当前仅在 ${selectedDocumentIds.length} 份已选文档内检索。`
+              : '当前未限定文档范围，将按全库检索。'
+          }}
+        </p>
+
+        <p v-if="documentLibraryMessage" class="document-library-message">{{ documentLibraryMessage }}</p>
+        <p v-if="documentsLoading && documents.length === 0" class="document-empty">文档列表加载中...</p>
+        <p v-else-if="documents.length === 0" class="document-empty">尚未上传文档。</p>
+
+        <ul v-else class="document-library-list">
+          <li v-for="document in documents" :key="document.document_id" class="document-library-item">
+            <label class="document-selection">
+              <input
+                v-model="selectedDocumentIds"
+                type="checkbox"
+                :value="document.document_id"
+                :disabled="deletingDocumentId === document.document_id"
+              />
+              <div>
+                <strong>{{ document.filename }}</strong>
+                <p class="document-library-meta">
+                  {{ formatDocumentMeta(document) }}
+                </p>
+              </div>
+            </label>
+
+            <button
+              class="ghost-button document-delete-button"
+              :disabled="deletingDocumentId.length > 0"
+              @click="handleDocumentDelete(document.document_id)"
+            >
+              {{ deletingDocumentId === document.document_id ? '删除中...' : '删除' }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <ChatInput :loading="loading" @submit="handleSubmit" />
 
       <section v-if="errorMessage" class="error-box">
@@ -102,14 +153,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import ChatInput from '../../components/chat/ChatInput.vue'
 import AnswerCard from '../../components/chat/AnswerCard.vue'
 import CitationList from '../../components/chat/CitationList.vue'
 import DocumentUpload from '../../components/chat/DocumentUpload.vue'
 import { askQuestion, submitFeedback } from '../../services/chat'
-import { uploadDocument } from '../../services/documents'
+import { deleteDocument, listDocuments, uploadDocument } from '../../services/documents'
 import type { ChatAskResponse, FeedbackLabel } from '../../types/chat'
+import type { DocumentListItem } from '../../types/document'
 
 const canDebug = import.meta.env.MODE !== 'production'
 const loading = ref(false)
@@ -123,6 +175,11 @@ const feedbackMessage = ref('')
 const lastSubmittedQuery = ref('')
 const documentUploading = ref(false)
 const documentUploadMessage = ref('')
+const documents = ref<DocumentListItem[]>([])
+const documentsLoading = ref(false)
+const documentLibraryMessage = ref('')
+const deletingDocumentId = ref('')
+const selectedDocumentIds = ref<string[]>([])
 
 const debugInfoJson = computed(() => {
   if (!response.value?.debug_info) {
@@ -141,7 +198,7 @@ async function handleSubmit(rawQuery: string) {
   selectedFeedback.value = null
   lastSubmittedQuery.value = rawQuery
   try {
-    response.value = await askQuestion(rawQuery, canDebug)
+    response.value = await askQuestion(rawQuery, canDebug, selectedDocumentIds.value)
   } catch (error) {
     response.value = null
     const message = error instanceof Error ? error.message : '请求失败'
@@ -158,11 +215,55 @@ async function handleDocumentUpload(file: File) {
   try {
     const result = await uploadDocument(file)
     documentUploadMessage.value = `已上传：${result.filename}（document_id: ${result.document_id}，text_length: ${result.text_length}，chunks: ${result.chunk_count}）`
+    await refreshDocuments('文档列表已更新。')
   } catch (error) {
     const message = error instanceof Error ? error.message : '文档上传失败'
     documentUploadMessage.value = message
   } finally {
     documentUploading.value = false
+  }
+}
+
+async function refreshDocuments(successMessage = '') {
+  documentsLoading.value = true
+  if (!successMessage) {
+    documentLibraryMessage.value = ''
+  }
+
+  try {
+    const result = await listDocuments()
+    documents.value = result.items
+    selectedDocumentIds.value = selectedDocumentIds.value.filter((documentId) =>
+      result.items.some((document) => document.document_id === documentId),
+    )
+    if (successMessage) {
+      documentLibraryMessage.value = successMessage
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '文档列表加载失败'
+    documentLibraryMessage.value = message
+  } finally {
+    documentsLoading.value = false
+  }
+}
+
+async function handleDocumentDelete(documentId: string) {
+  if (deletingDocumentId.value) {
+    return
+  }
+
+  deletingDocumentId.value = documentId
+  documentLibraryMessage.value = ''
+
+  try {
+    const result = await deleteDocument(documentId)
+    selectedDocumentIds.value = selectedDocumentIds.value.filter((item) => item !== documentId)
+    await refreshDocuments(`已删除：${result.document_id}`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '文档删除失败'
+    documentLibraryMessage.value = message
+  } finally {
+    deletingDocumentId.value = ''
   }
 }
 
@@ -207,6 +308,12 @@ function formatOptionalNumber(value?: number | null) {
 
 function formatOptionalText(value?: string | null) {
   return value && value.trim() ? value : '无'
+}
+
+function formatDocumentMeta(document: DocumentListItem) {
+  const createdAt = new Date(document.created_at)
+  const createdAtText = Number.isNaN(createdAt.getTime()) ? document.created_at : createdAt.toLocaleString()
+  return `上传时间：${createdAtText} · chunks：${document.chunk_count} · text_length：${document.text_length}`
 }
 
 function buildDebugContext() {
@@ -277,5 +384,9 @@ onBeforeUnmount(() => {
   if (copyFeedbackTimer) {
     clearTimeout(copyFeedbackTimer)
   }
+})
+
+onMounted(() => {
+  void refreshDocuments()
 })
 </script>

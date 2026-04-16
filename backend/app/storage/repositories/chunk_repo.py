@@ -18,7 +18,14 @@ class ChunkRepository:
                 records.append(json.loads(line))
         return records
 
-    def save(self, *, document_id: str, filename: str, chunks: list[str], file_path: str | None = None) -> list[dict[str, Any]]:
+    def save(
+        self,
+        *,
+        document_id: str,
+        filename: str,
+        chunks: list[str],
+        file_path: str | None = None,
+    ) -> list[dict[str, Any]]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         created_at = datetime.now(timezone.utc).isoformat()
         records: list[dict[str, Any]] = []
@@ -43,3 +50,27 @@ class ChunkRepository:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 records.append(record)
         return records
+
+    def delete_by_document(self, document_id: str) -> int:
+        records = self.list_all()
+        retained_records = [
+            record for record in records if record.get("document_id") != document_id
+        ]
+        deleted_count = len(records) - len(retained_records)
+
+        if deleted_count == 0:
+            return 0
+
+        if retained_records:
+            serialized = (
+                "\n".join(
+                    json.dumps(record, ensure_ascii=False)
+                    for record in retained_records
+                )
+                + "\n"
+            )
+            self._path.write_text(serialized, encoding="utf-8")
+        elif self._path.exists():
+            self._path.unlink()
+
+        return deleted_count

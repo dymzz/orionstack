@@ -1,4 +1,17 @@
-import type { DocumentUploadResponse } from '../types/document'
+import type {
+  DocumentDeleteResponse,
+  DocumentListResponse,
+  DocumentUploadResponse,
+} from '../types/document'
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  return (await response.json()) as T
+}
 
 export async function uploadDocument(file: File): Promise<DocumentUploadResponse> {
   const formData = new FormData()
@@ -9,10 +22,17 @@ export async function uploadDocument(file: File): Promise<DocumentUploadResponse
     body: formData,
   })
 
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed: ${response.status}`)
-  }
+  return await readJsonResponse<DocumentUploadResponse>(response)
+}
 
-  return (await response.json()) as DocumentUploadResponse
+export async function listDocuments(): Promise<DocumentListResponse> {
+  const response = await fetch('/api/documents')
+  return await readJsonResponse<DocumentListResponse>(response)
+}
+
+export async function deleteDocument(documentId: string): Promise<DocumentDeleteResponse> {
+  const response = await fetch(`/api/documents/${documentId}`, {
+    method: 'DELETE',
+  })
+  return await readJsonResponse<DocumentDeleteResponse>(response)
 }

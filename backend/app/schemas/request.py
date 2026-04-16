@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ChatAskRequest(BaseModel):
     raw_query: str = Field(min_length=1, max_length=500)
     debug: bool = False
+    document_ids: list[str] = Field(default_factory=list)
 
 
 class ChatFeedbackRequest(BaseModel):

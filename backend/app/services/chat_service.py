@@ -30,8 +30,15 @@ class ChatService:
         self._retriever = Retriever(self._faq_repo, self._chunk_repo)
         self._resolver = RouteResolver()
 
-    def ask(self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool) -> ChatAskResponse:
+    def ask(
+        self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
+    ) -> ChatAskResponse:
         normalized_query = normalize_query(payload.raw_query)
+        document_ids = [
+            document_id.strip()
+            for document_id in payload.document_ids
+            if document_id.strip()
+        ]
         if not normalized_query:
             return ChatAskResponse(
                 response_status="refused",
@@ -67,7 +74,10 @@ class ChatService:
 
         decision = self._resolver.resolve(normalized_query)
 
-        if decision.route != "faq_qa" or decision.confidence < settings.route_confidence_threshold:
+        if (
+            decision.route != "faq_qa"
+            or decision.confidence < settings.route_confidence_threshold
+        ):
             return ChatAskResponse(
                 response_status="fallback",
                 trace_id=trace_id,
@@ -83,7 +93,11 @@ class ChatService:
                 ),
             )
 
-        hit = self._retriever.search(decision.query_for_search, min_score=settings.retrieval_min_score)
+        hit = self._retriever.search(
+            decision.query_for_search,
+            min_score=settings.retrieval_min_score,
+            document_ids=document_ids,
+        )
         if hit is None or hit.score < settings.retrieval_min_score:
             return ChatAskResponse(
                 response_status="fallback",
@@ -97,7 +111,9 @@ class ChatService:
                     chunk_ids=[] if hit is None else [hit.item["id"]],
                     route_confidence=decision.confidence,
                     retrieval_score=None if hit is None else float(hit.score),
-                    fallback_reason="retrieval_score_below_threshold" if hit is not None else "retrieval_no_hit",
+                    fallback_reason="retrieval_score_below_threshold"
+                    if hit is not None
+                    else "retrieval_no_hit",
                 ),
             )
 

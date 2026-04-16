@@ -1,6 +1,7 @@
 export interface ChatAskRequest {
   raw_query: string
   debug?: boolean
+  document_ids?: string[]
 }
 
 export type FeedbackLabel = 'up' | 'down'

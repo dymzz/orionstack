@@ -59,6 +59,72 @@ def test_chat_service_prefers_document_chunk_before_faq(tmp_path) -> None:
     assert response.debug_info.retrieved_chunks == ["doc-budget-chunk-1"]
 
 
+def test_chat_service_limits_document_retrieval_to_selected_document_ids(
+    tmp_path,
+) -> None:
+    service = ChatService()
+    service._chunk_repo._path = tmp_path / "chunks.jsonl"
+    service._chunk_repo.save(
+        document_id="doc-budget",
+        filename="budget_guide.txt",
+        chunks=["预算报表模板位于财务手册第一节，可在预算中心下载。"],
+    )
+    service._chunk_repo.save(
+        document_id="doc-policy",
+        filename="policy.txt",
+        chunks=["预算审批规则位于预算制度说明第二节。"],
+    )
+
+    response = service.ask(
+        ChatAskRequest(
+            raw_query="如何查看预算报表模板？",
+            debug=True,
+            document_ids=["doc-budget"],
+        ),
+        trace_id="trace-document-scope",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.answer == "预算报表模板位于财务手册第一节，可在预算中心下载。"
+    assert len(response.citations) == 1
+    assert response.citations[0].citation_id == "doc-budget-chunk-1"
+    assert response.debug_info is not None
+    assert response.debug_info.retrieved_chunks == ["doc-budget-chunk-1"]
+
+
+def test_chat_service_returns_fallback_when_selected_documents_do_not_hit(
+    tmp_path,
+) -> None:
+    service = ChatService()
+    service._chunk_repo._path = tmp_path / "chunks.jsonl"
+    service._chunk_repo.save(
+        document_id="doc-budget",
+        filename="budget_guide.txt",
+        chunks=["预算报表模板位于财务手册第一节，可在预算中心下载。"],
+    )
+    service._chunk_repo.save(
+        document_id="doc-policy",
+        filename="policy.txt",
+        chunks=["差旅报销流程说明位于行政制度第三节。"],
+    )
+
+    response = service.ask(
+        ChatAskRequest(
+            raw_query="如何查看预算报表模板？",
+            debug=True,
+            document_ids=["doc-policy"],
+        ),
+        trace_id="trace-document-scope-fallback",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "fallback"
+    assert response.citations == []
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "retrieval_no_hit"
+
+
 def test_chat_service_falls_back_to_faq_when_document_hit_is_weak(tmp_path) -> None:
     service = ChatService()
     service._chunk_repo._path = tmp_path / "chunks.jsonl"
@@ -111,7 +177,10 @@ def test_chat_service_returns_fallback_for_weak_retrieval_hit(tmp_path) -> None:
     assert response.response_status == "fallback"
     assert response.citations == []
     assert response.debug_info is not None
-    assert response.debug_info.fallback_reason in {"retrieval_no_hit", "retrieval_score_below_threshold"}
+    assert response.debug_info.fallback_reason in {
+        "retrieval_no_hit",
+        "retrieval_score_below_threshold",
+    }
 
 
 def test_chat_service_returns_refused_for_unsafe_query(tmp_path) -> None:
@@ -137,7 +206,9 @@ def test_chat_route_returns_system_error_contract(monkeypatch) -> None:
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
     monkeypatch.setattr(chat_route.service, "ask", raise_runtime_error)
 
-    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=True))
+    response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
 
     assert response.response_status == "system_error"
     assert response.trace_id
@@ -149,16 +220,22 @@ def test_chat_route_returns_system_error_contract(monkeypatch) -> None:
 def test_chat_route_strips_debug_info_in_prod(monkeypatch) -> None:
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="prod"))
 
-    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=True))
+    response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
 
     assert response.response_status == "ok"
     assert response.debug_info is None
 
 
-def test_chat_route_strips_debug_info_when_debug_flag_disabled_in_demo(monkeypatch) -> None:
+def test_chat_route_strips_debug_info_when_debug_flag_disabled_in_demo(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
 
-    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=False))
+    response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=False)
+    )
 
     assert response.response_status == "ok"
     assert response.debug_info is None
@@ -182,7 +259,9 @@ def test_chat_route_records_feedback(tmp_path) -> None:
     )
 
     assert response.status == "recorded"
-    saved_lines = (tmp_path / "feedback_records.jsonl").read_text(encoding="utf-8").splitlines()
+    saved_lines = (
+        (tmp_path / "feedback_records.jsonl").read_text(encoding="utf-8").splitlines()
+    )
     assert len(saved_lines) == 1
     record = json.loads(saved_lines[0])
     assert record["trace_id"] == "trace-feedback"

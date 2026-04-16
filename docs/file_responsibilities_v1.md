@@ -91,7 +91,7 @@
 
 - 创建并挂载 Vue 应用
 - 注册全局样式
-- 注入路由与状态管理
+- 注入当前最小根组件
 
 不负责：
 
@@ -101,7 +101,7 @@
 
 职责：
 
-- 作为应用根组件承载页面结构
+- 作为应用根组件承载当前单页问答入口
 
 不负责：
 
@@ -113,7 +113,7 @@
 职责：
 
 - 作为问答主页面
-- 串联输入、请求、回答、引用与调试展示
+- 串联文档上传、文档列表、范围选择、删除、输入、请求、回答、引用、反馈与调试展示
 
 不负责：
 
@@ -149,10 +149,22 @@
 
 - 展示 citation 列表
 - 展示最小引用片段与来源定位信息
+- 区分 FAQ 来源与文档来源的展示样式
 
 不负责：
 
 - 不负责 citation 生成逻辑
+
+### `frontend/src/components/chat/DocumentUpload.vue`
+
+职责：
+
+- 提供最小文档选择与上传触发入口
+- 展示当前上传状态与结果提示
+
+不负责：
+
+- 不负责直接发起上传请求
 
 ### `frontend/src/services/api.ts`
 
@@ -170,11 +182,22 @@
 职责：
 
 - 封装问答接口调用
-- 对接 `/api/chat/ask`
+- 对接 `/api/chat/ask` 与 `/api/chat/feedback`
 
 不负责：
 
 - 不负责组件展示逻辑
+
+### `frontend/src/services/documents.ts`
+
+职责：
+
+- 封装文档上传、列表、删除接口调用
+- 对接 `/api/documents/upload`、`/api/documents`、`DELETE /api/documents/{document_id}`
+
+不负责：
+
+- 不负责上传组件交互状态管理
 
 ### `frontend/src/styles/index.css`
 
@@ -196,6 +219,26 @@
 不负责：
 
 - 不负责运行时校验实现
+
+### `frontend/src/types/document.ts`
+
+职责：
+
+- 定义文档上传响应类型
+
+不负责：
+
+- 不负责运行时校验实现
+
+### `frontend/src/vite-env.d.ts`
+
+职责：
+
+- 注入 Vite 默认类型声明
+
+不负责：
+
+- 不负责业务类型定义
 
 ---
 
@@ -228,23 +271,48 @@
 职责：
 
 - 接收问答请求
+- 接收最小反馈提交请求
 - 调用 `chat_service`
 - 返回统一响应结构
+- 生成与透传 `trace_id`
 
 不负责：
 
 - 不负责直接实现检索、路由、回答生成
+
+### `backend/app/api/routes/documents.py`
+
+职责：
+
+- 接收文档上传请求
+- 调用 `document_service`
+- 返回统一文档上传响应
+
+不负责：
+
+- 不负责直接实现文档解析与切块
 
 ### `backend/app/schemas/request.py`
 
 职责：
 
 - 定义请求模型
-- 固定 `raw_query` 等入参结构
+- 固定 `raw_query`、反馈等入参结构
 
 不负责：
 
 - 不负责业务执行
+
+### `backend/app/schemas/document.py`
+
+职责：
+
+- 定义文档上传响应模型
+- 固定 `document_id / text_length / chunk_count` 等结构
+
+不负责：
+
+- 不负责文件落盘或元数据保存
 
 ### `backend/app/schemas/response.py`
 
@@ -261,8 +329,9 @@
 
 职责：
 
-- 串联最小主链路：归一化 -> 路由 -> 检索 -> 回答 -> citation 返回
+- 串联最小主链路：归一化 -> 路由 -> document-first 检索 -> 回答 -> citation 返回
 - 作为问答业务主服务入口
+- 保留 FAQ fallback 边界
 
 不负责：
 
@@ -305,7 +374,7 @@
 
 职责：
 
-- 基于 FAQ / mock 数据执行最小检索
+- 基于 document chunks 与 FAQ fallback 执行最小检索
 - 返回候选内容与分数
 
 不负责：
@@ -344,6 +413,70 @@
 
 - 不负责检索打分逻辑
 
+### `backend/app/storage/repositories/feedback_repo.py`
+
+职责：
+
+- 记录最小反馈数据
+- 以本地 JSONL 形式持久化反馈记录
+
+不负责：
+
+- 不负责反馈分析与统计聚合
+
+### `backend/app/services/document_service.py`
+
+职责：
+
+- 串联文档上传、解析、切块与落盘保存流程
+- 返回文档上传最小结果
+
+不负责：
+
+- 不负责问答检索逻辑
+
+### `backend/app/services/document_parser.py`
+
+职责：
+
+- 将 `.txt / .md / .pdf / .docx` 解析为纯文本
+
+不负责：
+
+- 不负责 chunk 切分与持久化
+
+### `backend/app/services/chunk_service.py`
+
+职责：
+
+- 对解析后的文本执行最小 chunk 切分
+
+不负责：
+
+- 不负责文件读取与存储
+
+### `backend/app/storage/repositories/document_repo.py`
+
+职责：
+
+- 保存原始上传文件
+- 保存最小文档元数据记录
+
+不负责：
+
+- 不负责解析文档内容
+
+### `backend/app/storage/repositories/chunk_repo.py`
+
+职责：
+
+- 保存文档 chunks 与最小回源元数据
+- 提供本地 chunk 列表读取接口
+
+不负责：
+
+- 不负责检索排序与回答生成
+
 ### `backend/app/storage/seed/mock_faq.json`
 
 职责：
@@ -360,7 +493,7 @@
 职责：
 
 - 定义最小配置读取入口
-- 维护默认配置与环境变量覆盖规则
+- 维护默认配置、阈值与环境变量覆盖规则
 
 不负责：
 
@@ -400,6 +533,29 @@
 - 作为本地 Demo 一键启动入口
 - 串联前后端开发启动流程
 
+### `scripts/git-release.ps1`
+
+职责：
+
+- 提供交互式版本发布脚本入口
+- 同步 `pyproject.toml` 版本、git commit 与 git tag
+- 执行当前分支 push 与 tag push
+
+不负责：
+
+- 不负责替代发布说明编写
+- 不负责复杂多分支发布流程编排
+
+### `scripts/README.md`
+
+职责：
+
+- 汇总 `scripts/` 目录下各脚本的用途、参数与示例
+
+不负责：
+
+- 不负责替代项目级 README
+
 ---
 
 ## 5. 当前最小依赖方向
@@ -409,7 +565,7 @@
 ```text
 frontend/page -> frontend/components -> frontend/services -> backend api
 backend api -> backend services -> routing / retrieval / guardrails / storage
-storage -> seed/mock data
+storage -> local jsonl data / seed/mock data
 ```
 
 当前阶段不建议出现：

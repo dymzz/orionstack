@@ -12,10 +12,14 @@ from app.api.routes import documents as documents_route
 from main import app
 
 
-def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
+def _configure_document_storage(tmp_path: Path) -> None:
     documents_route.service._repository._meta_path = tmp_path / "documents.jsonl"
     documents_route.service._repository._upload_dir = tmp_path / "uploads"
     documents_route.service._chunk_repository._path = tmp_path / "chunks.jsonl"
+
+
+def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
+    _configure_document_storage(tmp_path)
 
     client = TestClient(app)
     response = client.post(
@@ -34,7 +38,9 @@ def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
     assert payload["text_length"] == len("hello document")
     assert payload["chunk_count"] == 1
 
-    saved_lines = (tmp_path / "documents.jsonl").read_text(encoding="utf-8").splitlines()
+    saved_lines = (
+        (tmp_path / "documents.jsonl").read_text(encoding="utf-8").splitlines()
+    )
     assert len(saved_lines) == 1
     record = json.loads(saved_lines[0])
     assert record["document_id"] == payload["document_id"]
@@ -54,8 +60,76 @@ def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
     assert chunk_record["chunk_index"] == 0
     assert chunk_record["text"] == "hello document"
     assert chunk_record["source_label"] == "guide.txt"
-    assert chunk_record["source_locator"] == f"document_id: {payload['document_id']} · file_path: uploads/{payload['document_id']}_guide.txt · chunk: 1"
+    assert (
+        chunk_record["source_locator"]
+        == f"document_id: {payload['document_id']} · file_path: uploads/{payload['document_id']}_guide.txt · chunk: 1"
+    )
     assert chunk_record["snippet"] == "hello document"
+
+
+def test_document_list_returns_uploaded_documents_in_reverse_created_order(
+    tmp_path,
+) -> None:
+    _configure_document_storage(tmp_path)
+
+    client = TestClient(app)
+    first_response = client.post(
+        "/api/documents/upload",
+        files={"file": ("first.txt", b"first document text", "text/plain")},
+    )
+    second_response = client.post(
+        "/api/documents/upload",
+        files={"file": ("second.txt", b"second document body", "text/plain")},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    response = client.get("/api/documents")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["filename"] for item in payload["items"]] == [
+        "second.txt",
+        "first.txt",
+    ]
+    assert payload["items"][0]["text_length"] == len("second document body")
+    assert payload["items"][0]["chunk_count"] == 1
+    assert payload["items"][1]["text_length"] == len("first document text")
+    assert payload["items"][1]["chunk_count"] == 1
+
+
+def test_document_delete_removes_file_metadata_and_chunks(tmp_path) -> None:
+    _configure_document_storage(tmp_path)
+
+    client = TestClient(app)
+    upload_response = client.post(
+        "/api/documents/upload",
+        files={"file": ("guide.txt", b"hello document", "text/plain")},
+    )
+
+    assert upload_response.status_code == 200
+    document_id = upload_response.json()["document_id"]
+    uploaded_file = tmp_path / "uploads" / f"{document_id}_guide.txt"
+    assert uploaded_file.exists()
+
+    delete_response = client.delete(f"/api/documents/{document_id}")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"status": "deleted", "document_id": document_id}
+    assert not uploaded_file.exists()
+    assert not (tmp_path / "documents.jsonl").exists()
+    assert not (tmp_path / "chunks.jsonl").exists()
+
+
+def test_document_delete_returns_404_for_unknown_document(tmp_path) -> None:
+    _configure_document_storage(tmp_path)
+
+    client = TestClient(app)
+    response = client.delete("/api/documents/doc-missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "文档不存在"
 
 
 def test_document_upload_rejects_unsupported_suffix() -> None:

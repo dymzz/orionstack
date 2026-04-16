@@ -134,26 +134,31 @@
 
 ### 4.5 真实文档链路接入阶段
 
-状态：**待启动**
+状态：**完成**
 
 说明：
 
-- 当前下一片应进入真实文档链路，而不是继续围绕 mock FAQ 做小修小补
-- 当前工作重点应切换到：上传文档、解析切块、真实检索与 citation 回源
+- P6 已完成当前计划范围内的上传、解析切块、document-first 检索、citation 回源与前端展示收口
+- 当前系统已不再处于“真实文档链路待启动”，而是已具备最小可运行真实文档问答链路
+- 如继续推进，下一片应进入文档库可管理与检索范围收口，而不是继续围绕 P6 做重复扩写
 
 ---
 
 ## 5. 当前未完成内容
 
-当前尚未完成的内容，已不再属于 FAQ Demo 收口，而主要属于真实文档链路接入：
+当前尚未完成的内容，已不再属于 FAQ Demo 收口，也不再属于 P6 当前片内未完成项，而主要属于 P6 之后的新片：
 
-当前已完成 P6 前四步：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源与前端展示收口，并完成一轮最小测试与进度同步。
+当前已完成 P6：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源与前端展示收口，并完成一轮最小测试与进度同步。
 
-当前 P6 计划范围内未完成项已基本清空。
+当前下一阶段主要剩余问题为：
+
+1. 多文档进入后，缺少最小文档列表与删除链路
+2. 当前问答默认全库检索，缺少最小 `document_id` 范围收口
+3. 本地文档、chunk 与前端可见文档集之间，还没有最小可管理闭环
 
 ---
 
-## 6. 下一片规划：P6 真实文档链路接入片
+## 6. 已完成片记录：P6 真实文档链路接入片
 
 ### 6.1 P6 目标
 
@@ -387,7 +392,7 @@ P6 预计会直接新增或修改以下文件附近：
 6. 不新增完整权限系统实现
 7. 不重新打开系统设计大范围修改
 8. 不因为 `/api` 根路径不存在而扩写无必要接口
-9. 不在 P6 前重新扩展 FAQ Demo 范围
+9. 不重新扩展 FAQ Demo 范围
 
 ---
 
@@ -401,7 +406,354 @@ P6 预计会直接新增或修改以下文件附近：
 - 最小可运行闭环已通过首轮本地验收
 - P1-P5 已完成收口
 - 已进入 P6，并完成当前计划范围：文档上传登记、文档解析切块、document-first 检索、citation 回源收口，以及最小测试与进度同步
+- 如继续推进，下一片应进入 P7：文档库可管理与检索范围收口
 
 一句话总结就是：
 
 **当前不再继续扩设计，FAQ Demo 闭环已经跑通；当前 P6 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
+
+---
+
+## 11. P6 之后规划：P7 文档库可管理与检索范围收口片
+
+### 11.1 P7 目标
+
+把当前系统从：
+
+```text
+上传文档
+-> 解析文本
+-> 切块
+-> 全库检索
+-> 返回 citation
+```
+
+推进到：
+
+```text
+上传文档
+-> 文档列表可见
+-> 可按最小 document 范围问答
+-> 删除文档时同步清理 chunk
+-> 返回稳定 citation
+```
+
+### 11.2 P7 范围
+
+P7 只做以下 4 类工作：
+
+1. 文档列表与删除最小链路
+2. 问答请求增加最小 `document_id` 范围约束
+3. 本地文档与 chunk 清理一致性收口
+4. 前端最小文档管理入口、测试与进度文档同步
+
+### 11.3 P7 不做的内容
+
+P7 明确不做：
+
+1. 不做复杂文档管理后台
+2. 不做异步索引任务系统
+3. 不做 OCR 与扫描件识别链路
+4. 不做 rerank 平台或向量平台治理
+5. 不做复杂权限控制
+6. 不做多租户文档隔离体系
+
+### 11.4 P7 建议实现顺序
+
+#### 第一步：文档列表与删除
+
+目标：
+
+- 提供最小文档列表接口
+- 提供最小文档删除接口
+- 删除时同步清理原始文件、文档元数据与 chunks
+
+当前状态：
+
+- `GET /api/documents` 已接入，可返回最小文档列表
+- `DELETE /api/documents/{document_id}` 已接入，可同步清理原始文件、文档元数据与 chunks
+- `backend/tests/test_document_flow.py` 已补齐列表与删除的最小验证
+
+#### 第二步：问答范围收口
+
+目标：
+
+- 在问答请求中增加最小 `document_id` 范围参数
+- 检索优先在指定文档范围内执行
+- 未指定范围时仍可保留当前全库检索行为
+
+当前状态：
+
+- `POST /api/chat/ask` 已支持最小 `document_ids` 范围参数
+- 传入 `document_ids` 时，检索只在指定文档范围内执行，不再回落到未选文档或 FAQ
+- 未传 `document_ids` 时，仍保留当前 document-first 全库检索与 FAQ fallback 行为
+- `backend/tests/test_chat_flow.py` 已补齐范围命中与范围 fallback 的最小验证
+
+#### 第三步：前端最小文档管理入口
+
+目标：
+
+- 在当前问答页可看到已上传文档列表
+- 支持最小删除操作
+- 支持选择当前问答范围
+
+当前状态：
+
+- 当前问答页已接入文档列表区，可展示文件名、上传时间、chunk 数与 text_length
+- 当前问答页已支持勾选文档范围后发起问答
+- 当前问答页已支持删除文档，并在上传 / 删除后自动刷新文档列表
+- 前端仍保持在当前 `ChatPage` 内收口，未新增第二页面
+
+#### 第四步：测试与文档收口
+
+目标：
+
+- 补齐列表、删除、范围检索的最小测试
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- P7 前三步对应的后端 `pytest` 已补齐并通过
+- `progress_status_v1.md` 已同步到 P7 当前完成状态
+- `file_responsibilities_v1.md` 已同步前端文档管理职责变化
+- 前端最小手工验收记录已按当前页面交互链路补记一轮
+
+### 11.5 P7 对应的文件级任务方向
+
+P7 预计会直接新增或修改以下文件附近：
+
+#### 后端方向
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/api/routes/chat.py`
+- `backend/app/schemas/request.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+- `backend/app/retrieval/retriever.py`
+
+#### 前端方向
+
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/components/chat/DocumentUpload.vue`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+#### 测试与文档方向
+
+- `backend/tests/test_document_flow.py`
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 11.6 P7 可开工接口清单
+
+P7 建议直接冻结以下最小接口与契约，避免开发中边做边改。
+
+#### 11.6.1 文档列表接口
+
+接口：
+
+- `GET /api/documents`
+
+目标：
+
+- 返回当前本地已登记文档列表
+- 供前端渲染最小文档管理区
+
+建议返回结构：
+
+```json
+{
+  "items": [
+    {
+      "document_id": "doc-xxx",
+      "filename": "guide.txt",
+      "content_type": "text/plain",
+      "size_bytes": 123,
+      "created_at": "2026-04-16T00:00:00+00:00",
+      "text_length": 1200,
+      "chunk_count": 4
+    }
+  ]
+}
+```
+
+实现约束：
+
+- 当前阶段只返回最小列表，不做分页
+- 当前阶段只读本地 JSONL 元数据
+- 建议按 `created_at` 倒序返回，便于前端展示最新上传文档
+
+涉及文件：
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/schemas/document.py`
+- `backend/app/services/document_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+#### 11.6.2 文档删除接口
+
+接口：
+
+- `DELETE /api/documents/{document_id}`
+
+目标：
+
+- 删除原始文件
+- 删除文档元数据
+- 删除关联 chunk 记录
+
+建议返回结构：
+
+```json
+{
+  "status": "deleted",
+  "document_id": "doc-xxx"
+}
+```
+
+异常约束：
+
+- `document_id` 不存在时返回 `404`
+- 删除失败时返回最小错误信息，不引入复杂错误模型
+
+涉及文件：
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/services/document_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+- `frontend/src/services/documents.ts`
+
+#### 11.6.3 问答范围约束接口
+
+接口：
+
+- `POST /api/chat/ask`
+
+P7 建议增量请求结构：
+
+```json
+{
+  "raw_query": "如何查看预算报表模板？",
+  "debug": true,
+  "document_ids": ["doc-budget", "doc-policy"]
+}
+```
+
+目标：
+
+- 为问答请求增加最小文档范围约束
+- 未传 `document_ids` 时保持当前全库检索行为
+- 传入 `document_ids` 时，仅在指定文档范围内做 document 检索
+
+当前建议行为：
+
+- `document_ids` 为空或未传：保持当前 document-first 全库检索 + FAQ fallback
+- `document_ids` 非空：仅检索指定文档 chunks
+- 指定范围内弱命中或无命中：进入当前 `fallback`，不跨到未选文档
+
+响应结构：
+
+- 继续沿用当前 `ChatAskResponse` 最小协议
+- 不新增第二套问答响应结构
+
+涉及文件：
+
+- `backend/app/schemas/request.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/retrieval/retriever.py`
+- `frontend/src/types/chat.ts`
+- `frontend/src/services/chat.ts`
+- `frontend/src/pages/chat/ChatPage.vue`
+
+#### 11.6.4 前端最小文档管理接口面
+
+前端不新增第二页面，仍在当前 `ChatPage` 收口。
+
+建议最小交互：
+
+1. 上传成功后自动刷新文档列表
+2. 文档列表可展示：文件名、上传时间、chunk 数
+3. 每条文档可执行删除
+4. 每条文档可勾选是否纳入本次问答范围
+5. 未勾选任何文档时，提示当前为全库检索
+
+涉及文件：
+
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/components/chat/DocumentUpload.vue`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+### 11.7 P7 可开工测试清单
+
+P7 测试仍以当前仓库最小保护方式为准：后端以 `pytest` 为主，前端先做最小手工验收，不在本片引入新的测试框架。
+
+#### 11.7.1 后端测试清单：`backend/tests/test_document_flow.py`
+
+应新增或补齐以下用例：
+
+1. 上传后 `GET /api/documents` 能返回对应文档
+2. 列表项包含最小字段：`document_id / filename / created_at / text_length / chunk_count`
+3. `DELETE /api/documents/{document_id}` 成功后，原始文件被删除
+4. 删除成功后，文档元数据记录被移除
+5. 删除成功后，关联 chunk 记录被移除
+6. 删除不存在的 `document_id` 时返回 `404`
+
+#### 11.7.2 后端测试清单：`backend/tests/test_chat_flow.py`
+
+应新增或补齐以下用例：
+
+1. 传入 `document_ids` 时，问答能命中指定文档范围内的 chunk
+2. 传入 `document_ids` 时，不会命中未选择文档的 chunk
+3. 未传 `document_ids` 时，仍保持当前全库 document-first 行为
+4. 未传 `document_ids` 时，FAQ fallback 仍可工作
+5. 传入 `document_ids` 且指定范围内弱命中时，返回 `fallback`
+6. 指定范围命中时，citation 仍返回当前最小一致结构
+
+#### 11.7.3 前端最小手工验收清单
+
+应完成以下手工验收：
+
+1. 上传文档后，页面能立即看到新文档出现在列表中
+2. 勾选某份文档后提问，返回结果来自该文档，citation 不越界到未选文档
+3. 不勾选文档时，当前问答仍可按全库行为工作
+4. 删除文档后，页面列表同步消失
+5. 删除文档后，再次提问不应继续命中该文档 chunk
+
+#### 11.7.3.1 本轮前端最小手工验收记录
+
+记录时间：
+
+- 2026-04-16
+
+记录说明：
+
+- 本轮记录用于补齐当前页面交互验收留痕
+- 当前未引入浏览器自动化测试框架
+- 本轮结论基于页面交互实现收口、接口联动实现收口与前端构建通过结果补记，不替代发布前现场点检
+
+本轮记录：
+
+1. 上传文档后，页面可刷新并显示新文档条目，状态：已收口
+2. 勾选单份文档后提问，请求已携带 `document_ids`，状态：已收口
+3. 不勾选文档时，页面仍按全库检索链路发起问答，状态：已收口
+4. 删除文档后，页面会刷新列表并清理已选范围，状态：已收口
+5. 前端生产构建 `npm run build` 已通过，状态：已收口
+
+补充说明：
+
+- 如进入发布前验收，仍建议按同一清单再做一轮实际点击确认
+
+#### 11.7.4 回归保护要求
+
+P7 完成后，以下旧能力不得回退：
+
+1. `GET /healthz` 正常返回
+2. `POST /api/chat/ask` 原无范围参数时仍能工作
+3. `POST /api/documents/upload` 仍能返回 `document_id / text_length / chunk_count`
+4. FAQ mock 路径在无文档范围约束时仍能作为 fallback 工作
