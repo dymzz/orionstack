@@ -201,9 +201,19 @@
 
 - 已在 `settings.py` 增加 `cors_origins` 配置项，支持环境变量覆盖
 - 已新增 `.env.example` 作为全量配置参考
-- 已新增 `scripts/start-backend.ps1` 生产启动脚本
+- 已新增 `scripts/start-backend.py` 生产启动脚本
 - 已在 `scripts/README.md` 补充生产配置说明
 - 当前系统已具备最小生产配置调优与启动方式区分能力
+
+### 4.12 部署运维最小说明阶段
+
+状态：**完成**
+
+说明：
+
+- 已重写 `README.md`，补齐面向非开发用户的最小部署运行指南
+- 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 配置、项目结构、API 列表与数据存储说明
+- 当前系统已具备可独立部署运行的最小文档基础
 
 ---
 
@@ -211,12 +221,11 @@
 
 当前尚未完成的内容，已不再属于 FAQ Demo 收口，也不再属于 P6 / P7 / P8 / P9 / P10 当前片内未完成项，而主要属于新的后续片：
 
-当前已完成 P6、P7、P8、P9、P10、P11、P12：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口，并完成当前阶段最小测试与文档同步。
+当前已完成 P6、P7、P8、P9、P10、P11、P12、P13：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口、部署运维最小说明，并完成当前阶段最小测试与文档同步。
 
 当前下一阶段主要剩余问题为：
 
 1. 当前记录保留策略已配置化，但长期运行下的边界校验仍需真实环境验证
-2. 当前仍缺少面向非开发用户的部署与运维最小说明
 
 ---
 
@@ -247,7 +256,7 @@ P12 只做以下 4 类工作：
 
 1. CORS 来源可配置化，支持环境变量 `ORIONSTACK_CORS_ORIGINS`
 2. 新增 `.env.example` 作为配置参考文件
-3. 新增生产启动脚本 `scripts/start-backend.ps1`（不带 `--reload`，支持多 worker）
+3. 新增生产启动脚本 `scripts/start-backend.py`（不带 `--reload`，支持多 worker）
 4. 更新脚本说明、进度文档与文件职责文档
 
 ### 16.3 P12 不做的内容
@@ -294,12 +303,12 @@ P12 明确不做：
 
 目标：
 
-- 新增 `scripts/start-backend.ps1`，以生产配置启动后端
-- 与 `dev-backend.ps1` 的差异：不带 `--reload`，默认 `prod` 模式，支持 `-Workers` 参数
+- 新增 `scripts/start-backend.py`，以生产配置启动后端
+- 与 `dev-backend.py` 的差异：不带 `--reload`，默认 `prod` 模式，支持 `-Workers` 参数
 
 当前状态：
 
-- `scripts/start-backend.ps1` 已创建
+- `scripts/start-backend.py` 已创建
 - 默认 `prod` 模式，不带 `--reload`
 - 支持 `-Workers` 参数启动多 worker 进程
 
@@ -312,9 +321,9 @@ P12 明确不做：
 
 当前状态：
 
-- `scripts/README.md` 已补充 `start-backend.ps1` 说明、生产配置说明、环境变量参考表与 CORS 来源说明
+- `scripts/README.md` 已补充 `start-backend.py` 说明、生产配置说明、环境变量参考表与 CORS 来源说明
 - `progress_status_v1.md` 已同步 P12 当前状态
-- `file_responsibilities_v1.md` 已同步 `settings.py`、`start-backend.ps1` 与 `.env.example` 职责变化
+- `file_responsibilities_v1.md` 已同步 `settings.py`、`start-backend.py` 与 `.env.example` 职责变化
 
 ### 16.5 P12 对应的文件级任务方向
 
@@ -326,7 +335,7 @@ P12 明确不做：
 #### 配置与脚本方向
 
 - `.env.example`
-- `scripts/start-backend.ps1`
+- `scripts/start-backend.py`
 - `scripts/README.md`
 
 #### 测试与文档方向
@@ -357,7 +366,7 @@ $env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com,https://admin.example.co
 
 脚本：
 
-- `scripts/start-backend.ps1`
+- `scripts/start-backend.py`
 
 关键参数：
 
@@ -403,7 +412,7 @@ P12 完成后，应达成以下结论：
 
 1. `settings.py` 已增加 `cors_origins` 配置项，支持环境变量 `ORIONSTACK_CORS_ORIGINS` 覆盖
 2. `.env.example` 已列出所有环境变量及其默认值与说明
-3. `scripts/start-backend.ps1` 已提供生产启动入口，默认 `prod` 模式，不带 `--reload`
+3. `scripts/start-backend.py` 已提供生产启动入口，默认 `prod` 模式，不带 `--reload`
 4. `scripts/README.md` 已补充生产配置说明、环境变量参考表与 CORS 来源说明
 
 一句话总结：
@@ -667,10 +676,11 @@ P6 预计会直接新增或修改以下文件附近：
 - 已进入 P10，并完成当前计划范围：本地记录清理脚本、记录摘要收口与策略配置化
 - 已进入 P11，并完成当前计划范围：本地记录维护策略配置化与自动截断
 - 已进入 P12，并完成当前计划范围：CORS 来源可配置化、配置参考文件、生产启动脚本与配置说明收口
+- 已进入 P13，并完成当前计划范围：部署运维最小说明收口
 
 一句话总结就是：
 
-**当前不再继续扩设计，FAQ Demo 到生产配置调优闭环链路已经跑通；当前 P6、P7、P8、P9、P10、P11、P12 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
+**当前不再继续扩设计，FAQ Demo 到可独立部署运行的文档闭环已经跑通；当前 P6、P7、P8、P9、P10、P11、P12、P13 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
 
 ---
 
@@ -1478,7 +1488,7 @@ P10 明确不做：
 
 当前状态：
 
-- `scripts/clean-local-records.ps1` 已接入
+- `scripts/clean-local-records.py` 已接入
 - `scripts/README.md` 已补齐本地记录清理脚本说明
 
 #### 第三步：最近记录摘要收口
@@ -1524,7 +1534,7 @@ P10 预计会直接新增或修改以下文件附近：
 
 #### 脚本与文档方向
 
-- `scripts/clean-local-records.ps1`
+- `scripts/clean-local-records.py`
 - `scripts/README.md`
 - `docs/progress_status_v1.md`
 - `docs/file_responsibilities_v1.md`
@@ -1535,7 +1545,7 @@ P10 预计会直接新增或修改以下文件附近：
 
 建议脚本：
 
-- `scripts/clean-local-records.ps1`
+- `scripts/clean-local-records.py`
 
 目标：
 
@@ -1770,3 +1780,81 @@ P11 完成后，应达成以下结论：
 一句话总结：
 
 **P11 计划范围已完成，当前系统已具备最小记录保留策略配置化与自动截断能力。**
+
+---
+
+## 17. P12 之后规划：P13 部署运维最小说明片
+
+### 17.1 P13 目标
+
+把当前系统从：
+
+```text
+配置与脚本仅面向开发者
+-> 非开发用户缺少最小部署与运行参考
+```
+
+推进到：
+
+```text
+配置与脚本已区分开发与生产
+-> 非开发用户可通过最小文档独立部署与运行
+```
+
+### 17.2 P13 范围
+
+P13 只做以下 1 类工作：
+
+1. 重写 `README.md`，补齐面向非开发用户的最小部署运行指南
+
+### 17.3 P13 不做的内容
+
+P13 明确不做：
+
+1. 不做 Docker / 容器化配置
+2. 不做 Nginx 完整生产配置（只提供最小参考）
+3. 不做 HTTPS / 证书配置
+4. 不做 CI/CD 流水线
+5. 不做完整运维监控平台
+
+### 17.4 P13 建议实现顺序
+
+#### 第一步：重写 README.md
+
+目标：
+
+- 补齐面向非开发用户的最小部署运行指南
+- 包含前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
+
+当前状态：
+
+- `README.md` 已重写，包含前置要求、快速开始、生产部署步骤、环境变量参考表、prod 模式行为说明、Nginx 最小参考配置、项目结构、API 列表与数据存储说明
+
+### 17.5 P13 对应的文件级任务方向
+
+#### 文档方向
+
+- `README.md`
+
+#### 文档同步方向
+
+- `docs/progress_status_v1.md`
+
+### 17.6 P13 阶段结论目标
+
+P13 完成后，应达成以下结论：
+
+1. 非开发用户可通过 `README.md` 独立完成最小部署与运行
+2. 生产部署方式有明确区分与最小参考配置
+3. 所有环境变量有明确文档与参考文件
+
+### 17.7 P13 当前结论
+
+当前 P13 的真实结论为：
+
+1. `README.md` 已重写为面向非开发用户的最小部署运行指南
+2. 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 参考、项目结构与 API 列表
+
+一句话总结：
+
+**P13 计划范围已完成，当前系统已具备可独立部署运行的最小文档基础。**

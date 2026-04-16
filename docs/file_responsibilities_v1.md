@@ -47,6 +47,19 @@
 
 ## 4. 当前冻结目录与文件职责
 
+### `README.md`
+
+职责：
+
+- 作为项目入口文档
+- 提供前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
+- 面向非开发用户提供最小可独立部署运行的参考
+
+不负责：
+
+- 不负责替代系统设计文档
+- 不负责替代脚本详细参数说明（参见 `scripts/README.md`）
+
 ## 4.1 前端文件职责
 
 ### `frontend/package.json`
@@ -552,32 +565,32 @@
 
 ## 4.3 脚本文件职责
 
-### `scripts/dev-backend.ps1`
+### `scripts/dev-backend.py`
 
 职责：
 
 - 启动后端开发服务（带 `--reload`）
 
-### `scripts/start-backend.ps1`
+### `scripts/start-backend.py`
 
 职责：
 
 - 以生产配置启动后端服务（不带 `--reload`，支持多 worker）
 
-### `scripts/dev-frontend.ps1`
+### `scripts/dev-frontend.py`
 
 职责：
 
 - 启动前端开发服务
 
-### `scripts/dev-demo.ps1`
+### `scripts/dev-demo.py`
 
 职责：
 
 - 作为本地 Demo 一键启动入口
 - 串联前后端开发启动流程
 
-### `scripts/git-release.ps1`
+### `scripts/git-release.py`
 
 职责：
 
@@ -590,7 +603,7 @@
 - 不负责替代发布说明编写
 - 不负责复杂多分支发布流程编排
 
-### `scripts/clean-local-records.ps1`
+### `scripts/clean-local-records.py`
 
 职责：
 

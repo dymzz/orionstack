@@ -1,59 +1,190 @@
 # OrionStack
 
-企业 AI 应用底座仓库。
+企业知识助手 / 文档问答最小可运行系统。
 
-## 当前定位
+## 能做什么
 
-本仓库当前承载 OrionStack 首期 MVP：**企业知识助手 / 文档问答**。
+- 上传 `.txt` / `.md` / `.pdf` / `.docx` 文档
+- 基于文档内容进行问答检索与引用返回
+- FAQ 模式兜底（弱命中或无命中时自动回落）
+- 问答记录与用户反馈自动落盘
+- 开发态可查看最近问答记录与反馈
 
-当前主线聚焦：
+## 前置要求
 
-- 文档上传与解析
-- 索引构建
-- 检索问答
-- 引用返回
-- 会话、日志与反馈基础链路
+- Python 3.12+（建议使用 `.venv`）
+- Node.js 18+（仅开发和构建前端时需要，生产部署不需要）
 
-当前不追求：
+## 快速开始
 
-- 大而全平台化
-- 多 Agent 协同
-- 自动审批与自动写入旧系统
-- 以替代 ERP / OA / 权限系统为目标的重构工程
+### 一键启动（开发模式）
 
-## 目录概览
+```bash
+python scripts/dev-demo.py
+```
+
+浏览器打开 `http://localhost:5173` 即可使用。
+
+### 只检查环境，不启动
+
+```bash
+python scripts/dev-demo.py --check-only
+```
+
+### 分别启动前端和后端
+
+```bash
+# 后端（开发模式，带热重载）
+python scripts/dev-backend.py --app-mode dev
+
+# 前端
+python scripts/dev-frontend.py
+```
+
+## 生产部署
+
+### 1. 构建前端
+
+> 以下步骤需要 Node.js 18+。构建完成后生产环境不再依赖 Node.js。
+
+```bash
+cd frontend
+npm run build
+```
+
+构建产物在 `frontend/dist/`，由 Nginx 或其他静态文件服务提供。
+
+### 2. 启动后端
+
+```bash
+python scripts/start-backend.py
+```
+
+默认以 `prod` 模式启动，不带热重载，监听 `127.0.0.1:8000`。
+
+常用参数：
+
+```bash
+python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --workers 2
+```
+
+### 3. 环境变量
+
+所有配置通过环境变量控制。参见 `.env.example` 获取完整列表。
+
+关键变量：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `ORIONSTACK_APP_MODE` | `demo` | `demo`/`dev`：显示 Debug 与记录面板；`prod`：隐藏 |
+| `ORIONSTACK_HOST` | `127.0.0.1` | 后端监听地址 |
+| `ORIONSTACK_PORT` | `8000` | 后端监听端口 |
+| `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 前端允许的来源，逗号分隔 |
+| `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
+| `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
+
+生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`：
+
+```bash
+export ORIONSTACK_CORS_ORIGINS="https://app.example.com"
+```
+
+### 4. `prod` 模式行为
+
+- Debug 信息不返回前端
+- `/api/chat/records` 与 `/api/chat/feedback` 返回 404
+- 前端不展示 Debug 面板与最近记录区
+
+### 5. Nginx 参考
+
+最小 Nginx 配置示例：
+
+```nginx
+server {
+    listen 80;
+    server_name app.example.com;
+
+    root /path/to/orionstack/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /healthz {
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+```
+
+## 项目结构
 
 ```text
 orionstack/
-├── frontend/
-├── backend/
-├── docs/
+├── backend/                 # FastAPI 后端
+│   ├── main.py              # 应用入口
+│   └── app/
+│       ├── api/routes/       # 路由（health, chat, documents）
+│       ├── config/           # 配置（settings.py）
+│       ├── guardrails/       # 输入归一化
+│       ├── retrieval/        # 检索与引用
+│       ├── routing/          # 路由决策
+│       ├── runtime/          # trace 生成
+│       ├── schemas/          # 请求与响应模型
+│       ├── services/         # 业务服务
+│       └── storage/          # 本地存储（JSONL）
+├── frontend/                 # Vue 3 + Vite 前端
+│   └── src/
+│       ├── components/chat/  # 问答组件
+│       ├── pages/chat/       # 问答主页面
+│       ├── services/         # API 调用
+│       ├── styles/           # 全局样式
+│       └── types/            # 类型定义
+├── scripts/                 # 启动与维护脚本
+├── docs/                    # 设计与进度文档
+├── .env.example             # 环境变量参考
 └── README.md
 ```
 
-## 本地启动
+## API
 
-最短路径启动 Demo：
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/healthz` | 健康检查 |
+| `POST` | `/api/chat/ask` | 问答请求 |
+| `POST` | `/api/chat/feedback` | 提交反馈 |
+| `GET` | `/api/chat/records` | 最近问答记录（仅 demo/dev） |
+| `GET` | `/api/chat/feedback` | 最近反馈记录（仅 demo/dev） |
+| `POST` | `/api/documents/upload` | 上传文档 |
+| `GET` | `/api/documents` | 文档列表 |
+| `DELETE` | `/api/documents/{id}` | 删除文档 |
 
-```powershell
-.\scripts\dev-demo.ps1
-```
+## 脚本说明
 
-只检查脚本和环境，不实际拉起服务：
+| 脚本 | 用途 |
+|------|------|
+| `dev-backend.py` | 开发模式启动后端（带热重载） |
+| `dev-frontend.py` | 启动前端开发服务 |
+| `dev-demo.py` | 一键启动前后端开发环境 |
+| `start-backend.py` | 生产模式启动后端（不带热重载） |
+| `clean-local-records.py` | 清理本地记录文件 |
+| `git-release.py` | 交互式版本发布 |
 
-```powershell
-.\scripts\dev-demo.ps1 -CheckOnly
-```
+详细参数说明见 `scripts/README.md`。
 
-分别启动前后端：
+## 数据存储
 
-```powershell
-.\scripts\dev-backend.ps1 -AppMode dev -BackendHost 127.0.0.1
-.\scripts\dev-frontend.ps1
-```
+当前使用本地 JSONL 文件存储，数据位于 `backend/app/storage/data/`：
 
-补充说明：
+- `chat_records.jsonl` — 问答记录
+- `feedback_records.jsonl` — 反馈记录
+- `chunks.jsonl` — 文档切块
+- `documents.jsonl` — 文档元数据
 
-- `dev-demo.ps1` 会先启动后端，并等待 `GET /healthz` 就绪后再启动前端。
-- `dev-backend.ps1` 默认优先使用仓库根目录下的 `.venv\Scripts\python.exe`。
-- `dev-frontend.ps1` 默认只在 `node_modules` 缺失时安装依赖；如需强制刷新依赖，可使用 `-Install`。
+记录保留数量可通过环境变量配置，超出自增数量后自动截断最旧记录。

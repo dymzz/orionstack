@@ -2,17 +2,18 @@
 
 `scripts/` 目录当前包含本地开发与最小发布辅助脚本。
 
+所有脚本使用 Python 重写，不再依赖 PowerShell。
+
 ## 前置要求
 
-- Windows PowerShell / PowerShell 7
-- 已安装 `python`
+- 已安装 `python`（建议 3.12+）
 - 已安装 `npm`
 - 已安装 `git`
 - 建议在仓库根目录下准备 `.venv`
 
 ## 脚本列表
 
-### `dev-backend.ps1`
+### `dev-backend.py`
 
 用途：
 
@@ -20,19 +21,19 @@
 
 参数：
 
-- `-AppMode demo|dev|prod`
-- `-BackendHost 127.0.0.1`
-- `-Port 8000`
-- `-CheckOnly`
+- `--app-mode demo|dev|prod`
+- `--host 127.0.0.1`
+- `--port 8000`
+- `--check-only`
 
 示例：
 
-```powershell
-.\scripts\dev-backend.ps1 -AppMode dev -BackendHost 127.0.0.1 -Port 8000
-.\scripts\dev-backend.ps1 -CheckOnly
+```bash
+python scripts/dev-backend.py --app-mode dev --host 127.0.0.1 --port 8000
+python scripts/dev-backend.py --check-only
 ```
 
-### `dev-frontend.ps1`
+### `dev-frontend.py`
 
 用途：
 
@@ -40,19 +41,19 @@
 
 参数：
 
-- `-Install`
-- `-BackendOrigin http://127.0.0.1:8000`
-- `-CheckOnly`
+- `--install`
+- `--backend-origin http://127.0.0.1:8000`
+- `--check-only`
 
 示例：
 
-```powershell
-.\scripts\dev-frontend.ps1
-.\scripts\dev-frontend.ps1 -Install -BackendOrigin http://127.0.0.1:8000
-.\scripts\dev-frontend.ps1 -CheckOnly
+```bash
+python scripts/dev-frontend.py
+python scripts/dev-frontend.py --install --backend-origin http://127.0.0.1:8000
+python scripts/dev-frontend.py --check-only
 ```
 
-### `dev-demo.ps1`
+### `dev-demo.py`
 
 用途：
 
@@ -60,21 +61,21 @@
 
 参数：
 
-- `-AppMode demo|dev|prod`
-- `-BackendPort 8000`
-- `-BackendReadyTimeoutSeconds 30`
-- `-InstallFrontend`
-- `-CheckOnly`
+- `--app-mode demo|dev|prod`
+- `--port 8000`
+- `--timeout 30`
+- `--install-frontend`
+- `--check-only`
 
 示例：
 
-```powershell
-.\scripts\dev-demo.ps1
-.\scripts\dev-demo.ps1 -AppMode demo -BackendPort 8000 -InstallFrontend
-.\scripts\dev-demo.ps1 -CheckOnly
+```bash
+python scripts/dev-demo.py
+python scripts/dev-demo.py --app-mode demo --port 8000 --install-frontend
+python scripts/dev-demo.py --check-only
 ```
 
-### `git-release.ps1`
+### `git-release.py`
 
 用途：
 
@@ -87,25 +88,25 @@
 
 - tag 格式为 `v<version>`，例如 `v0.1.3`
 - `pyproject.toml` 中的 `version` 会被同步为 `0.1.3`
-- 若未传 `-Version` 或 `-CommitMessage`，脚本会交互式询问
+- 若未传 `--version` 或 `--commit-message`，脚本会交互式询问
 - 提交前会再做一次确认
 
 参数：
 
-- `-Version 0.1.3`
-- `-CommitMessage "feat: ..."`
-- `-TagPrefix v`
-- `-RemoteName origin`
-- `-SkipPush`
-- `-CheckOnly`
+- `--version 0.1.3`
+- `--commit-message "feat: ..."`
+- `--tag-prefix v`
+- `--remote origin`
+- `--skip-push`
+- `--check-only`
 
 示例：
 
-```powershell
-.\scripts\git-release.ps1
-.\scripts\git-release.ps1 -Version 0.1.3 -CommitMessage "feat: complete P7 document management"
-.\scripts\git-release.ps1 -Version 0.1.3 -CommitMessage "chore: release 0.1.3" -SkipPush
-.\scripts\git-release.ps1 -Version 0.1.3 -CommitMessage "chore: release 0.1.3" -CheckOnly
+```bash
+python scripts/git-release.py
+python scripts/git-release.py --version 0.1.3 --commit-message "feat: complete P7 document management"
+python scripts/git-release.py --version 0.1.3 --commit-message "chore: release 0.1.3" --skip-push
+python scripts/git-release.py --version 0.1.3 --commit-message "chore: release 0.1.3" --check-only
 ```
 
 执行结果：
@@ -120,10 +121,10 @@
 
 - 如果 tag 已存在，脚本会直接停止
 - 如果当前没有可提交变更，脚本会直接停止
-- 如果使用 `-SkipPush`，提交与 tag 只保留在本地
-- 如果只想检查参数和版本摘要，可使用 `-CheckOnly`
+- 如果使用 `--skip-push`，提交与 tag 只保留在本地
+- 如果只想检查参数和版本摘要，可使用 `--check-only`
 
-### `clean-local-records.ps1`
+### `clean-local-records.py`
 
 用途：
 
@@ -132,19 +133,19 @@
 
 参数：
 
-- `-ChatOnly`
-- `-FeedbackOnly`
-- `-CheckOnly`
-- `-WhatIf`
+- `--chat-only`
+- `--feedback-only`
+- `--check-only`
+- `--what-if`
 
 示例：
 
-```powershell
-.\scripts\clean-local-records.ps1 -CheckOnly
-.\scripts\clean-local-records.ps1 -WhatIf
-.\scripts\clean-local-records.ps1
-.\scripts\clean-local-records.ps1 -ChatOnly
-.\scripts\clean-local-records.ps1 -FeedbackOnly
+```bash
+python scripts/clean-local-records.py --check-only
+python scripts/clean-local-records.py --what-if
+python scripts/clean-local-records.py
+python scripts/clean-local-records.py --chat-only
+python scripts/clean-local-records.py --feedback-only
 ```
 
 执行结果：
@@ -156,10 +157,10 @@
 注意事项：
 
 - 该脚本只清理本地记录文件，不清理文档上传数据
-- `-WhatIf` 只预演，不实际删除
-- `-CheckOnly` 只检查当前文件状态，不执行清理
+- `--what-if` 只预演，不实际删除
+- `--check-only` 只检查当前文件状态，不执行清理
 
-### `start-backend.ps1`
+### `start-backend.py`
 
 用途：
 
@@ -167,25 +168,25 @@
 
 参数：
 
-- `-AppMode prod|demo|dev`
-- `-BackendHost 127.0.0.1`
-- `-Port 8000`
-- `-Workers 1`
-- `-CheckOnly`
+- `--app-mode prod|demo|dev`
+- `--host 127.0.0.1`
+- `--port 8000`
+- `--workers 1`
+- `--check-only`
 
 示例：
 
-```powershell
-.\scripts\start-backend.ps1
-.\scripts\start-backend.ps1 -AppMode prod -BackendHost 0.0.0.0 -Port 8000 -Workers 2
-.\scripts\start-backend.ps1 -CheckOnly
+```bash
+python scripts/start-backend.py
+python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --workers 2
+python scripts/start-backend.py --check-only
 ```
 
-与 `dev-backend.ps1` 的差异：
+与 `dev-backend.py` 的差异：
 
 - 不带 `--reload`：生产启动不做热重载
-- 支持 `-Workers` 参数：可启动多 worker 进程
-- 默认 `-AppMode prod`：关闭 Debug 信息与记录查看接口
+- 支持 `--workers` 参数：可启动多 worker 进程
+- 默认 `--app-mode prod`：关闭 Debug 信息与记录查看接口
 
 ## 生产配置说明
 
@@ -220,8 +221,8 @@
 
 示例：
 
-```powershell
-$env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com"
+```bash
+export ORIONSTACK_CORS_ORIGINS="https://app.example.com"
 ```
 
 不设置时默认为开发来源：
@@ -231,7 +232,7 @@ $env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com"
 
 ### 前端生产构建
 
-```powershell
+```bash
 cd frontend
 npm run build
 ```
@@ -251,9 +252,9 @@ npm run build
 
 设置方式：
 
-```powershell
-$env:ORIONSTACK_CHAT_RECORD_MAX_COUNT = "50"
-$env:ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT = "50"
+```bash
+export ORIONSTACK_CHAT_RECORD_MAX_COUNT=50
+export ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT=50
 ```
 
 行为说明：
