@@ -30,3 +30,28 @@ class ChatAskResponse(BaseModel):
 
 class ChatFeedbackResponse(BaseModel):
     status: Literal["recorded"]
+
+
+class ChatRecordItem(BaseModel):
+    trace_id: str
+    raw_query: str
+    response_status: str
+    retrieved_chunk_ids: list[str]
+    created_at: str
+    feedback_label: str | None = None
+
+
+class ChatRecordListResponse(BaseModel):
+    items: list[ChatRecordItem]
+
+
+class FeedbackRecordItem(BaseModel):
+    trace_id: str
+    raw_query: str
+    feedback_label: str
+    response_status: str
+    created_at: str
+
+
+class FeedbackRecordListResponse(BaseModel):
+    items: list[FeedbackRecordItem]

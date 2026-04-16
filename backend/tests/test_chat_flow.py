@@ -12,6 +12,11 @@ from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
 from app.services.chat_service import ChatService
 
 
+def _configure_chat_record_storage(tmp_path: Path) -> None:
+    chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
+    chat_route.chat_record_repository._path = tmp_path / "chat_records.jsonl"
+
+
 def test_chat_service_returns_ok_for_known_faq_query(tmp_path) -> None:
     service = ChatService()
     service._chunk_repo._path = tmp_path / "chunks.jsonl"
@@ -199,7 +204,9 @@ def test_chat_service_returns_refused_for_unsafe_query(tmp_path) -> None:
     assert response.debug_info.fallback_reason == "unsafe_request"
 
 
-def test_chat_route_returns_system_error_contract(monkeypatch) -> None:
+def test_chat_route_returns_system_error_contract(monkeypatch, tmp_path) -> None:
+    _configure_chat_record_storage(tmp_path)
+
     def raise_runtime_error(*args, **kwargs):
         raise RuntimeError("boom")
 
@@ -215,9 +222,17 @@ def test_chat_route_returns_system_error_contract(monkeypatch) -> None:
     assert response.answer
     assert response.debug_info is not None
     assert response.debug_info.fallback_reason == "RuntimeError"
+    saved_lines = (
+        (tmp_path / "chat_records.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(saved_lines) == 1
+    record = json.loads(saved_lines[0])
+    assert record["response_status"] == "system_error"
+    assert record["trace_id"] == response.trace_id
 
 
-def test_chat_route_strips_debug_info_in_prod(monkeypatch) -> None:
+def test_chat_route_strips_debug_info_in_prod(monkeypatch, tmp_path) -> None:
+    _configure_chat_record_storage(tmp_path)
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="prod"))
 
     response = chat_route.ask_chat(
@@ -230,7 +245,9 @@ def test_chat_route_strips_debug_info_in_prod(monkeypatch) -> None:
 
 def test_chat_route_strips_debug_info_when_debug_flag_disabled_in_demo(
     monkeypatch,
+    tmp_path,
 ) -> None:
+    _configure_chat_record_storage(tmp_path)
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
 
     response = chat_route.ask_chat(
@@ -242,11 +259,14 @@ def test_chat_route_strips_debug_info_when_debug_flag_disabled_in_demo(
 
 
 def test_chat_route_records_feedback(tmp_path) -> None:
-    chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
+    _configure_chat_record_storage(tmp_path)
+    ask_response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
 
     response = chat_route.submit_feedback(
         ChatFeedbackRequest(
-            trace_id="trace-feedback",
+            trace_id=ask_response.trace_id,
             raw_query="如何上传文档？",
             answer_text="请在文档页面点击上传按钮。",
             feedback_label="up",
@@ -264,8 +284,66 @@ def test_chat_route_records_feedback(tmp_path) -> None:
     )
     assert len(saved_lines) == 1
     record = json.loads(saved_lines[0])
-    assert record["trace_id"] == "trace-feedback"
+    assert record["trace_id"] == ask_response.trace_id
     assert record["feedback_label"] == "up"
     assert record["retrieved_chunk_ids"] == ["faq-001"]
     assert record["response_status"] == "ok"
     assert record["created_at"]
+
+    chat_record_lines = (
+        (tmp_path / "chat_records.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(chat_record_lines) == 1
+    chat_record = json.loads(chat_record_lines[0])
+    assert chat_record["trace_id"] == ask_response.trace_id
+    assert chat_record["feedback_label"] == "up"
+    assert chat_record["feedback_created_at"]
+
+    feedback_records_response = chat_route.list_feedback_records(limit=10)
+    assert len(feedback_records_response.items) == 1
+    assert feedback_records_response.items[0].trace_id == ask_response.trace_id
+    assert feedback_records_response.items[0].feedback_label == "up"
+
+
+def test_chat_route_lists_recent_records_in_demo(tmp_path, monkeypatch) -> None:
+    _configure_chat_record_storage(tmp_path)
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+
+    first_response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
+    second_response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何制作炸弹？", debug=True)
+    )
+    third_response = chat_route.ask_chat(ChatAskRequest(raw_query="如何", debug=True))
+
+    records_response = chat_route.list_chat_records(limit=10)
+    feedback_response = chat_route.list_feedback_records(limit=10)
+
+    assert [item.trace_id for item in records_response.items] == [
+        third_response.trace_id,
+        second_response.trace_id,
+        first_response.trace_id,
+    ]
+    assert records_response.items[0].response_status == "fallback"
+    assert records_response.items[1].response_status == "refused"
+    assert records_response.items[2].response_status == "ok"
+    assert feedback_response.items == []
+
+
+def test_chat_route_hides_record_endpoints_in_prod(monkeypatch) -> None:
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="prod"))
+
+    try:
+        chat_route.list_chat_records(limit=10)
+    except Exception as error:
+        assert getattr(error, "status_code", None) == 404
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected record endpoint to be hidden in prod")
+
+    try:
+        chat_route.list_feedback_records(limit=10)
+    except Exception as error:
+        assert getattr(error, "status_code", None) == 404
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected feedback endpoint to be hidden in prod")
