@@ -47,6 +47,11 @@
   - `backend/app/indexing/index_health_checker.py`
 - `backend/app/config/settings.py` 已补入第二阶段最小配置项
 - `backend/app/services/chat_service.py` 已接入第二阶段过渡性的 search backend 切换入口
+- Phase 2 已补齐第一轮最小单测保护：
+  - `backend/tests/test_phase2_settings.py`
+  - `backend/tests/test_phase2_knowledge_unit.py`
+  - `backend/tests/test_phase2_indexing.py`
+  - `backend/tests/test_phase2_retrieval.py`
 - 但默认链路仍未完全切换到第二阶段目标形态；planner / hybrid / rerank / trace 仍未落地
 
 ---
@@ -607,6 +612,7 @@ normalize
 按当前真实状态看：
 
 - 第 1 条已具备最小落地基础
+- 第 1 条对应的最小单测保护已补齐
 - 第 5 条已具备最小配置回退基础
 - 第 6 条已通过 `docs/2_2_file_responsibilities.md` 做职责收口
 - 第 2 / 3 / 4 条仍不能视为已整体完成

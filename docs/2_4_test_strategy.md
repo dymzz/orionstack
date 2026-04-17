@@ -126,15 +126,55 @@
 - 它提供了 document chunk -> citation -> retrieval 之前的数据基座保护
 - 后续 phase 2 若继续统一 document chunk 为 `Knowledge Unit`，这里仍是上游数据正确性的最小保障
 
-### 4.3 当前空缺但已明确存在测试价值的 phase 2 模块
+### 4.3 当前已补齐的 phase 2 最小单测
+
+当前已新增并通过验证的 phase 2 最小单测主要包括：
+
+#### `backend/tests/test_phase2_settings.py`
+
+当前已覆盖：
+
+- `search_backend` 的环境变量解析
+- 无效 search backend 的回退行为
+- `elastic_use_ik_analyzer / enable_query_planner / enable_fast_track` 的布尔开关解析
+- `elastic_url / elastic_index / planner_provider / planner_model / ollama_url` 的环境变量读取
+
+#### `backend/tests/test_phase2_knowledge_unit.py`
+
+当前已覆盖：
+
+- FAQ -> `KnowledgeUnit` 映射
+- chunk -> `KnowledgeUnit` 映射
+- `list_all / list_faq_units / list_chunk_units` 行为
+- 默认字段与最小兼容值
+
+#### `backend/tests/test_phase2_indexing.py`
+
+当前已覆盖：
+
+- `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
+- `ElasticIndexer.index_units()` 的最小写入流程
+- `IndexHealthChecker.check()` 的基础输出结构
+- 连通异常时的错误输出
+
+#### `backend/tests/test_phase2_retrieval.py`
+
+当前已覆盖：
+
+- `LexicalRetriever` 的空 query 行为
+- `LexicalRetriever` 的默认 `lifecycle_status = active` 过滤
+- `business_domain / access_scope / lifecycle_status` filter 拼装行为
+- `ChatService` 在 `search_backend = elasticsearch` 下的最小切换行为
+- `ChatService` 在 Elasticsearch 无命中时的 fallback 行为
+- `ChatService._extract_lexical_terms()` 的最小稳定输出
+
+### 4.4 当前仍待补齐、但已明确存在测试价值的 phase 2 模块
 
 当前尚缺少专门测试文件或明确断言的模块主要包括：
 
-- `knowledge_unit_repo.py`
-- `lexical_retriever.py`
-- `elastic_indexer.py`
-- `index_health_checker.py`
-- `chat_service.py` 在 `search_backend = elasticsearch` 下的最小切换行为
+- `retrieval_trace.py` 真正落地后的 trace 回放行为
+- `hard_cases_repo.py` 真正落地后的样本回流与读取行为
+- planner / hybrid / rerank / evidence 真正进入仓库后的最小可执行测试位
 
 ---
 
@@ -156,7 +196,7 @@
 当前建议命令：
 
 ```bash
-python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
+python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
 ```
 
 当前 smoke 至少应覆盖：
@@ -227,13 +267,21 @@ python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flo
 - lexical-only 已实际使用的 filter 字段不应无提示失效
 - `search_backend` 切换不应破坏 local 默认链路
 
-## 6.2 建议新增的 regression 测试位
+## 6.2 当前已落地的 regression 测试位
 
-当继续推进 phase 2 时，建议优先新增以下测试文件：
+当前已经补齐并可作为 phase 2 最小回归保护带的测试文件包括：
+
+### `backend/tests/test_phase2_settings.py`
+
+已覆盖：
+
+- `search_backend` 的环境变量解析
+- phase 2 配置布尔开关解析
+- phase 2 Elastic / planner 关键配置项读取
 
 ### `backend/tests/test_phase2_knowledge_unit.py`
 
-建议覆盖：
+已覆盖：
 
 - FAQ -> `KnowledgeUnit` 映射
 - chunk -> `KnowledgeUnit` 映射
@@ -242,25 +290,56 @@ python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flo
 
 ### `backend/tests/test_phase2_retrieval.py`
 
-建议覆盖：
+已覆盖：
 
 - `LexicalRetriever` 的 query 为空行为
 - `LexicalRetriever` 的 `lifecycle_status = active` 默认过滤
 - `business_domain / access_scope / lifecycle_status` filter 拼装行为
 - `search_backend` 切换后的最小服务行为
+- Elasticsearch 无命中时的 fallback 行为
+- `_extract_lexical_terms()` 的最小稳定输出
 
 说明：
 
-- 其中一部分可通过 stub / monkeypatch 完成
-- 不要求所有 regression 都依赖真实 Elasticsearch 实例
+- 当前实现主要通过 stub / monkeypatch 完成
+- 不要求这些 regression 依赖真实 Elasticsearch 实例
 
 ### `backend/tests/test_phase2_indexing.py`
 
-建议覆盖：
+已覆盖：
 
 - `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
 - `ElasticIndexer.index_units()` 的最小写入流程
 - `IndexHealthChecker` 的 `connected / index_exists / doc_count / errors` 输出结构
+
+## 6.3 后续建议继续新增的 regression 测试位
+
+当继续推进 phase 2 时，建议优先新增以下测试文件：
+
+### `backend/tests/test_phase2_trace.py`
+
+建议覆盖：
+
+- retrieval trace 落盘结构
+- trace 按 `trace_id` 回放
+- trace 与 `fallback_reason / final_status` 的一致性
+
+### `backend/tests/test_phase2_hard_cases.py`
+
+建议覆盖：
+
+- hard cases 写入
+- hard cases 样本读取
+- user feedback 回流后的最小字段完整性
+
+### planner / hybrid / rerank 对应测试文件
+
+建议覆盖：
+
+- planner 输出字段稳定性
+- hybrid top-k 基本行为
+- rerank accept / reject 判断
+- evidence spans 最小结构
 
 ---
 
