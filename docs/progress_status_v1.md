@@ -215,6 +215,25 @@
 - 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 配置、项目结构、API 列表与数据存储说明
 - 当前系统已具备可独立部署运行的最小文档基础
 
+### 4.13 Phase 2 Step 1+2：数据层与 lexical 检索接入阶段
+
+状态：**进行中**
+
+说明：
+
+- 已新增 `KnowledgeUnitRepository`，统一 FAQ 与 document chunk 为同一知识单元结构
+- 已新增 `ElasticIndexer`，支持 ES 索引创建与文档写入
+- 已新增 `IndexHealthChecker`，支持 ES 连通性与索引健康检查
+- 已新增 `LexicalRetriever`，支持 ES BM25 + metadata pre-filter 检索
+- 已重构 `chat_service.py`，新增 retrieval adapter 切换逻辑（`local` / `elasticsearch`）
+- 已降级 `rule_parser.py`，移除硬编码关键词白名单，只保留空输入保护与安全拒答
+- 已改进 `retriever.py` 中文 tokenize，支持 bigram + trigram 子词提取
+- 已降低 `route_confidence_threshold` 从 0.6 到 0.15，不再硬截短查询
+- 已降低 `retrieval_min_score` 从 2 到 1，短词可命中
+- 已新增 Phase 2 配置分组到 `settings.py` 与 `.env.example`
+- 已新增 `docker-compose.yml`（ES + ollama）
+- 当前旧链路仍可通过 `ORIONSTACK_SEARCH_BACKEND=local` 完整回退
+
 ---
 
 ## 5. 当前未完成内容
@@ -223,9 +242,19 @@
 
 当前已完成 P6、P7、P8、P9、P10、P11、P12、P13：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口、部署运维最小说明，并完成当前阶段最小测试与文档同步。
 
+当前 Phase 2 Step 1+2 已完成核心改造：
+- 知识单元统一数据层（KnowledgeUnitRepository）
+- ES lexical-only 过渡检索层（LexicalRetriever）
+- 检索适配器切换（local / elasticsearch）
+- 路由层降级（移除硬编码白名单）
+- 中文 tokenize 增强（bigram + trigram）
+
 当前下一阶段主要剩余问题为：
 
-1. 当前记录保留策略已配置化，但长期运行下的边界校验仍需真实环境验证
+1. ES 环境部署与索引验证
+2. Query Planner 接入（Step 3）
+3. Vector + RRF 检索接入（Step 4）
+4. Rerank + Evidence Extraction（Step 5）
 
 ---
 

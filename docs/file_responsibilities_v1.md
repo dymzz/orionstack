@@ -523,6 +523,58 @@
 
 - 不负责检索排序与回答生成
 
+### `backend/app/storage/repositories/knowledge_unit_repo.py`
+
+职责：
+
+- 统一 FAQ 与 document chunk 为同一知识单元结构（KnowledgeUnit）
+- 提供 FAQ 单元与 chunk 单元的映射
+- 为 Elasticsearch 索引入库提供统一数据源
+
+不负责：
+
+- 不负责检索逻辑
+- 不负责向量生成
+
+### `backend/app/retrieval/lexical_retriever.py`
+
+职责：
+
+- 承接 Elasticsearch BM25 lexical 检索
+- 支持 normalized_query、lexical_terms、metadata pre-filter
+- 输出 LexicalHit 列表
+
+不负责：
+
+- 不负责向量检索
+- 不负责融合与重排
+
+### `backend/app/indexing/elastic_indexer.py`
+
+职责：
+
+- 建立 / 更新 `knowledge_units_v1` 索引
+- 处理索引创建、文档写入
+- 支持 IK 分词器与标准分词器两套 mapping
+
+不负责：
+
+- 不负责检索查询
+- 不负责健康检查
+
+### `backend/app/indexing/index_health_checker.py`
+
+职责：
+
+- 检查 Elasticsearch 连通性
+- 检查索引是否存在、文档数量
+- 验证最小联通性
+
+不负责：
+
+- 不负责索引创建
+- 不负责数据写入
+
 ### `backend/app/storage/seed/mock_faq.json`
 
 职责：
@@ -543,6 +595,7 @@
 - 为记录查看接口维护 demo/dev 与 prod 的暴露边界开关
 - 维护本地记录保留数量配置项
 - 维护 CORS 来源配置项
+- 维护 Phase 2 搜索后端、Elasticsearch、Query Planner 配置项
 
 不负责：
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.config.settings import settings
 from app.guardrails.normalize import normalize_query
 from app.retrieval.citation_mapper import map_citation
@@ -7,6 +9,7 @@ from app.schemas.request import ChatAskRequest
 from app.schemas.response import ChatAskResponse, DebugInfo
 from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.faq_repo import FAQRepository
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 
 class ChatService:
@@ -27,8 +30,21 @@ class ChatService:
     def __init__(self) -> None:
         self._faq_repo = FAQRepository()
         self._chunk_repo = ChunkRepository()
+        self._ku_repo = KnowledgeUnitRepository(
+            faq_repo=self._faq_repo, chunk_repo=self._chunk_repo
+        )
         self._retriever = Retriever(self._faq_repo, self._chunk_repo)
         self._resolver = RouteResolver()
+        self._lexical_retriever = None
+        if settings.search_backend == "elasticsearch":
+            self._lexical_retriever = self._create_lexical_retriever()
+
+    def _create_lexical_retriever(self):
+        from app.retrieval.lexical_retriever import LexicalRetriever
+        from elasticsearch import Elasticsearch
+
+        es = Elasticsearch(settings.elastic_url)
+        return LexicalRetriever(es, index_name=settings.elastic_index)
 
     def ask(
         self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
@@ -93,10 +109,90 @@ class ChatService:
                 ),
             )
 
+        if (
+            settings.search_backend == "elasticsearch"
+            and self._lexical_retriever is not None
+        ):
+            return self._search_elastic(
+                normalized_query, trace_id=trace_id, debug_enabled=debug_enabled
+            )
+
+        return self._search_local(
+            decision,
+            normalized_query,
+            document_ids=document_ids,
+            trace_id=trace_id,
+            debug_enabled=debug_enabled,
+        )
+
+    def _search_elastic(
+        self, normalized_query: str, *, trace_id: str, debug_enabled: bool
+    ) -> ChatAskResponse:
+        hits = self._lexical_retriever.search(
+            normalized_query,
+            lexical_terms=self._extract_lexical_terms(normalized_query),
+            min_score=0.1,
+            lifecycle_status="active",
+            size=5,
+        )
+
+        if not hits:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="faq_qa_elastic",
+                    chunk_ids=[],
+                    route_confidence=None,
+                    retrieval_score=None,
+                    fallback_reason="retrieval_no_hit",
+                ),
+            )
+
+        best = hits[0]
+        answer = best.answer or best.body_text
+        citation = map_citation(
+            {
+                "id": best.unit_id,
+                "answer": answer,
+                "source_label": best.source_label,
+                "source_locator": best.source_locator,
+                "snippet": answer[:160],
+            }
+        )
+
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer=answer,
+            citations=[citation],
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result="faq_qa_elastic",
+                chunk_ids=[best.unit_id],
+                route_confidence=None,
+                retrieval_score=best.score,
+            ),
+        )
+
+    def _search_local(
+        self,
+        decision,
+        normalized_query: str,
+        *,
+        document_ids: list[str],
+        trace_id: str,
+        debug_enabled: bool,
+    ) -> ChatAskResponse:
         hit = self._retriever.search(
             decision.query_for_search,
             min_score=settings.retrieval_min_score,
-            document_ids=document_ids,
+            document_ids=document_ids or None,
         )
         if hit is None or hit.score < settings.retrieval_min_score:
             return ChatAskResponse(
@@ -132,6 +228,21 @@ class ChatService:
                 retrieval_score=float(hit.score),
             ),
         )
+
+    @staticmethod
+    def _extract_lexical_terms(query: str) -> list[str]:
+        terms = [query]
+        if len(query) > 2:
+            for i in range(len(query) - 1):
+                bigram = query[i : i + 2]
+                if bigram not in terms:
+                    terms.append(bigram)
+        if len(query) > 4:
+            for i in range(range(len(query) - 2)):
+                trigram = query[i : i + 3]
+                if trigram not in terms:
+                    terms.append(trigram)
+        return terms
 
     @staticmethod
     def _match_refusal_reason(normalized_query: str) -> str | None:

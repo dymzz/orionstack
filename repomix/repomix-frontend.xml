@@ -1,4 +1,4 @@
-This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
@@ -33,6 +33,7 @@ The content is organized as follows:
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
 - Only files matching these patterns are included: frontend/**/*
+- Files matching these patterns are excluded: backend/tests/**, backend/app/storage/seed/**, frontend/dist/**
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -47,12 +48,16 @@ frontend/src/App.vue
 frontend/src/components/chat/AnswerCard.vue
 frontend/src/components/chat/ChatInput.vue
 frontend/src/components/chat/CitationList.vue
+frontend/src/components/chat/DocumentUpload.vue
+frontend/src/components/chat/RecordList.vue
 frontend/src/main.ts
 frontend/src/pages/chat/ChatPage.vue
 frontend/src/services/api.ts
 frontend/src/services/chat.ts
+frontend/src/services/documents.ts
 frontend/src/styles/index.css
 frontend/src/types/chat.ts
+frontend/src/types/document.ts
 frontend/src/vite-env.d.ts
 frontend/vite.config.ts
 </directory_structure>
@@ -153,10 +158,15 @@ function submit() {
     <ul class="citation-list">
       <li v-for="citation in citations" :key="citation.citation_id">
         <div class="citation-head">
-          <strong>{{ citation.source_label }}</strong>
+          <div class="citation-title-group">
+            <strong>{{ citation.source_label }}</strong>
+            <span class="citation-kind" :class="getCitationKindClass(citation)">{{ getCitationKindText(citation) }}</span>
+          </div>
           <span class="citation-id">{{ citation.citation_id }}</span>
         </div>
+        <p class="locator-label">{{ getLocatorLabel(citation) }}</p>
         <p class="locator">{{ citation.source_locator }}</p>
+        <p class="citation-snippet-label">引用片段</p>
         <p class="citation-snippet">{{ citation.snippet }}</p>
       </li>
     </ul>
@@ -167,6 +177,72 @@ function submit() {
 import type { CitationItem } from '../../types/chat'
 
 defineProps<{ citations: CitationItem[] }>()
+
+function isFaqCitation(citation: CitationItem) {
+  return citation.citation_id.startsWith('faq-')
+}
+
+function getCitationKindText(citation: CitationItem) {
+  return isFaqCitation(citation) ? 'FAQ 来源' : '文档来源'
+}
+
+function getCitationKindClass(citation: CitationItem) {
+  return isFaqCitation(citation) ? 'citation-kind-faq' : 'citation-kind-document'
+}
+
+function getLocatorLabel(citation: CitationItem) {
+  return isFaqCitation(citation) ? 'FAQ 定位' : '文档定位'
+}
+</script>
+</file>
+
+<file path="frontend/src/components/chat/DocumentUpload.vue">
+<template>
+  <section class="card">
+    <label class="label" for="document-upload">上传文档</label>
+    <input
+      id="document-upload"
+      class="file-input"
+      type="file"
+      accept=".txt,.md,.pdf,.docx"
+      @change="handleFileChange"
+    />
+    <p v-if="selectedFile" class="upload-meta">已选择：{{ selectedFile.name }}</p>
+    <div class="actions">
+      <button class="primary-button" :disabled="uploading || !selectedFile" @click="submit">
+        {{ uploading ? '上传中...' : '上传文档' }}
+      </button>
+    </div>
+    <p v-if="uploadMessage" class="upload-message">{{ uploadMessage }}</p>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const props = defineProps<{
+  uploading: boolean
+  uploadMessage: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'upload', file: File): void
+}>()
+
+const selectedFile = ref<File | null>(null)
+
+function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  selectedFile.value = target.files?.[0] ?? null
+}
+
+function submit() {
+  if (!selectedFile.value || props.uploading) {
+    return
+  }
+
+  emit('upload', selectedFile.value)
+}
 </script>
 </file>
 
@@ -176,6 +252,256 @@ import App from './App.vue'
 import './styles/index.css'
 
 createApp(App).mount('#app')
+</file>
+
+<file path="frontend/src/vite-env.d.ts">
+/// <reference types="vite/client" />
+</file>
+
+<file path="frontend/vite.config.ts">
+import { defineConfig } from 'vite'
+import { loadEnv } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, '.', '')
+  const backendOrigin = env.ORIONSTACK_BACKEND_ORIGIN || 'http://127.0.0.1:8000'
+
+  return {
+    plugins: [vue()],
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: backendOrigin,
+          changeOrigin: true,
+        },
+        '/healthz': {
+          target: backendOrigin,
+          changeOrigin: true,
+        },
+      },
+    },
+  }
+})
+</file>
+
+<file path="frontend/index.html">
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OrionStack Demo</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="frontend/src/App.vue">
+<template>
+  <ChatPage />
+</template>
+
+<script setup lang="ts">
+import ChatPage from './pages/chat/ChatPage.vue'
+</script>
+</file>
+
+<file path="frontend/src/components/chat/RecordList.vue">
+<template>
+  <section class="card record-panel">
+    <div class="record-panel-head">
+      <div>
+        <h2>最近记录</h2>
+        <p class="record-panel-subtitle">开发态最近 ask / feedback 记录，便于快速核对 trace 链路。</p>
+      </div>
+      <button class="ghost-button" :disabled="loading" @click="$emit('refresh')">
+        {{ loading ? '刷新中...' : '刷新记录' }}
+      </button>
+    </div>
+
+    <p v-if="message" class="record-panel-message">{{ message }}</p>
+
+    <div class="record-section">
+      <div class="record-section-head">
+        <h3>最近问答</h3>
+        <span class="record-count">{{ records.length }}</span>
+      </div>
+      <p v-if="records.length === 0" class="record-empty">暂无最近问答记录。</p>
+      <ul v-else class="record-list">
+        <li v-for="record in records" :key="record.trace_id" class="record-item">
+          <div class="record-item-head">
+            <span class="badge" :class="statusBadgeClass(record.response_status)">
+              {{ record.response_status }}
+            </span>
+            <code class="record-trace">{{ record.trace_id }}</code>
+          </div>
+          <p class="record-query">{{ record.raw_query }}</p>
+          <p class="record-summary">
+            {{ formatTime(record.created_at) }}
+            <span v-if="record.feedback_label"> · feedback: {{ record.feedback_label }}</span>
+            <span> · chunks: {{ record.retrieved_chunk_ids.length }}</span>
+          </p>
+          <p class="record-trace-line">trace_id: <code>{{ record.trace_id }}</code></p>
+          <details v-if="record.retrieved_chunk_ids.length > 0" class="record-details">
+            <summary>查看命中 chunk</summary>
+            <p class="record-meta">{{ record.retrieved_chunk_ids.join(', ') }}</p>
+          </details>
+        </li>
+      </ul>
+    </div>
+
+    <div class="record-section">
+      <div class="record-section-head">
+        <h3>最近反馈</h3>
+        <span class="record-count">{{ feedbackItems.length }}</span>
+      </div>
+      <p v-if="feedbackItems.length === 0" class="record-empty">暂无最近反馈记录。</p>
+      <ul v-else class="record-list">
+        <li v-for="item in feedbackItems" :key="`${item.trace_id}-${item.created_at}`" class="record-item">
+          <div class="record-item-head">
+            <span class="badge record-feedback-badge">{{ item.feedback_label }}</span>
+            <code class="record-trace">{{ item.trace_id }}</code>
+          </div>
+          <p class="record-query">{{ item.raw_query }}</p>
+          <p class="record-summary">{{ formatTime(item.created_at) }} · response: {{ item.response_status }}</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+</template>
+
+<script setup lang="ts">
+import type { ChatRecordItem, FeedbackRecordItem } from '../../types/chat'
+
+defineProps<{
+  records: ChatRecordItem[]
+  feedbackItems: FeedbackRecordItem[]
+  loading: boolean
+  message: string
+}>()
+
+defineEmits<{
+  refresh: []
+}>()
+
+function formatTime(value: string) {
+  const time = new Date(value)
+  return Number.isNaN(time.getTime()) ? value : time.toLocaleString()
+}
+
+function statusBadgeClass(status: string) {
+  if (status === 'ok') {
+    return 'record-status-ok'
+  }
+  if (status === 'refused') {
+    return 'record-status-refused'
+  }
+  if (status === 'fallback') {
+    return 'record-status-fallback'
+  }
+  return 'record-status-system'
+}
+</script>
+</file>
+
+<file path="frontend/src/services/documents.ts">
+import type {
+  DocumentDeleteResponse,
+  DocumentListResponse,
+  DocumentUploadResponse,
+} from '../types/document'
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  return (await response.json()) as T
+}
+
+export async function uploadDocument(file: File): Promise<DocumentUploadResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch('/api/documents/upload', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return await readJsonResponse<DocumentUploadResponse>(response)
+}
+
+export async function listDocuments(): Promise<DocumentListResponse> {
+  const response = await fetch('/api/documents')
+  return await readJsonResponse<DocumentListResponse>(response)
+}
+
+export async function deleteDocument(documentId: string): Promise<DocumentDeleteResponse> {
+  const response = await fetch(`/api/documents/${documentId}`, {
+    method: 'DELETE',
+  })
+  return await readJsonResponse<DocumentDeleteResponse>(response)
+}
+</file>
+
+<file path="frontend/src/types/document.ts">
+export interface DocumentListItem {
+  document_id: string
+  filename: string
+  content_type: string
+  size_bytes: number
+  created_at: string
+  text_length: number
+  chunk_count: number
+}
+
+export interface DocumentListResponse {
+  items: DocumentListItem[]
+}
+
+export interface DocumentUploadResponse {
+  status: 'uploaded'
+  document_id: string
+  filename: string
+  content_type: string
+  size_bytes: number
+  created_at: string
+  text_length: number
+  chunk_count: number
+}
+
+export interface DocumentDeleteResponse {
+  status: 'deleted'
+  document_id: string
+}
+</file>
+
+<file path="frontend/package.json">
+{
+  "name": "orionstack-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^5.4.19"
+  }
+}
 </file>
 
 <file path="frontend/src/pages/chat/ChatPage.vue">
@@ -192,6 +518,68 @@ createApp(App).mount('#app')
     </header>
 
     <main class="app-main">
+      <DocumentUpload :uploading="documentUploading" :upload-message="documentUploadMessage" @upload="handleDocumentUpload" />
+
+      <RecordList
+        v-if="canDebug"
+        :records="chatRecords"
+        :feedback-items="feedbackRecords"
+        :loading="recordPanelLoading"
+        :message="recordPanelMessage"
+        @refresh="refreshRecordPanel()"
+      />
+
+      <section class="card document-library">
+        <div class="document-library-head">
+          <div>
+            <h2>文档库</h2>
+            <p class="document-library-subtitle">上传后的文档可在此选择问答范围或执行删除。</p>
+          </div>
+          <button class="ghost-button" :disabled="documentsLoading" @click="refreshDocuments()">
+            {{ documentsLoading ? '刷新中...' : '刷新列表' }}
+          </button>
+        </div>
+
+        <p class="document-scope-hint">
+          {{
+            selectedDocumentIds.length > 0
+              ? `当前仅在 ${selectedDocumentIds.length} 份已选文档内检索。`
+              : '当前未限定文档范围，将按全库检索。'
+          }}
+        </p>
+
+        <p v-if="documentLibraryMessage" class="document-library-message">{{ documentLibraryMessage }}</p>
+        <p v-if="documentsLoading && documents.length === 0" class="document-empty">文档列表加载中...</p>
+        <p v-else-if="documents.length === 0" class="document-empty">尚未上传文档。</p>
+
+        <ul v-else class="document-library-list">
+          <li v-for="document in documents" :key="document.document_id" class="document-library-item">
+            <label class="document-selection">
+              <input
+                v-model="selectedDocumentIds"
+                type="checkbox"
+                :value="document.document_id"
+                :disabled="deletingDocumentId === document.document_id"
+              />
+              <div>
+                <strong>{{ document.filename }}</strong>
+                <p class="document-library-meta">
+                  {{ formatDocumentMeta(document) }}
+                </p>
+              </div>
+            </label>
+
+            <button
+              class="ghost-button document-delete-button"
+              :disabled="deletingDocumentId.length > 0"
+              @click="handleDocumentDelete(document.document_id)"
+            >
+              {{ deletingDocumentId === document.document_id ? '删除中...' : '删除' }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <ChatInput :loading="loading" @submit="handleSubmit" />
 
       <section v-if="errorMessage" class="error-box">
@@ -281,12 +669,16 @@ createApp(App).mount('#app')
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import ChatInput from '../../components/chat/ChatInput.vue'
 import AnswerCard from '../../components/chat/AnswerCard.vue'
 import CitationList from '../../components/chat/CitationList.vue'
-import { askQuestion, submitFeedback } from '../../services/chat'
-import type { ChatAskResponse, FeedbackLabel } from '../../types/chat'
+import DocumentUpload from '../../components/chat/DocumentUpload.vue'
+import RecordList from '../../components/chat/RecordList.vue'
+import { askQuestion, listChatRecords, listFeedbackRecords, submitFeedback } from '../../services/chat'
+import { deleteDocument, listDocuments, uploadDocument } from '../../services/documents'
+import type { ChatAskResponse, ChatRecordItem, FeedbackLabel, FeedbackRecordItem } from '../../types/chat'
+import type { DocumentListItem } from '../../types/document'
 
 const canDebug = import.meta.env.MODE !== 'production'
 const loading = ref(false)
@@ -298,6 +690,17 @@ const feedbackSubmitting = ref(false)
 const selectedFeedback = ref<FeedbackLabel | null>(null)
 const feedbackMessage = ref('')
 const lastSubmittedQuery = ref('')
+const documentUploading = ref(false)
+const documentUploadMessage = ref('')
+const documents = ref<DocumentListItem[]>([])
+const documentsLoading = ref(false)
+const documentLibraryMessage = ref('')
+const deletingDocumentId = ref('')
+const selectedDocumentIds = ref<string[]>([])
+const chatRecords = ref<ChatRecordItem[]>([])
+const feedbackRecords = ref<FeedbackRecordItem[]>([])
+const recordPanelLoading = ref(false)
+const recordPanelMessage = ref('')
 
 const debugInfoJson = computed(() => {
   if (!response.value?.debug_info) {
@@ -316,13 +719,103 @@ async function handleSubmit(rawQuery: string) {
   selectedFeedback.value = null
   lastSubmittedQuery.value = rawQuery
   try {
-    response.value = await askQuestion(rawQuery, canDebug)
+    response.value = await askQuestion(rawQuery, canDebug, selectedDocumentIds.value)
+    if (canDebug) {
+      await refreshRecordPanel()
+    }
   } catch (error) {
     response.value = null
     const message = error instanceof Error ? error.message : '请求失败'
     errorMessage.value = message
   } finally {
     loading.value = false
+  }
+}
+
+async function handleDocumentUpload(file: File) {
+  documentUploading.value = true
+  documentUploadMessage.value = ''
+
+  try {
+    const result = await uploadDocument(file)
+    documentUploadMessage.value = `已上传：${result.filename}（document_id: ${result.document_id}，text_length: ${result.text_length}，chunks: ${result.chunk_count}）`
+    await refreshDocuments('文档列表已更新。')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '文档上传失败'
+    documentUploadMessage.value = message
+  } finally {
+    documentUploading.value = false
+  }
+}
+
+async function refreshDocuments(successMessage = '') {
+  documentsLoading.value = true
+  if (!successMessage) {
+    documentLibraryMessage.value = ''
+  }
+
+  try {
+    const result = await listDocuments()
+    documents.value = result.items
+    selectedDocumentIds.value = selectedDocumentIds.value.filter((documentId) =>
+      result.items.some((document) => document.document_id === documentId),
+    )
+    if (successMessage) {
+      documentLibraryMessage.value = successMessage
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '文档列表加载失败'
+    documentLibraryMessage.value = message
+  } finally {
+    documentsLoading.value = false
+  }
+}
+
+async function refreshRecordPanel(successMessage = '') {
+  if (!canDebug) {
+    return
+  }
+
+  recordPanelLoading.value = true
+  if (!successMessage) {
+    recordPanelMessage.value = ''
+  }
+
+  try {
+    const [recordsResult, feedbackResult] = await Promise.all([
+      listChatRecords(20),
+      listFeedbackRecords(20),
+    ])
+    chatRecords.value = recordsResult.items
+    feedbackRecords.value = feedbackResult.items
+    if (successMessage) {
+      recordPanelMessage.value = successMessage
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '最近记录加载失败'
+    recordPanelMessage.value = message
+  } finally {
+    recordPanelLoading.value = false
+  }
+}
+
+async function handleDocumentDelete(documentId: string) {
+  if (deletingDocumentId.value) {
+    return
+  }
+
+  deletingDocumentId.value = documentId
+  documentLibraryMessage.value = ''
+
+  try {
+    const result = await deleteDocument(documentId)
+    selectedDocumentIds.value = selectedDocumentIds.value.filter((item) => item !== documentId)
+    await refreshDocuments(`已删除：${result.document_id}`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '文档删除失败'
+    documentLibraryMessage.value = message
+  } finally {
+    deletingDocumentId.value = ''
   }
 }
 
@@ -349,6 +842,7 @@ async function handleFeedback(label: FeedbackLabel) {
     })
     selectedFeedback.value = label
     feedbackMessage.value = label === 'up' ? '已记录：有帮助' : '已记录：没帮助'
+    await refreshRecordPanel('最近记录已刷新。')
   } catch (error) {
     const message = error instanceof Error ? error.message : '反馈提交失败'
     feedbackMessage.value = message
@@ -367,6 +861,12 @@ function formatOptionalNumber(value?: number | null) {
 
 function formatOptionalText(value?: string | null) {
   return value && value.trim() ? value : '无'
+}
+
+function formatDocumentMeta(document: DocumentListItem) {
+  const createdAt = new Date(document.created_at)
+  const createdAtText = Number.isNaN(createdAt.getTime()) ? document.created_at : createdAt.toLocaleString()
+  return `上传时间：${createdAtText} · chunks：${document.chunk_count} · text_length：${document.text_length}`
 }
 
 function buildDebugContext() {
@@ -438,20 +938,121 @@ onBeforeUnmount(() => {
     clearTimeout(copyFeedbackTimer)
   }
 })
+
+onMounted(() => {
+  void refreshDocuments()
+  void refreshRecordPanel()
+})
 </script>
 </file>
 
 <file path="frontend/src/services/chat.ts">
-import { postJson } from './api'
-import type { ChatAskRequest, ChatAskResponse, ChatFeedbackRequest, ChatFeedbackResponse } from '../types/chat'
+import { getJson, postJson } from './api'
+import type {
+  ChatAskRequest,
+  ChatAskResponse,
+  ChatFeedbackRequest,
+  ChatFeedbackResponse,
+  ChatRecordListResponse,
+  FeedbackRecordListResponse,
+} from '../types/chat'
 
-export async function askQuestion(rawQuery: string, debug = import.meta.env.DEV): Promise<ChatAskResponse> {
-  const payload: ChatAskRequest = { raw_query: rawQuery, debug }
+export async function askQuestion(
+  rawQuery: string,
+  debug = import.meta.env.DEV,
+  documentIds: string[] = [],
+): Promise<ChatAskResponse> {
+  const payload: ChatAskRequest = { raw_query: rawQuery, debug, document_ids: documentIds }
   return await postJson<ChatAskResponse>('/api/chat/ask', payload)
 }
 
 export async function submitFeedback(payload: ChatFeedbackRequest): Promise<ChatFeedbackResponse> {
   return await postJson<ChatFeedbackResponse>('/api/chat/feedback', payload)
+}
+
+export async function listChatRecords(limit = 20): Promise<ChatRecordListResponse> {
+  return await getJson<ChatRecordListResponse>(`/api/chat/records?limit=${limit}`)
+}
+
+export async function listFeedbackRecords(limit = 20): Promise<FeedbackRecordListResponse> {
+  return await getJson<FeedbackRecordListResponse>(`/api/chat/feedback?limit=${limit}`)
+}
+</file>
+
+<file path="frontend/src/types/chat.ts">
+export interface ChatAskRequest {
+  raw_query: string
+  debug?: boolean
+  document_ids?: string[]
+}
+
+export type FeedbackLabel = 'up' | 'down'
+
+export interface CitationItem {
+  citation_id: string
+  source_label: string
+  source_locator: string
+  snippet: string
+}
+
+export interface DebugInfo {
+  normalized_query: string
+  route_result: string
+  router_used: string
+  retrieved_chunks: string[]
+  route_confidence?: number
+  retrieval_score?: number
+  fallback_reason?: string
+}
+
+export interface ChatAskResponse {
+  response_status: 'ok' | 'refused' | 'fallback' | 'system_error'
+  trace_id: string
+  answer: string
+  citations: CitationItem[]
+  debug_info?: DebugInfo
+}
+
+export interface ChatRecordItem {
+  trace_id: string
+  raw_query: string
+  response_status: ChatAskResponse['response_status'] | string
+  retrieved_chunk_ids: string[]
+  created_at: string
+  feedback_label?: FeedbackLabel | string | null
+}
+
+export interface ChatRecordListResponse {
+  items: ChatRecordItem[]
+}
+
+export interface FeedbackRecordItem {
+  trace_id: string
+  raw_query: string
+  feedback_label: FeedbackLabel | string
+  response_status: ChatAskResponse['response_status'] | string
+  created_at: string
+}
+
+export interface FeedbackRecordListResponse {
+  items: FeedbackRecordItem[]
+}
+
+export interface ChatFeedbackRequest {
+  trace_id: string
+  raw_query: string
+  answer_text: string
+  feedback_label: FeedbackLabel
+  response_status: ChatAskResponse['response_status']
+  retrieved_chunk_ids: string[]
+  normalized_query?: string
+  router_used?: string
+  route_result?: string
+  fallback_reason?: string
+}
+
+export interface ChatFeedbackResponse {
+  status: 'recorded'
 }
 </file>
 
@@ -528,6 +1129,231 @@ textarea {
   border: 1px solid #d1d5db;
   border-radius: 12px;
   padding: 12px;
+}
+
+.file-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.upload-meta,
+.upload-message {
+  margin: 12px 0 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.document-library {
+  display: grid;
+  gap: 12px;
+}
+
+.document-library-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.document-library-head h2 {
+  margin: 0;
+}
+
+.document-library-subtitle,
+.document-scope-hint,
+.document-library-message,
+.document-empty,
+.document-library-meta {
+  margin: 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.document-scope-hint {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f3f4f6;
+}
+
+.document-library-message {
+  color: #4338ca;
+}
+
+.document-empty {
+  padding: 8px 0;
+}
+
+.document-library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.document-library-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.document-selection {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+  cursor: pointer;
+}
+
+.document-selection input {
+  margin-top: 4px;
+}
+
+.document-delete-button {
+  white-space: nowrap;
+}
+
+.record-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.record-panel-head,
+.record-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.record-panel-head h2,
+.record-section-head h3 {
+  margin: 0;
+}
+
+.record-panel-subtitle,
+.record-panel-message,
+.record-meta,
+.record-summary,
+.record-empty {
+  margin: 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.record-panel-message {
+  color: #4338ca;
+}
+
+.record-section {
+  display: grid;
+  gap: 12px;
+}
+
+.record-count {
+  min-width: 32px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.record-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.record-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.record-query {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.record-summary,
+.record-trace-line {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.record-trace-line code,
+.record-details .record-meta {
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+}
+
+.record-details summary {
+  cursor: pointer;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.record-details .record-meta {
+  margin-top: 8px;
+  word-break: break-word;
+}
+
+.record-trace {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.record-feedback-badge {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.record-status-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.record-status-refused {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.record-status-fallback {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.record-status-system {
+  background: #e5e7eb;
+  color: #374151;
 }
 
 .actions {
@@ -642,10 +1468,48 @@ textarea {
   flex-wrap: wrap;
 }
 
+.citation-title-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.citation-kind {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.citation-kind-document {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.citation-kind-faq {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
 .citation-id {
   color: #6b7280;
   font-size: 12px;
   font-family: 'Consolas', 'SFMono-Regular', monospace;
+}
+
+.locator-label,
+.citation-snippet-label {
+  margin: 8px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.locator {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .citation-snippet {
@@ -751,143 +1615,36 @@ textarea {
     flex-direction: column;
   }
 
+  .document-library-item {
+    flex-direction: column;
+  }
+
+  .document-delete-button {
+    align-self: flex-end;
+  }
+
+  .record-item-head {
+    align-items: flex-start;
+  }
+
   .debug-grid {
     grid-template-columns: 1fr;
   }
 }
 </file>
 
-<file path="frontend/src/types/chat.ts">
-export interface ChatAskRequest {
-  raw_query: string
-  debug?: boolean
-}
-
-export type FeedbackLabel = 'up' | 'down'
-
-export interface CitationItem {
-  citation_id: string
-  source_label: string
-  source_locator: string
-  snippet: string
-}
-
-export interface DebugInfo {
-  normalized_query: string
-  route_result: string
-  router_used: string
-  retrieved_chunks: string[]
-  route_confidence?: number
-  retrieval_score?: number
-  fallback_reason?: string
-}
-
-export interface ChatAskResponse {
-  response_status: 'ok' | 'refused' | 'fallback' | 'system_error'
-  trace_id: string
-  answer: string
-  citations: CitationItem[]
-  debug_info?: DebugInfo
-}
-
-export interface ChatFeedbackRequest {
-  trace_id: string
-  raw_query: string
-  answer_text: string
-  feedback_label: FeedbackLabel
-  response_status: ChatAskResponse['response_status']
-  retrieved_chunk_ids: string[]
-  normalized_query?: string
-  router_used?: string
-  route_result?: string
-  fallback_reason?: string
-}
-
-export interface ChatFeedbackResponse {
-  status: 'recorded'
-}
-</file>
-
-<file path="frontend/src/vite-env.d.ts">
-/// <reference types="vite/client" />
-</file>
-
-<file path="frontend/vite.config.ts">
-import { defineConfig } from 'vite'
-import { loadEnv } from 'vite'
-import vue from '@vitejs/plugin-vue'
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '')
-  const backendOrigin = env.ORIONSTACK_BACKEND_ORIGIN || 'http://127.0.0.1:8000'
-
-  return {
-    plugins: [vue()],
-    server: {
-      host: '0.0.0.0',
-      port: 5173,
-      proxy: {
-        '/api': {
-          target: backendOrigin,
-          changeOrigin: true,
-        },
-        '/healthz': {
-          target: backendOrigin,
-          changeOrigin: true,
-        },
-      },
-    },
-  }
-})
-</file>
-
-<file path="frontend/index.html">
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OrionStack Demo</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-</file>
-
-<file path="frontend/src/App.vue">
-<template>
-  <ChatPage />
-</template>
-
-<script setup lang="ts">
-import ChatPage from './pages/chat/ChatPage.vue'
-</script>
-</file>
-
-<file path="frontend/package.json">
-{
-  "name": "orionstack-frontend",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "vue": "^3.5.18"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
-    "vite": "^5.4.19"
-  }
-}
-</file>
-
 <file path="frontend/src/services/api.ts">
+export async function getJson<T>(url: string): Promise<T> {
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  return (await response.json()) as T
+}
+
 export async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',

@@ -14,10 +14,11 @@
 
 - Python 3.12+（建议使用 `.venv`）
 - Node.js 18+（仅开发和构建前端时需要，生产部署不需要）
+- Docker（Phase 2 检索增强时需要 Elasticsearch）
 
-## 快速开始
+## 快速启动（本地关键词检索）
 
-### 一键启动（开发模式）
+不依赖 Elasticsearch，使用内置关键词检索：
 
 ```bash
 python scripts/dev-demo.py
@@ -25,21 +26,34 @@ python scripts/dev-demo.py
 
 浏览器打开 `http://localhost:5173` 即可使用。
 
-### 只检查环境，不启动
+## Phase 2 检索增强
+
+默认使用本地关键词检索（`ORIONSTACK_SEARCH_BACKEND=local`）。要启用 Elasticsearch 语义检索：
+
+### 1. 启动 Elasticsearch
 
 ```bash
-python scripts/dev-demo.py --check-only
+docker compose up -d elasticsearch
 ```
 
-### 分别启动前端和后端
+### 2. 索引知识单元
 
 ```bash
-# 后端（开发模式，带热重载）
-python scripts/dev-backend.py --app-mode dev
-
-# 前端
-python scripts/dev-frontend.py
+# 启动后端后，调用索引接口（或通过启动脚本自动索引）
+ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
 ```
+
+### 3. 切换检索后端
+
+```bash
+# 本地关键词检索（默认）
+ORIONSTACK_SEARCH_BACKEND=local python scripts/dev-backend.py
+
+# Elasticsearch lexical 检索
+ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
+```
+
+旧链路可通过 `ORIONSTACK_SEARCH_BACKEND=local` 完整回退
 
 ## 生产部署
 
@@ -80,6 +94,9 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_HOST` | `127.0.0.1` | 后端监听地址 |
 | `ORIONSTACK_PORT` | `8000` | 后端监听端口 |
 | `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 前端允许的来源，逗号分隔 |
+| `ORIONSTACK_SEARCH_BACKEND` | `local` | `local`：关键词检索；`elasticsearch`：ES lexical 检索 |
+| `ORIONSTACK_ELASTIC_URL` | `http://localhost:9200` | ES 连接地址 |
+| `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名称 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 
@@ -133,12 +150,15 @@ orionstack/
 │       ├── api/routes/       # 路由（health, chat, documents）
 │       ├── config/           # 配置（settings.py）
 │       ├── guardrails/       # 输入归一化
-│       ├── retrieval/        # 检索与引用
+│       ├── indexing/         # ES 索引与健康检查
+│       ├── llm/providers/   # LLM Provider 抽象（占位）
+│       ├── query/            # Query Planner（占位）
+│       ├── retrieval/        # 检索（retriever, lexical_retriever, citation_mapper）
 │       ├── routing/          # 路由决策
 │       ├── runtime/          # trace 生成
 │       ├── schemas/          # 请求与响应模型
 │       ├── services/         # 业务服务
-│       └── storage/          # 本地存储（JSONL）
+│       └── storage/          # 本地存储（JSONL + KnowledgeUnit）
 ├── frontend/                 # Vue 3 + Vite 前端
 │   └── src/
 │       ├── components/chat/  # 问答组件
@@ -148,6 +168,7 @@ orionstack/
 │       └── types/            # 类型定义
 ├── scripts/                 # 启动与维护脚本
 ├── docs/                    # 设计与进度文档
+├── docker-compose.yml       # ES + ollama 容器配置
 ├── .env.example             # 环境变量参考
 └── README.md
 ```

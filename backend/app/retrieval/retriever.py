@@ -146,20 +146,33 @@ class Retriever:
             .replace("?", " ")
             .replace("，", " ")
             .replace(",", " ")
+            .replace("、", " ")
+            .replace("。", " ")
+            .replace("！", " ")
+            .replace("!", " ")
+            .replace("：", " ")
+            .replace(":", " ")
         )
-        tokens = [token.strip() for token in query.split() if token.strip()]
-        if len(tokens) > 1:
-            return tokens
-
-        compact = tokens[0] if tokens else query.strip()
-        if not compact:
+        raw_tokens = [token.strip() for token in query.split() if token.strip()]
+        if not raw_tokens:
             return []
 
-        if any(ord(char) > 127 for char in compact) and len(compact) > 2:
-            pieces = [compact[i : i + 2] for i in range(len(compact) - 1)]
-            return list(dict.fromkeys([compact, *pieces]))
+        tokens = list(raw_tokens)
 
-        return [compact]
+        for token in raw_tokens:
+            has_cjk = any(ord(char) > 127 for char in token)
+            if has_cjk and len(token) > 2:
+                bigrams = [token[i : i + 2] for i in range(len(token) - 1)]
+                for bigram in bigrams:
+                    if bigram not in tokens:
+                        tokens.append(bigram)
+                if len(token) > 4:
+                    trigrams = [token[i : i + 3] for i in range(len(token) - 2)]
+                    for trigram in trigrams:
+                        if trigram not in tokens:
+                            tokens.append(trigram)
+
+        return list(dict.fromkeys(tokens))
 
     @staticmethod
     def _compact_query(query: str) -> str:

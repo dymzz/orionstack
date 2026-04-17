@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  elasticsearch:
+    image: elasticsearch:8.17.0
+    container_name: orionstack-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: orionstack-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  es_data:
+  ollama_data:
