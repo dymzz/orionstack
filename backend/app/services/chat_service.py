@@ -238,7 +238,7 @@ class ChatService:
                 if bigram not in terms:
                     terms.append(bigram)
         if len(query) > 4:
-            for i in range(range(len(query) - 2)):
+            for i in range(len(query) - 2):
                 trigram = query[i : i + 3]
                 if trigram not in terms:
                     terms.append(trigram)

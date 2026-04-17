@@ -3,7 +3,7 @@
 > 状态：**阶段设计基线（待按迭代实现）**  
 > 目标方向：**Elasticsearch 单引擎 Hybrid Retrieval（Lexical + Vector + RRF）**  
 > 使用场景：**FAQ / 业务知识问答主链路的第二阶段升级**  
-> 与 `system_design_v1.md` 的关系：`system_design_v1.md` 继续作为**当前真实实现基线**；本文档定义**下一阶段目标链路**，用于指导后续实现替换与接口冻结。
+> 与 `1_system_design.md` 的关系：`1_system_design.md` 继续作为**当前真实实现基线**；`2_system_design.md` 定义**下一阶段目标链路**，用于指导后续实现替换与接口冻结。
 
 ---
 
@@ -13,10 +13,10 @@
 
 本文档用于定义 OrionStack FAQ / 业务知识问答主链路的第二阶段系统设计，目标是将当前“可运行但对自然问法可用性不足”的检索链路，升级为“对自然问法稳定可召回、可证据化、可降级”的目标链路。
 
-### 1.2 与 `system_design_v1.md` 的职责分工
+### 1.2 与 `1_system_design.md` / `2_system_design.md` 的职责分工
 
-- `system_design_v1.md`：当前真实实现基线
-- `system_design_phase2_v1.md`：下一阶段目标设计基线
+- `1_system_design.md`：当前真实实现基线
+- `2_system_design.md`：下一阶段目标设计基线
 
 本文档不再描述“当前代码已经做到什么”，而是描述“第二阶段应收敛成什么”。
 
@@ -440,6 +440,8 @@ TTL 建议：
 - documents / chunks 一套
 - mock FAQ fallback 一套
 
+该统一的前提不是“任意原始文档可直接入库”，而是“任何进入下游索引的内容，最终都必须先被转换为满足最小契约的 Knowledge Unit”。对于复杂原始文档，该转换应通过 ingestion / cleaning adapter 完成。
+
 ### 7.2 最小字段结构
 
 每条 Knowledge Unit 至少包含：
@@ -461,8 +463,11 @@ TTL 建议：
 - `valid_until`
 - `version`
 - `department_scope`
+- `question_aliases`（高频 FAQ 场景可选）
 - `question_vector`
 - `answer_vector`
+
+以上字段由 `2_system_design.md` 统一冻结。`document_ingestion_boundary.md` 只负责定义原始文档如何进入标准化知识输入，不再单独维护字段清单。
 
 ### 7.3 时间 / 状态感知
 
@@ -617,19 +622,21 @@ v1 不采用 preview 的单字段多向量方案，先用两个独立向量字�
 
 新的 FAQ / document chunk 进入系统后，建议按以下顺序处理：
 
-1. 解析原始输入
-2. 转换为统一 Knowledge Unit
-3. 补齐最小元数据：
+1. 文档接入判断
+2. 对可直接进入链路的输入执行 direct ingest
+3. 对复杂文档执行 ingestion / cleaning adapter
+4. 转换为统一 Knowledge Unit
+5. 补齐最小元数据：
    - `business_domain`
    - `access_scope`
    - `lifecycle_status`
    - `valid_from`
    - `valid_until`
    - `version`
-4. 生成：
+6. 生成：
    - `question_vector`
    - `answer_vector`
-5. 写入 `knowledge_units_v1`
+7. 写入 `knowledge_units_v1`
 
 #### 8.6.2 历史 FAQ / 文档的回填流程
 
@@ -794,7 +801,7 @@ Clarification Mode 不是默认对话分支，而是**冲突化解器**。
 
 ### 10.3 实施顺序与切换路径表
 
-为避免第二阶段改造一次性切换过多组件，Phase 2 应按“先并行、再灰度、后替换”的顺序推进。
+为避免第二阶段改造一次性切换过多组件，本阶段改造应按“先并行、再灰度、后替换”的顺序推进。
 
 #### Step 1：统一知识单元入库，不切默认链路
 
@@ -818,6 +825,7 @@ Clarification Mode 不是默认对话分支，而是**冲突化解器**。
 
 - 当前默认问答链路保持不变
 - 只建立并验证新索引，不替换线上主检索
+- 复杂原始文档的接入判断与清洗不在本 Step 1 的字段清单内展开，统一以 `document_ingestion_boundary.md` 为准。
 
 #### Step 2：先接 Elasticsearch lexical-only，作为过渡检索层
 
@@ -889,99 +897,6 @@ Clarification Mode 不是默认对话分支，而是**冲突化解器**。
 ---
 
 
-### 10.4 实施顺序与切换路径表
-
-为避免第二阶段改造一次性切换过多组件，Phase 2 应按“先并行、再灰度、后替换”的顺序推进。
-
-#### Step 1：统一知识单元入库，不切默认链路
-
-目标：
-
-- 新增 `knowledge_unit_repo`
-- 将 FAQ 单元与 document chunk 统一转换为 `knowledge_units_v1`
-- 补齐最小字段：
-  - `unit_id`
-  - `source_kind`
-  - `question`
-  - `answer`
-  - `business_domain`
-  - `access_scope`
-  - `lifecycle_status`
-  - `valid_from`
-  - `valid_until`
-  - `version`
-
-约束：
-
-- 当前默认问答链路保持不变
-- 只建立并验证新索引，不替换线上主检索
-
-#### Step 2：先接 Elasticsearch lexical-only，作为过渡检索层
-
-目标：
-
-- 先用 Elastic full-text / BM25 承接当前 lexical 检索
-- 保留 `retriever.py` 作为回退路径
-- 验证：
-  - FAQ 标题命中
-  - 高置信 lexical fast track
-  - metadata pre-filter 是否正常工作
-
-约束：
-
-- 此阶段不强制启用向量检索
-- 重点先确认索引结构、filter 与 fast track 的稳定性
-
-#### Step 3：接入 vector retrieval + RRF，但默认只灰度少量 Query
-
-目标：
-
-- 引入 `question_vector` / `answer_vector`
-- 打通 lexical + vector + RRF
-- 先对少量高频 query 灰度：
-  - `请假`
-  - `病假材料`
-  - `工资条`
-  - `调休`
-
-约束：
-
-- 默认仍允许回退到 lexical-only
-- 不在此阶段直接放开全部 query
-
-#### Step 4：引入 rerank + evidence extraction
-
-目标：
-
-- 增加 `rerank_score`
-- 增加 `evidence_spans`
-- 启用 `RERANK_ACCEPT_THRESHOLD`
-- 启用 `RERANK_MARGIN_THRESHOLD`
-
-约束：
-
-- 无明确证据时直接 fallback
-- 此阶段仍可关闭 Answer Composer，仅返回模板化答案 + citations
-
-#### Step 5：最后接入 Clarification Mode 与按需 API fallback
-
-目标：
-
-- 仅在高分、低分差、冲突证据同时成立时开启 Clarification Mode
-- 仅在本地队列繁忙、低置信 query 或预算允许时启用在线 API
-
-约束：
-
-- Clarification Mode 不作为默认分支
-- API fallback 不得成为所有 query 的固定前置步骤
-
-#### 默认切换原则
-
-1. 先完成数据统一，再切检索
-2. 先完成 lexical-only，再切 hybrid
-3. 先完成 hybrid，再启用 rerank
-4. 先完成 rerank，再启用 clarification / API fallback
-5. 任一阶段不稳定时，按降级路径退回上一层稳定链路
 
 ## 11. LLM / Provider / 延迟预算
 
@@ -1107,7 +1022,7 @@ exact_match_fast_track
 
 ### 12.4 最小观测指标定义
 
-除功能验收外，Phase 2 还应冻结一组最小观测指标，用于判断链路是否真的变得更可用、更稳定，而不是只凭体感判断。
+除功能验收外，`2_system_design.md` 对应方案还应冻结一组最小观测指标，用于判断链路是否真的变得更可用、更稳定，而不是只凭体感判断。
 
 #### 指标 1：fast_track_hit_rate
 
@@ -1246,7 +1161,7 @@ exact_match_fast_track
 
 ### 13.5 敏感边界与日志脱敏
 
-当前 Phase 2 方案主要服务于 FAQ / 业务知识问答主链路，其中 HR FAQ 是首批重点场景之一。
+当前 `2_system_design.md` 对应方案主要服务于 FAQ / 业务知识问答主链路，其中 HR FAQ 是首批重点场景之一。
 因此，除检索可用性外，还必须补齐最小的敏感边界与日志脱敏约束。
 
 #### 13.5.1 边界原则

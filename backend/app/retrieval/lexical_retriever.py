@@ -57,17 +57,10 @@ class LexicalRetriever:
             }
         ]
 
+        should_queries: list[dict[str, Any]] = []
         if lexical_terms:
-            must_queries.append(
-                {
-                    "bool": {
-                        "should": [
-                            {"term": {"keywords": term}} for term in lexical_terms
-                        ],
-                        "minimum_should_match": 1,
-                    }
-                }
-            )
+            for term in lexical_terms:
+                should_queries.append({"term": {"keywords": term}})
 
         filter_clauses: list[dict[str, Any]] = []
         if business_domain:
@@ -84,6 +77,7 @@ class LexicalRetriever:
             "query": {
                 "bool": {
                     "must": must_queries,
+                    "should": should_queries if should_queries else [],
                     "filter": filter_clauses,
                 }
             },

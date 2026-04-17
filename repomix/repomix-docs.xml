@@ -42,6 +42,15 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+docs/1_1_progress.md
+docs/1_2_file_responsibilities.md
+docs/1_3_field_definitions.md
+docs/2_1_progress.md
+docs/2_2_file_responsibilities.md
+docs/2_3_field_definitions.md
+docs/designs/1_system_design.md
+docs/designs/2_system_design.md
+docs/designs/document_ingestion_boundary.md
 docs/designs/document_library/domain_finance_library_v1.md
 docs/designs/document_library/domain_general_library_v1.md
 docs/designs/document_library/domain_hr_library_v1.md
@@ -52,14 +61,7158 @@ docs/designs/document_library/domain_product_library_v1.md
 docs/designs/document_library/domain_sales_library_v1.md
 docs/designs/document_library/phase1_document_library_fields_freeze.md
 docs/designs/document_library/README.md
-docs/designs/system_design_phase2_v1.md
-docs/designs/system_design_v1.md
-docs/file_responsibilities_v1.md
-docs/progress_status_v1.md
+docs/README.md
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="docs/1_1_progress.md">
+# OrionStack 当前阶段进度说明 v1
+
+## 1. 文档目标
+
+本文档用于说明 OrionStack 当前阶段的真实进度状态、已冻结内容、当前未完成项与下一步实现顺序。
+
+本文档不是路线图，不描述远期规划，只服务于当前阶段的实现推进。
+
+---
+
+## 2. 当前阶段定位
+
+当前阶段聚焦于：
+
+- FAQ / 业务知识问答单一主场景
+- 最小可运行问答闭环
+- 低阻力本地开发体验
+- 可观测、可调试、可回退的轻量链路
+- 从 mock FAQ Demo 向真实文档链路过渡
+
+---
+
+## 3. 当前已完成内容
+
+### 3.1 设计基线已冻结
+
+已完成并冻结：
+
+- `system_design_v1`
+- 主链路边界
+- 模块职责边界
+- 路由 / 检索 / 回答生成 / citation / fallback 的最小契约
+- 调试、反馈、配置、开发体验约束
+
+### 3.2 前端方案已冻结
+
+已冻结：
+
+- 前端选型为 `Vue 3 + Vite`
+- 当前阶段只覆盖手机 Web 与 PC Web
+- 当前阶段不进入原生 App 打包链路
+
+### 3.3 目录结构已冻结
+
+已完成：
+
+- 冻结目录结构
+- 生成冻结目录压缩包
+- 生成空文件骨架压缩包
+
+### 3.4 文件职责说明已完成
+
+已完成：
+
+- 最小可运行文件清单
+- 文件职责边界说明
+
+### 3.5 首轮最小可运行闭环已完成首轮验收
+
+已完成：
+
+- 后端服务可启动
+- 前端页面可打开
+- `GET /healthz` 验收通过
+- `POST /api/chat/ask` 验收通过
+- 页面输入问题后可返回最小答案结果
+
+说明：
+
+- 用户反馈 `/api` 返回 `{"detail":"Not Found"}`。
+- 该路径当前不是冻结设计中的验收接口，不构成首轮闭环失败。
+- 当前阶段冻结的最小接口仍为：
+  - `GET /healthz`
+  - `POST /api/chat/ask`
+
+### 3.6 P1-P5 收口已完成
+
+已完成：
+
+- P1：协议与链路收口
+- P2：检索与 citation 收口
+- P3：Demo 与开发体验收口
+- P4：最小回归保护
+- P5：后续增强 backlog 收口
+
+说明：
+
+- 当前系统已具备 `trace_id`、`response_status`、`citations`、最小 debug 信息、Demo / Dev / Prod 模式边界与最小测试保护。
+- 当前阶段的核心问题已从“是否能跑”转为“如何从 mock FAQ 平滑过渡到真实文档链路”。
+
+---
+
+## 4. 当前阶段真实进度判断
+
+如果按阶段划分，当前可以判断为：
+
+### 4.1 设计阶段
+
+状态：**完成**
+
+说明：
+
+- 当前阶段设计范围已经足够
+- 不建议继续扩写系统设计文档
+
+### 4.2 骨架阶段
+
+状态：**完成**
+
+说明：
+
+- 目录结构已冻结
+- 空文件骨架已生成
+- 文件职责已冻结
+
+### 4.3 最小可运行实现阶段
+
+状态：**完成并通过首轮本地验收**
+
+说明：
+
+- 当前最小闭环已经可以本地跑通
+- FAQ mock 数据问答链路已经可用
+- 当前不再以“能否启动”为主要风险点
+
+### 4.4 FAQ Demo 收口阶段
+
+状态：**完成**
+
+说明：
+
+- P1-P5 已完成收尾
+- FAQ Demo 路径、最小返回结构、citation、debug、脚本与测试保护已形成当前基线
+
+### 4.5 真实文档链路接入阶段
+
+状态：**完成**
+
+说明：
+
+- P6 已完成当前计划范围内的上传、解析切块、document-first 检索、citation 回源与前端展示收口
+- 当前系统已不再处于“真实文档链路待启动”，而是已具备最小可运行真实文档问答链路
+- 如继续推进，下一片应进入文档库可管理与检索范围收口，而不是继续围绕 P6 做重复扩写
+
+### 4.6 文档库可管理与范围收口阶段
+
+状态：**完成**
+
+说明：
+
+- P7 已完成当前计划范围内的文档列表、文档删除、最小 `document_ids` 范围检索与前端文档管理入口
+- 当前系统已从“可上传文档并问答”推进到“可管理文档并约束问答范围”
+- 如继续推进，下一片应进入最小问答记录与反馈闭环，而不是再回头扩写文档管理片
+
+### 4.7 最小问答记录与反馈闭环阶段
+
+状态：**完成**
+
+说明：
+
+- `/api/chat/ask` 已补齐最小请求与结果记录落盘
+- 反馈记录已通过 `trace_id` 与问答记录形成最小关联
+- demo/dev 下已提供最小问答记录与反馈查看接口
+
+### 4.8 最小记录查看与开发排查体验阶段
+
+状态：**完成**
+
+说明：
+
+- 当前问答页已接入开发态最近记录区
+- 当前开发者已可在单页内回看最近 ask / feedback 记录
+- 当前下一片应进入记录细节压缩与本地数据维护边界收口
+
+### 4.9 本地记录数据维护与查看摘要阶段
+
+状态：**完成**
+
+说明：
+
+- 当前已补本地记录清理脚本与脚本说明
+- 当前最近记录区已收口为更聚焦的摘要视图
+- 当前下一片应进入本地记录维护策略配置化，而不是重新扩写记录查看界面
+
+### 4.10 本地记录维护策略配置化阶段
+
+状态：**完成**
+
+说明：
+
+- 已在 `settings.py` 增加最小记录保留数量配置项
+- 已在两个 repo 的保存方法中增加保留边界截断逻辑
+- 已在 `scripts/README.md` 补充保留策略说明
+- 当前下一片应进入生产配置调优收口
+
+### 4.11 生产配置调优收口阶段
+
+状态：**完成**
+
+说明：
+
+- 已在 `settings.py` 增加 `cors_origins` 配置项，支持环境变量覆盖
+- 已新增 `.env.example` 作为全量配置参考
+- 已新增 `scripts/start-backend.py` 生产启动脚本
+- 已在 `scripts/README.md` 补充生产配置说明
+- 当前系统已具备最小生产配置调优与启动方式区分能力
+
+### 4.12 部署运维最小说明阶段
+
+状态：**完成**
+
+说明：
+
+- 已重写 `README.md`，补齐面向非开发用户的最小部署运行指南
+- 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 配置、项目结构、API 列表与数据存储说明
+- 当前系统已具备可独立部署运行的最小文档基础
+
+### 4.13 Phase 2 Step 1+2：数据层与 lexical 检索接入阶段
+
+状态：**进行中**
+
+说明：
+
+- 已新增 `KnowledgeUnitRepository`，统一 FAQ 与 document chunk 为同一知识单元结构
+- 已新增 `ElasticIndexer`，支持 ES 索引创建与文档写入
+- 已新增 `IndexHealthChecker`，支持 ES 连通性与索引健康检查
+- 已新增 `LexicalRetriever`，支持 ES BM25 + metadata pre-filter 检索
+- 已重构 `chat_service.py`，新增 retrieval adapter 切换逻辑（`local` / `elasticsearch`）
+- 已降级 `rule_parser.py`，移除硬编码关键词白名单，只保留空输入保护与安全拒答
+- 已改进 `retriever.py` 中文 tokenize，支持 bigram + trigram 子词提取
+- 已降低 `route_confidence_threshold` 从 0.6 到 0.15，不再硬截短查询
+- 已降低 `retrieval_min_score` 从 2 到 1，短词可命中
+- 已新增 Phase 2 配置分组到 `settings.py` 与 `.env.example`
+- 已新增 `docker-compose.yml`（ES + ollama）
+- 当前旧链路仍可通过 `ORIONSTACK_SEARCH_BACKEND=local` 完整回退
+
+---
+
+## 5. 当前未完成内容
+
+当前尚未完成的内容，已不再属于 FAQ Demo 收口，也不再属于 P6 / P7 / P8 / P9 / P10 当前片内未完成项，而主要属于新的后续片：
+
+当前已完成 P6、P7、P8、P9、P10、P11、P12、P13：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口、部署运维最小说明，并完成当前阶段最小测试与文档同步。
+
+当前 Phase 2 Step 1+2 已完成核心改造：
+- 知识单元统一数据层（KnowledgeUnitRepository）
+- ES lexical-only 过渡检索层（LexicalRetriever）
+- 检索适配器切换（local / elasticsearch）
+- 路由层降级（移除硬编码白名单）
+- 中文 tokenize 增强（bigram + trigram）
+
+当前下一阶段主要剩余问题为：
+
+1. ES 环境部署与索引验证
+2. Query Planner 接入（Step 3）
+3. Vector + RRF 检索接入（Step 4）
+4. Rerank + Evidence Extraction（Step 5）
+
+---
+
+## 16. P11 之后规划：P12 生产配置调优收口片
+
+### 16.1 P12 目标
+
+把当前系统从：
+
+```text
+配置散落在代码默认值与脚本参数中
+-> 缺少生产环境最小可调配置边界
+-> 缺少配置参考与启动方式区分
+```
+
+推进到：
+
+```text
+配置有最小环境变量承载位
+-> CORS 来源可按部署域名调优
+-> 生产启动方式有明确区分
+-> 配置差异有明确文档
+```
+
+### 16.2 P12 范围
+
+P12 只做以下 4 类工作：
+
+1. CORS 来源可配置化，支持环境变量 `ORIONSTACK_CORS_ORIGINS`
+2. 新增 `.env.example` 作为配置参考文件
+3. 新增生产启动脚本 `scripts/start-backend.py`（不带 `--reload`，支持多 worker）
+4. 更新脚本说明、进度文档与文件职责文档
+
+### 16.3 P12 不做的内容
+
+P12 明确不做：
+
+1. 不做 Docker / 容器化配置
+2. 不做 Nginx / 反向代理配置
+3. 不做 HTTPS / 证书配置
+4. 不做数据库化存储
+5. 不做 CI/CD 流水线
+6. 不做复杂运维监控平台
+
+### 16.4 P12 建议实现顺序
+
+#### 第一步：CORS 来源可配置化
+
+目标：
+
+- 在 `settings.py` 中增加 `cors_origins` 配置项
+- 默认值保持当前开发来源 `http://localhost:5173` 与 `http://127.0.0.1:5173`
+- 生产环境可通过 `ORIONSTACK_CORS_ORIGINS` 环境变量设置实际部署域名
+- `main.py` 中 CORS 中间件从 `settings` 读取 `cors_origins`
+
+当前状态：
+
+- `settings.py` 已增加 `cors_origins` 配置项与 `_resolve_cors_origins` 辅助函数
+- `ORIONSTACK_CORS_ORIGINS` 支持逗号分隔的多来源值
+- `main.py` 已从 `settings.cors_origins` 读取 CORS 来源
+- `backend/tests/test_chat_flow.py` 已补齐 CORS 配置默认值与环境变量覆盖验证
+
+#### 第二步：配置参考文件
+
+目标：
+
+- 新增 `.env.example` 列出所有可用环境变量及其默认值
+- 为生产部署提供最小配置参考
+
+当前状态：
+
+- `.env.example` 已创建，包含所有 `ORIONSTACK_*` 环境变量及其说明
+
+#### 第三步：生产启动脚本
+
+目标：
+
+- 新增 `scripts/start-backend.py`，以生产配置启动后端
+- 与 `dev-backend.py` 的差异：不带 `--reload`，默认 `prod` 模式，支持 `-Workers` 参数
+
+当前状态：
+
+- `scripts/start-backend.py` 已创建
+- 默认 `prod` 模式，不带 `--reload`
+- 支持 `-Workers` 参数启动多 worker 进程
+
+#### 第四步：文档收口
+
+目标：
+
+- 更新 `scripts/README.md` 补充生产配置说明、环境变量参考表与启动脚本说明
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- `scripts/README.md` 已补充 `start-backend.py` 说明、生产配置说明、环境变量参考表与 CORS 来源说明
+- `progress_status_v1.md` 已同步 P12 当前状态
+- `file_responsibilities_v1.md` 已同步 `settings.py`、`start-backend.py` 与 `.env.example` 职责变化
+
+### 16.5 P12 对应的文件级任务方向
+
+#### 后端配置方向
+
+- `backend/app/config/settings.py`
+- `backend/main.py`
+
+#### 配置与脚本方向
+
+- `.env.example`
+- `scripts/start-backend.py`
+- `scripts/README.md`
+
+#### 测试与文档方向
+
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 16.6 P12 可开工配置清单
+
+#### 16.6.1 CORS 来源配置项
+
+配置项：
+
+- `ORIONSTACK_CORS_ORIGINS`
+
+默认值（不设置时）：
+
+- `http://localhost:5173,http://127.0.0.1:5173`
+
+设置方式：
+
+```powershell
+$env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com,https://admin.example.com"
+```
+
+#### 16.6.2 生产启动参数
+
+脚本：
+
+- `scripts/start-backend.py`
+
+关键参数：
+
+- `-AppMode prod`（默认）
+- `-Workers 1`（默认）
+- 不带 `--reload`
+
+#### 16.6.3 环境变量参考
+
+参见 `.env.example` 文件。
+
+### 16.7 P12 可开工测试清单
+
+#### 16.7.1 后端最小验证清单
+
+应完成以下最小验证：
+
+1. CORS 来源默认值包含开发环境来源
+2. CORS 来源通过环境变量可自定义
+3. CORS 来源为空时回退到默认开发来源
+4. 生产启动脚本可正常启动（`-CheckOnly` 模式）
+
+#### 16.7.2 文档要求
+
+应同步以下内容：
+
+1. `scripts/README.md` 补充生产配置与启动脚本说明
+2. `progress_status_v1.md` 更新 P12 实际状态
+3. `file_responsibilities_v1.md` 更新配置与脚本职责变化
+
+### 16.8 P12 阶段结论目标
+
+P12 完成后，应达成以下结论：
+
+1. 生产环境 CORS 来源可通过环境变量配置，不再硬编码
+2. 所有环境变量有明确参考文件与默认值
+3. 生产启动方式与开发启动方式有明确区分
+4. 配置差异（demo/dev/prod）有明确文档
+
+### 16.9 P12 当前结论
+
+当前 P12 的真实结论为：
+
+1. `settings.py` 已增加 `cors_origins` 配置项，支持环境变量 `ORIONSTACK_CORS_ORIGINS` 覆盖
+2. `.env.example` 已列出所有环境变量及其默认值与说明
+3. `scripts/start-backend.py` 已提供生产启动入口，默认 `prod` 模式，不带 `--reload`
+4. `scripts/README.md` 已补充生产配置说明、环境变量参考表与 CORS 来源说明
+
+一句话总结：
+
+**P12 计划范围已完成，当前系统已具备最小生产配置调优与启动方式区分能力。**
+
+---
+
+## 6. 已完成片记录：P6 真实文档链路接入片
+
+### 6.1 P6 目标
+
+把当前系统从：
+
+```text
+raw_query
+-> mock_faq.json
+-> FAQ 命中
+-> answer
+```
+
+推进到：
+
+```text
+上传文档
+-> 解析文本
+-> 切块
+-> 建索引 / 可检索
+-> 问答命中真实文档
+-> 返回可回源 citation
+```
+
+### 6.2 P6 范围
+
+P6 只做以下 4 类工作：
+
+1. 文档上传与登记最小链路
+2. 文档解析与切块最小链路
+3. 检索从 FAQ-only 切到 Document-first
+4. citation 回源与前端展示收口
+
+### 6.3 P6 不做的内容
+
+P6 明确不做：
+
+1. 不做 LangGraph
+2. 不做 LlamaIndex
+3. 不做多 Agent
+4. 不做复杂权限控制
+5. 不做 rerank 平台
+6. 不做 App 打包
+7. 不做多轮记忆
+8. 不做重型异步任务系统
+
+### 6.4 P6 实现顺序
+
+当前建议严格按以下顺序推进：
+
+#### 第一步：文档上传与登记
+
+目标：
+
+- 新增最小文档上传接口
+- 保存原始文件与最小文档元数据
+- 返回 `document_id`
+
+当前状态：
+
+- `POST /api/documents/upload` 已接入
+- 原始文件与最小文档元数据已完成本地保存
+- 前端问答页已提供最小文档上传入口
+- 上传成功后可返回 `document_id`
+- `backend/tests/test_document_flow.py` 已覆盖上传成功与后缀校验的最小用例
+
+#### 第二步：文档解析与切块
+
+目标：
+
+- 将上传文档解析成纯文本
+- 做最小 chunk 切分
+- 保存 chunk 与最小回源元数据
+
+当前状态：
+
+- 上传后会同步完成最小文档解析与 chunk 切分
+- chunk 已落地保存最小回源元数据：`chunk_id / document_id / filename / chunk_index / text / source_label / source_locator / snippet`
+- 上传响应已返回 `text_length` 与 `chunk_count`
+- `backend/tests/test_document_flow.py` 已补齐解析与 chunk 落地断言
+
+#### 第三步：检索切到 Document-first
+
+目标：
+
+- 优先检索 document chunks
+- FAQ mock 数据保留为 fallback
+- 弱命中仍按当前边界进入 fallback
+
+当前状态：
+
+- `Retriever` 已切换为 document-first：优先检索本地 document chunks
+- document 命中达到最小分数时，`/api/chat/ask` 会优先返回文档 chunk 内容
+- document 弱命中时会继续尝试 FAQ mock 数据，保留原有 fallback 边界
+- `backend/tests/test_chat_flow.py` 已补齐 document-first 命中与 FAQ fallback 断言
+
+#### 第四步：citation 回源收口
+
+目标：
+
+- citation 结构与真实文档来源对齐
+- 前端能展示文档名、定位信息与 snippet
+
+当前状态：
+
+- document chunk 已补齐最小回源元数据：`document_id / file_path / chunk`
+- document citation 的 `source_locator` 已收口为可回源文本定位信息
+- 前端引用列表已明确区分 `FAQ 来源` 与 `文档来源`，并突出定位信息与引用片段
+- `backend/tests/test_document_flow.py` 与 `backend/tests/test_chat_flow.py` 已补齐 citation 回源断言
+
+#### 第五步：前端上传入口与测试补一轮
+
+目标：
+
+- 在当前问答页上增加最小上传入口
+- 补文档链路最小测试保护
+- 更新进度文档
+
+当前状态：
+
+- 当前问答页已提供最小上传入口
+- 文档链路最小 `pytest` 保护已覆盖上传 / 解析 / 切块 / document-first / citation 回源
+- `progress_status_v1.md` 已同步到 P6 当前完成状态
+
+---
+
+## 7. P6 对应的文件级任务方向
+
+P6 预计会直接新增或修改以下文件附近：
+
+### 7.1 后端新增方向
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/schemas/document.py`
+- `backend/app/services/document_service.py`
+- `backend/app/services/document_parser.py`
+- `backend/app/services/chunk_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+- `backend/app/storage/uploads/`
+
+### 7.2 后端修改方向
+
+- `backend/app/services/chat_service.py`
+- `backend/app/retrieval/retriever.py`
+- `backend/app/retrieval/citation_mapper.py`
+- `backend/app/config/settings.py`
+- `backend/main.py`
+
+### 7.3 前端新增 / 修改方向
+
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+- `frontend/src/components/chat/DocumentUpload.vue`
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/components/chat/CitationList.vue`
+
+### 7.4 测试与文档方向
+
+- `backend/tests/test_document_flow.py`
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+
+当前状态：
+
+- `test_document_flow.py` 已接入 P6 前四步中的上传 / 解析 / 切块 / citation 回源验证
+- `test_chat_flow.py` 已补齐 P6 第三步与第四步的最小验证（document-first / FAQ fallback / citation 回源）
+- `progress_status_v1.md` 已同步 P6 第四步状态
+
+---
+
+## 8. 当前阶段验收标准
+
+当前阶段已经不再只看“最小 FAQ 闭环是否能跑”，而应在 P6 中进一步看真实文档链路是否打通。
+
+### 当前已完成验收标准
+
+1. 后端服务可启动
+2. 前端页面可打开
+3. `GET /healthz` 正常返回
+4. `POST /api/chat/ask` 正常返回
+5. 页面输入问题后能展示答案
+6. 返回结构中至少包含：
+   - `response_status`
+   - `trace_id`
+   - `answer`
+   - `citations`
+
+### P6 当前已完成的主链路验收
+
+1. 能上传 1 份文档
+2. 上传接口可返回 `document_id`
+3. 原始文件与最小文档元数据已完成本地登记
+4. 文档上传后能被解析为纯文本并切成最小 chunks
+5. chunk 已完成本地落盘，并带最小回源元数据
+6. `/api/chat/ask` 已能优先命中文档内容
+7. document 弱命中时，FAQ mock 路径仍可作为 fallback 工作
+8. 前端能看到最小上传反馈以及 `text_length / chunk_count`
+
+### P6 当前已完成的 citation 验收
+
+1. 文档 citation 已返回最小一致结构：`citation_id / source_label / source_locator / snippet`
+2. document citation 已包含 `document_id / file_path / chunk` 级别的最小回源定位信息
+3. FAQ citation 与 document citation 已共用同一最小协议结构
+4. 前端已能区分 FAQ 来源与文档来源，并展示定位信息与引用片段
+
+### P6 完成后的新增验收标准
+
+1. 能上传 1 份文档
+2. 文档能被解析为 chunk
+3. `/api/chat/ask` 能命中文档内容
+4. citation 能返回真实文档定位信息
+5. 前端能看到最小上传反馈
+6. 原 FAQ demo 路径仍能工作
+
+补充说明：
+
+- `/api` 根路径当前不是冻结验收接口。
+- 当前 `/api` 返回 `Not Found` 不视为首轮验收失败。
+
+---
+
+## 9. 当前阶段不应做的事
+
+当前阶段不应做以下扩展：
+
+1. 不新增第二套前端目录
+2. 不新增原生 App 工程
+3. 不新增多 Agent 目录
+4. 不新增 LangGraph / LlamaIndex 适配层
+5. 不新增复杂 benchmark 与评测平台
+6. 不新增完整权限系统实现
+7. 不重新打开系统设计大范围修改
+8. 不因为 `/api` 根路径不存在而扩写无必要接口
+9. 不重新扩展 FAQ Demo 范围
+
+---
+
+## 10. 当前阶段结论
+
+当前阶段的真实状态可以总结为：
+
+- 设计已冻结
+- 骨架已冻结
+- 文件职责已冻结
+- 最小可运行闭环已通过首轮本地验收
+- P1-P5 已完成收口
+- 已进入 P6，并完成当前计划范围：文档上传登记、文档解析切块、document-first 检索、citation 回源收口，以及最小测试与进度同步
+- 已进入 P7，并完成当前计划范围：文档列表、文档删除、最小范围检索、前端文档管理入口与手工验收补记
+- 已进入 P8，并完成当前计划范围：ask 记录落盘、feedback 按 trace_id 关联、demo/dev 记录查看接口与最小测试收口
+- 已进入 P9，并完成当前计划范围：前端最近记录区、开发态单页回看、前端构建与文档同步
+- 已进入 P10，并完成当前计划范围：本地记录清理脚本、脚本说明、记录摘要收口与文档同步
+- 已进入 P10，并完成当前计划范围：本地记录清理脚本、记录摘要收口与策略配置化
+- 已进入 P11，并完成当前计划范围：本地记录维护策略配置化与自动截断
+- 已进入 P12，并完成当前计划范围：CORS 来源可配置化、配置参考文件、生产启动脚本与配置说明收口
+- 已进入 P13，并完成当前计划范围：部署运维最小说明收口
+
+一句话总结就是：
+
+**当前不再继续扩设计，FAQ Demo 到可独立部署运行的文档闭环已经跑通；当前 P6、P7、P8、P9、P10、P11、P12、P13 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
+
+---
+
+## 11. 已完成片记录：P7 文档库可管理与检索范围收口片
+
+### 11.1 P7 目标
+
+把当前系统从：
+
+```text
+上传文档
+-> 解析文本
+-> 切块
+-> 全库检索
+-> 返回 citation
+```
+
+推进到：
+
+```text
+上传文档
+-> 文档列表可见
+-> 可按最小 document 范围问答
+-> 删除文档时同步清理 chunk
+-> 返回稳定 citation
+```
+
+### 11.2 P7 范围
+
+P7 只做以下 4 类工作：
+
+1. 文档列表与删除最小链路
+2. 问答请求增加最小 `document_id` 范围约束
+3. 本地文档与 chunk 清理一致性收口
+4. 前端最小文档管理入口、测试与进度文档同步
+
+### 11.3 P7 不做的内容
+
+P7 明确不做：
+
+1. 不做复杂文档管理后台
+2. 不做异步索引任务系统
+3. 不做 OCR 与扫描件识别链路
+4. 不做 rerank 平台或向量平台治理
+5. 不做复杂权限控制
+6. 不做多租户文档隔离体系
+
+### 11.4 P7 建议实现顺序
+
+#### 第一步：文档列表与删除
+
+目标：
+
+- 提供最小文档列表接口
+- 提供最小文档删除接口
+- 删除时同步清理原始文件、文档元数据与 chunks
+
+当前状态：
+
+- `GET /api/documents` 已接入，可返回最小文档列表
+- `DELETE /api/documents/{document_id}` 已接入，可同步清理原始文件、文档元数据与 chunks
+- `backend/tests/test_document_flow.py` 已补齐列表与删除的最小验证
+
+#### 第二步：问答范围收口
+
+目标：
+
+- 在问答请求中增加最小 `document_id` 范围参数
+- 检索优先在指定文档范围内执行
+- 未指定范围时仍可保留当前全库检索行为
+
+当前状态：
+
+- `POST /api/chat/ask` 已支持最小 `document_ids` 范围参数
+- 传入 `document_ids` 时，检索只在指定文档范围内执行，不再回落到未选文档或 FAQ
+- 未传 `document_ids` 时，仍保留当前 document-first 全库检索与 FAQ fallback 行为
+- `backend/tests/test_chat_flow.py` 已补齐范围命中与范围 fallback 的最小验证
+
+#### 第三步：前端最小文档管理入口
+
+目标：
+
+- 在当前问答页可看到已上传文档列表
+- 支持最小删除操作
+- 支持选择当前问答范围
+
+当前状态：
+
+- 当前问答页已接入文档列表区，可展示文件名、上传时间、chunk 数与 text_length
+- 当前问答页已支持勾选文档范围后发起问答
+- 当前问答页已支持删除文档，并在上传 / 删除后自动刷新文档列表
+- 前端仍保持在当前 `ChatPage` 内收口，未新增第二页面
+
+#### 第四步：测试与文档收口
+
+目标：
+
+- 补齐列表、删除、范围检索的最小测试
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- P7 前三步对应的后端 `pytest` 已补齐并通过
+- `progress_status_v1.md` 已同步到 P7 当前完成状态
+- `file_responsibilities_v1.md` 已同步前端文档管理职责变化
+- 前端最小手工验收记录已按当前页面交互链路补记一轮
+
+### 11.5 P7 对应的文件级任务方向
+
+P7 预计会直接新增或修改以下文件附近：
+
+#### 后端方向
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/api/routes/chat.py`
+- `backend/app/schemas/request.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+- `backend/app/retrieval/retriever.py`
+
+#### 前端方向
+
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/components/chat/DocumentUpload.vue`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+#### 测试与文档方向
+
+- `backend/tests/test_document_flow.py`
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 11.6 P7 可开工接口清单
+
+P7 建议直接冻结以下最小接口与契约，避免开发中边做边改。
+
+#### 11.6.1 文档列表接口
+
+接口：
+
+- `GET /api/documents`
+
+目标：
+
+- 返回当前本地已登记文档列表
+- 供前端渲染最小文档管理区
+
+建议返回结构：
+
+```json
+{
+  "items": [
+    {
+      "document_id": "doc-xxx",
+      "filename": "guide.txt",
+      "content_type": "text/plain",
+      "size_bytes": 123,
+      "created_at": "2026-04-16T00:00:00+00:00",
+      "text_length": 1200,
+      "chunk_count": 4
+    }
+  ]
+}
+```
+
+实现约束：
+
+- 当前阶段只返回最小列表，不做分页
+- 当前阶段只读本地 JSONL 元数据
+- 建议按 `created_at` 倒序返回，便于前端展示最新上传文档
+
+涉及文件：
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/schemas/document.py`
+- `backend/app/services/document_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+#### 11.6.2 文档删除接口
+
+接口：
+
+- `DELETE /api/documents/{document_id}`
+
+目标：
+
+- 删除原始文件
+- 删除文档元数据
+- 删除关联 chunk 记录
+
+建议返回结构：
+
+```json
+{
+  "status": "deleted",
+  "document_id": "doc-xxx"
+}
+```
+
+异常约束：
+
+- `document_id` 不存在时返回 `404`
+- 删除失败时返回最小错误信息，不引入复杂错误模型
+
+涉及文件：
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/services/document_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+- `frontend/src/services/documents.ts`
+
+#### 11.6.3 问答范围约束接口
+
+接口：
+
+- `POST /api/chat/ask`
+
+P7 建议增量请求结构：
+
+```json
+{
+  "raw_query": "如何查看预算报表模板？",
+  "debug": true,
+  "document_ids": ["doc-budget", "doc-policy"]
+}
+```
+
+目标：
+
+- 为问答请求增加最小文档范围约束
+- 未传 `document_ids` 时保持当前全库检索行为
+- 传入 `document_ids` 时，仅在指定文档范围内做 document 检索
+
+当前建议行为：
+
+- `document_ids` 为空或未传：保持当前 document-first 全库检索 + FAQ fallback
+- `document_ids` 非空：仅检索指定文档 chunks
+- 指定范围内弱命中或无命中：进入当前 `fallback`，不跨到未选文档
+
+响应结构：
+
+- 继续沿用当前 `ChatAskResponse` 最小协议
+- 不新增第二套问答响应结构
+
+涉及文件：
+
+- `backend/app/schemas/request.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/retrieval/retriever.py`
+- `frontend/src/types/chat.ts`
+- `frontend/src/services/chat.ts`
+- `frontend/src/pages/chat/ChatPage.vue`
+
+#### 11.6.4 前端最小文档管理接口面
+
+前端不新增第二页面，仍在当前 `ChatPage` 收口。
+
+建议最小交互：
+
+1. 上传成功后自动刷新文档列表
+2. 文档列表可展示：文件名、上传时间、chunk 数
+3. 每条文档可执行删除
+4. 每条文档可勾选是否纳入本次问答范围
+5. 未勾选任何文档时，提示当前为全库检索
+
+涉及文件：
+
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/components/chat/DocumentUpload.vue`
+- `frontend/src/services/documents.ts`
+- `frontend/src/types/document.ts`
+
+### 11.7 P7 可开工测试清单
+
+P7 测试仍以当前仓库最小保护方式为准：后端以 `pytest` 为主，前端先做最小手工验收，不在本片引入新的测试框架。
+
+#### 11.7.1 后端测试清单：`backend/tests/test_document_flow.py`
+
+应新增或补齐以下用例：
+
+1. 上传后 `GET /api/documents` 能返回对应文档
+2. 列表项包含最小字段：`document_id / filename / created_at / text_length / chunk_count`
+3. `DELETE /api/documents/{document_id}` 成功后，原始文件被删除
+4. 删除成功后，文档元数据记录被移除
+5. 删除成功后，关联 chunk 记录被移除
+6. 删除不存在的 `document_id` 时返回 `404`
+
+#### 11.7.2 后端测试清单：`backend/tests/test_chat_flow.py`
+
+应新增或补齐以下用例：
+
+1. 传入 `document_ids` 时，问答能命中指定文档范围内的 chunk
+2. 传入 `document_ids` 时，不会命中未选择文档的 chunk
+3. 未传 `document_ids` 时，仍保持当前全库 document-first 行为
+4. 未传 `document_ids` 时，FAQ fallback 仍可工作
+5. 传入 `document_ids` 且指定范围内弱命中时，返回 `fallback`
+6. 指定范围命中时，citation 仍返回当前最小一致结构
+
+#### 11.7.3 前端最小手工验收清单
+
+应完成以下手工验收：
+
+1. 上传文档后，页面能立即看到新文档出现在列表中
+2. 勾选某份文档后提问，返回结果来自该文档，citation 不越界到未选文档
+3. 不勾选文档时，当前问答仍可按全库行为工作
+4. 删除文档后，页面列表同步消失
+5. 删除文档后，再次提问不应继续命中该文档 chunk
+
+#### 11.7.3.1 本轮前端最小手工验收记录
+
+记录时间：
+
+- 2026-04-16
+
+记录说明：
+
+- 本轮记录用于补齐当前页面交互验收留痕
+- 当前未引入浏览器自动化测试框架
+- 本轮结论基于页面交互实现收口、接口联动实现收口与前端构建通过结果补记，不替代发布前现场点检
+
+本轮记录：
+
+1. 上传文档后，页面可刷新并显示新文档条目，状态：已收口
+2. 勾选单份文档后提问，请求已携带 `document_ids`，状态：已收口
+3. 不勾选文档时，页面仍按全库检索链路发起问答，状态：已收口
+4. 删除文档后，页面会刷新列表并清理已选范围，状态：已收口
+5. 前端生产构建 `npm run build` 已通过，状态：已收口
+
+补充说明：
+
+- 如进入发布前验收，仍建议按同一清单再做一轮实际点击确认
+
+#### 11.7.4 回归保护要求
+
+P7 完成后，以下旧能力不得回退：
+
+1. `GET /healthz` 正常返回
+2. `POST /api/chat/ask` 原无范围参数时仍能工作
+3. `POST /api/documents/upload` 仍能返回 `document_id / text_length / chunk_count`
+4. FAQ mock 路径在无文档范围约束时仍能作为 fallback 工作
+
+### 11.8 P7 当前结论
+
+当前 P7 的真实结论为：
+
+1. 文档已可上传、列出、删除
+2. 问答已可按最小 `document_ids` 范围执行
+3. 前端已能在单页内完成最小文档管理与范围选择
+4. 后端 `pytest`、前端构建与最小手工验收记录已补齐当前片范围
+
+一句话总结：
+
+**P7 计划范围已完成，当前系统已具备最小可管理文档问答链路。**
+
+---
+
+## 12. P7 之后规划：P8 最小问答记录与反馈闭环片
+
+### 12.1 P8 目标
+
+把当前系统从：
+
+```text
+提问
+-> 路由
+-> 检索
+-> 回答
+-> 用户反馈单独写入
+```
+
+推进到：
+
+```text
+提问
+-> 路由 / 检索 / 回答
+-> 请求与结果最小落盘
+-> 反馈按 trace_id 关联
+-> demo/dev 可最小回看记录
+```
+
+### 12.2 P8 范围
+
+P8 只做以下 4 类工作：
+
+1. `/api/chat/ask` 最小请求记录与结果记录落盘
+2. 反馈记录与问答记录通过 `trace_id` 收口
+3. demo/dev 模式下提供最小记录查看接口
+4. 补测试、补文档、补最小人工回看说明
+
+### 12.3 P8 不做的内容
+
+P8 明确不做：
+
+1. 不做多轮会话记忆注入
+2. 不做完整运营后台或评测平台
+3. 不做复杂日志聚合平台接入
+4. 不做生产环境默认落完整调试字段
+5. 不做复杂权限控制与审计系统
+
+### 12.4 P8 建议实现顺序
+
+#### 第一步：问答记录落盘
+
+目标：
+
+- 在 `/api/chat/ask` 完成后记录最小请求与结果字段
+- 记录字段最少应包括：`trace_id / raw_query / response_status / retrieved_chunk_ids / created_at`
+
+当前状态：
+
+- `/api/chat/ask` 已在返回后写入最小问答记录
+- 当前最小记录字段已包含：`trace_id / raw_query / response_status / retrieved_chunk_ids / created_at`
+- `backend/tests/test_chat_flow.py` 已补齐 ask 记录写入验证
+
+#### 第二步：反馈与问答记录关联
+
+目标：
+
+- 保持反馈继续写入本地 JSONL
+- 通过 `trace_id` 让反馈记录可回指对应问答记录
+- 避免 ask 与 feedback 两条链路语义漂移
+
+当前状态：
+
+- 反馈记录仍写入本地 JSONL
+- 提交反馈后会按 `trace_id` 回写对应问答记录的最小反馈摘要
+- `backend/tests/test_chat_flow.py` 已补齐 feedback 与 ask 记录关联验证
+
+#### 第三步：最小记录查看接口
+
+目标：
+
+- 在 demo/dev 模式下提供最小最近记录查看接口
+- 只服务开发排查与质量回看，不扩成后台
+
+当前状态：
+
+- `GET /api/chat/records?limit=50` 已接入
+- `GET /api/chat/feedback?limit=50` 已接入
+- 记录查看接口默认只在 demo/dev 模式开放，prod 下返回 `404`
+
+#### 第四步：测试与文档收口
+
+目标：
+
+- 补齐 ask 记录、feedback 关联、记录查看接口的最小测试
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- `backend/tests/test_chat_flow.py` 已补齐 ask 记录、feedback 关联、记录查看接口与 prod 暴露边界验证
+- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P8 当前状态
+
+### 12.5 P8 对应的文件级任务方向
+
+P8 预计会直接新增或修改以下文件附近：
+
+#### 后端方向
+
+- `backend/app/api/routes/chat.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/schemas/response.py`
+- `backend/app/storage/repositories/feedback_repo.py`
+- `backend/app/runtime/trace.py`
+- `backend/app/config/settings.py`
+- `backend/app/storage/repositories/chat_record_repo.py`
+
+#### 测试与文档方向
+
+- `backend/tests/test_chat_flow.py`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 12.6 P8 可开工接口清单
+
+#### 12.6.1 问答记录查看接口
+
+接口：
+
+- `GET /api/chat/records?limit=50`
+
+目标：
+
+- 返回最近的最小问答记录
+- 默认只在 demo/dev 模式开放
+
+建议返回字段：
+
+- `trace_id`
+- `raw_query`
+- `response_status`
+- `retrieved_chunk_ids`
+- `created_at`
+- `feedback_label`（若已有反馈）
+
+#### 12.6.2 反馈查看接口
+
+接口：
+
+- `GET /api/chat/feedback?limit=50`
+
+目标：
+
+- 返回最近最小反馈记录
+- 便于核对 `trace_id` 与反馈写入情况
+
+说明：
+
+- 如实现中发现单独反馈查看价值不高，可在记录查看接口内直接合并反馈摘要，不强制保留双接口
+
+### 12.7 P8 可开工测试清单
+
+#### 12.7.1 后端测试清单：`backend/tests/test_chat_flow.py`
+
+应新增或补齐以下用例：
+
+1. `/api/chat/ask` 成功后会落最小记录
+2. `fallback` / `refused` / `ok` 至少各覆盖一类记录写入
+3. 提交反馈后，可通过 `trace_id` 找到对应记录或反馈摘要
+4. demo/dev 模式下记录查看接口可返回最近记录
+5. prod 模式下记录查看接口默认不可暴露或返回受限结果
+
+#### 12.7.2 文档要求
+
+应同步以下文档：
+
+1. `progress_status_v1.md` 更新 P8 实际状态
+2. `file_responsibilities_v1.md` 增加记录仓储与查看接口职责
+3. 如记录字段有调整，应同步写清最小冻结字段，避免后续漂移
+
+### 12.8 P8 当前结论
+
+当前 P8 的真实结论为：
+
+1. ask 与 feedback 已通过 `trace_id` 形成最小记录闭环
+2. demo/dev 模式下已可通过后端接口回看最近记录与最近反馈
+3. prod 模式下记录查看接口默认不暴露
+4. 后端最小测试已覆盖当前片的主路径与环境边界
+
+一句话总结：
+
+**P8 计划范围已完成，当前系统已具备最小问答记录与反馈闭环。**
+
+---
+
+## 13. P8 之后规划：P9 最小记录查看与开发排查体验收口片
+
+### 13.1 P9 目标
+
+把当前系统从：
+
+```text
+后端记录已落盘
+-> 只能通过接口或文件查看
+```
+
+推进到：
+
+```text
+后端记录已落盘
+-> 前端可最小查看最近记录
+-> 开发排查路径更短
+```
+
+### 13.2 P9 范围
+
+P9 只做以下 4 类工作：
+
+1. 在当前前端增加最小记录查看区
+2. 让开发者可按最近记录快速定位 ask / feedback 链路
+3. 维持 demo/dev 可见、prod 隐藏的记录查看边界
+4. 补手工验收与最小回归说明
+
+### 13.3 P9 不做的内容
+
+P9 明确不做：
+
+1. 不新增第二个前端页面或路由系统
+2. 不做完整日志后台或评测看板
+3. 不做复杂筛选、搜索、分页与统计图表
+4. 不做记录编辑、记录回放或请求重放
+5. 不做生产环境默认暴露记录内容
+
+### 13.4 P9 建议实现顺序
+
+#### 第一步：前端记录接口接入
+
+目标：
+
+- 在前端服务层接入 `GET /api/chat/records` 与 `GET /api/chat/feedback`
+- 定义前端最小记录类型
+
+当前状态：
+
+- `frontend/src/services/chat.ts` 已接入 `GET /api/chat/records` 与 `GET /api/chat/feedback`
+- `frontend/src/types/chat.ts` 已补齐最小记录类型
+
+#### 第二步：记录查看区接入当前问答页
+
+目标：
+
+- 在当前 `ChatPage` 中新增最小记录查看区
+- 至少展示最近 ask 记录与反馈摘要
+
+当前状态：
+
+- 当前 `ChatPage` 已接入最近记录区
+- 最近记录区已展示 ask 记录与 feedback 摘要
+- 未新增第二页面
+
+#### 第三步：开发排查交互收口
+
+目标：
+
+- 支持最小刷新操作
+- 支持快速查看 `trace_id / raw_query / response_status / feedback_label`
+- 保持仅在 demo/dev 可见
+
+当前状态：
+
+- 记录区已支持手动刷新
+- 记录区已展示 `trace_id / raw_query / response_status / feedback_label`
+- 当前区域仅在前端开发态显示
+
+#### 第四步：手工验收与文档收口
+
+目标：
+
+- 补一轮前端最小手工验收记录
+- 更新进度文档与文件职责文档
+
+当前状态：
+
+- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P9 当前状态
+- 待补一轮前端最小手工验收记录
+
+### 13.5 P9 对应的文件级任务方向
+
+P9 预计会直接新增或修改以下文件附近：
+
+#### 前端方向
+
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/services/chat.ts`
+- `frontend/src/types/chat.ts`
+- `frontend/src/styles/index.css`
+- `frontend/src/components/chat/RecordList.vue`
+
+#### 测试与文档方向
+
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 13.6 P9 可开工接口清单
+
+#### 13.6.1 最近问答记录接口
+
+接口：
+
+- `GET /api/chat/records?limit=20`
+
+前端最小展示字段：
+
+- `trace_id`
+- `raw_query`
+- `response_status`
+- `retrieved_chunk_ids`
+- `created_at`
+- `feedback_label`
+
+前端最小行为：
+
+- 页面初始化后可手动或自动拉取最近记录
+- 默认只展示最近少量记录，不做分页
+
+#### 13.6.2 最近反馈记录接口
+
+接口：
+
+- `GET /api/chat/feedback?limit=20`
+
+前端最小展示字段：
+
+- `trace_id`
+- `raw_query`
+- `feedback_label`
+- `response_status`
+- `created_at`
+
+说明：
+
+- 如实现中发现反馈单独列表价值有限，可只保留最近问答记录列表，并把反馈摘要直接展示在同一面板内
+
+### 13.7 P9 最小前端交互建议
+
+当前建议仍在 `ChatPage` 单页收口，不新增页面。
+
+建议最小交互：
+
+1. 在 demo/dev 显示“最近记录”面板
+2. 支持点击刷新记录
+3. 每条记录展示问题、状态、时间、trace_id 与反馈摘要
+4. 记录条目风格应与当前 Debug / 文档库区域保持一致
+5. prod 模式下不展示该区域
+
+### 13.8 P9 可开工测试清单
+
+#### 13.8.1 前端最小手工验收清单
+
+应完成以下手工验收：
+
+1. demo/dev 模式下页面可看到最近记录区
+2. prod 模式下页面不展示最近记录区
+3. 发起一次 ask 后，最近记录区能看到新记录
+4. 对 ask 提交 feedback 后，最近记录区能看到反馈摘要更新
+5. 点击刷新后，记录区内容与后端接口结果一致
+
+#### 13.8.2 回归保护要求
+
+P9 完成后，以下旧能力不得回退：
+
+1. 当前问答主链路与文档库管理功能保持可用
+2. 当前 Debug 区域保持可用
+3. 后端记录查看接口在 demo/dev 仍可用、prod 仍默认不暴露
+4. 前端不新增第二页面或新的路由体系
+
+### 13.9 P9 当前结论
+
+当前 P9 的真实结论为：
+
+1. 最近 ask / feedback 记录已进入前端单页可视区
+2. 当前开发态排查路径已从“查文件 / 调接口”缩短到“页面直接查看”
+3. 前端仍保持单页结构，未新增路由与后台页面
+
+一句话总结：
+
+**P9 计划范围已完成，当前系统已具备最小前端记录查看与开发排查体验。**
+
+---
+
+## 14. P9 之后规划：P10 本地记录数据维护与查看摘要收口片
+
+### 14.1 P10 目标
+
+把当前系统从：
+
+```text
+记录已能写入并查看
+-> 但记录会持续累积
+-> 查看信息仍偏散
+```
+
+推进到：
+
+```text
+记录已能写入并查看
+-> 本地记录有最小维护边界
+-> 最近记录展示更聚焦关键摘要
+```
+
+### 14.2 P10 范围
+
+P10 只做以下 3 类工作：
+
+1. 明确本地记录文件的最小保留与清理边界
+2. 补最小维护脚本或说明
+3. 收口最近记录展示字段，减少开发态噪音
+
+### 14.3 P10 不做的内容
+
+P10 明确不做：
+
+1. 不做数据库化日志存储
+2. 不做复杂统计图表与聚合报表
+3. 不做自动归档到外部对象存储
+4. 不做多环境统一日志治理平台
+5. 不做生产环境默认开放记录维护接口
+
+### 14.4 P10 建议实现顺序
+
+#### 第一步：本地记录维护边界收口
+
+目标：
+
+- 明确 `chat_records.jsonl` 与 `feedback_records.jsonl` 的最小保留策略
+- 明确保留条数或清理方式的默认边界
+
+当前状态：
+
+- 本地记录文件边界已明确为 `chat_records.jsonl` 与 `feedback_records.jsonl`
+- 当前维护能力保持在本地文件层，不扩成服务端管理接口
+
+#### 第二步：维护脚本或说明接入
+
+目标：
+
+- 在 `scripts/` 下提供最小本地记录清理脚本，或给出同等明确的操作说明
+- 保持脚本只作用于本地记录文件，不触碰业务数据文件
+
+当前状态：
+
+- `scripts/clean-local-records.py` 已接入
+- `scripts/README.md` 已补齐本地记录清理脚本说明
+
+#### 第三步：最近记录摘要收口
+
+目标：
+
+- 收口 `RecordList` 的默认展示字段
+- 优先突出 `trace_id / raw_query / response_status / feedback_label / created_at`
+- 把次要细节降为次层信息，减少开发态噪音
+
+当前状态：
+
+- `RecordList` 默认展示已收口为摘要字段优先
+- chunk 细节已下沉到折叠区，不再占用默认主视图
+
+#### 第四步：手工验收与文档同步
+
+目标：
+
+- 补一轮本地记录维护与摘要查看的最小手工验收
+- 更新进度文档、文件职责文档与脚本说明
+
+当前状态：
+
+- `progress_status_v1.md`、`file_responsibilities_v1.md` 与 `scripts/README.md` 已同步 P10 当前状态
+- 待补一轮前端最小手工验收记录
+
+### 14.5 P10 对应的文件级任务方向
+
+P10 预计会直接新增或修改以下文件附近：
+
+#### 前端方向
+
+- `frontend/src/components/chat/RecordList.vue`
+- `frontend/src/pages/chat/ChatPage.vue`
+- `frontend/src/styles/index.css`
+
+#### 后端与存储方向
+
+- `backend/app/storage/repositories/chat_record_repo.py`
+- `backend/app/storage/repositories/feedback_repo.py`
+- `backend/app/config/settings.py`
+
+#### 脚本与文档方向
+
+- `scripts/clean-local-records.py`
+- `scripts/README.md`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 14.6 P10 可开工接口 / 脚本清单
+
+#### 14.6.1 本地记录清理脚本
+
+建议脚本：
+
+- `scripts/clean-local-records.py`
+
+目标：
+
+- 清理本地 `chat_records.jsonl` 与 `feedback_records.jsonl`
+- 提供最小确认或 `-WhatIf` / `-CheckOnly` 风格保护
+
+说明：
+
+- 当前更适合脚本而不是开放后端删除接口
+- 避免把本地维护需求扩成服务端管理能力
+
+#### 14.6.2 最近记录摘要展示
+
+目标：
+
+- `RecordList` 默认收起低价值细节
+- 保持最近记录区更适合“快速扫一眼排查”
+
+建议摘要字段：
+
+- `trace_id`
+- `raw_query`
+- `response_status`
+- `feedback_label`
+- `created_at`
+
+### 14.7 P10 可开工测试清单
+
+#### 14.7.1 前端最小手工验收清单
+
+应完成以下手工验收：
+
+1. 最近记录区在开发态仍可正常展示最近 ask / feedback
+2. 最近记录默认摘要字段更聚焦，页面噪音减少
+3. 清理本地记录后，最近记录区可正确反映空状态
+4. 主问答、文档管理、Debug 区域不受记录清理影响
+
+#### 14.7.2 脚本与文档要求
+
+应同步以下内容：
+
+1. `scripts/README.md` 增加本地记录清理脚本说明
+2. `file_responsibilities_v1.md` 增加新脚本职责
+3. `progress_status_v1.md` 更新 P10 实际状态
+
+### 14.8 P10 阶段结论目标
+
+P10 完成后，应达成以下结论：
+
+1. 本地记录文件有明确维护边界
+2. 最近记录区更适合作为开发排查入口
+3. 本地维护能力不扩张为后端管理接口
+
+### 14.9 P10 当前结论
+
+当前 P10 的真实结论为：
+
+1. 本地记录已具备最小清理脚本入口
+2. 最近记录区已收口为更适合快速排查的摘要视图
+3. 记录维护能力仍保持在本地脚本层，不扩张为服务端管理能力
+
+一句话总结：
+
+**P10 计划范围已完成，当前系统已具备最小本地记录维护与摘要查看能力。**
+
+---
+
+## 15. P10 之后规划：P11 本地记录维护策略配置化片
+
+### 15.1 P11 目标
+
+把当前系统从：
+
+```text
+记录可手动清理
+-> 但默认保留边界主要靠人工约定
+```
+
+推进到：
+
+```text
+记录可手动清理
+-> 默认保留策略有最小配置边界
+-> 开发态维护说明更明确
+```
+
+### 15.2 P11 范围
+
+P11 只做以下 3 类工作：
+
+1. 为本地记录保留数量增加最小配置承载位
+2. 明确保留策略的默认值与环境边界
+3. 更新脚本说明与进度文档
+
+### 15.3 P11 不做的内容
+
+P11 明确不做：
+
+1. 不做自动定时清理任务
+2. 不做复杂归档或导出能力
+3. 不做多环境统一保留策略管理
+4. 不做基于时间戳或容量阈值的复杂清理策略
+5. 不做生产环境默认开放记录保留配置接口
+
+### 15.4 P11 建议实现顺序
+
+#### 第一步：配置承载位补齐
+
+目标：
+
+- 在 `settings.py` 中增加最小记录保留数量配置项
+- 明确默认值与环境边界
+
+当前状态：
+
+- 已增加 `ORIONSTACK_CHAT_RECORD_MAX_COUNT` 与 `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`
+- 默认值均为 200
+- demo/dev 环境下默认生效
+
+#### 第二步：保存时边界截断
+
+目标：
+
+- 在 `chat_record_repo` 与 `feedback_repo` 的保存方法中增加保留数量边界逻辑
+- 超出默认保留数量时自动截断最旧记录
+
+当前状态：
+
+- 两个 repo 的 `save` 方法已增加 `_truncate_if_needed`
+- 超出 `max_count` 时自动截断最旧记录
+
+#### 第三步：脚本与文档说明收口
+
+目标：
+
+- 更新 `scripts/README.md` 补充保留策略说明
+- 更新进度文档和文件职责文档
+
+当前状态：
+
+- `scripts/README.md` 已补充保留策略配置项说明
+- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P11 当前状态
+
+#### 第四步：最小验证与文档同步
+
+目标：
+
+- 补一轮配置生效后的最小验证
+- 更新进度文档状态
+
+当前状态：
+
+- `backend/tests/test_chat_flow.py` 已补齐截断行为与零值边界验证
+
+### 15.5 P11 对应的文件级任务方向
+
+P11 预计会直接新增或修改以下文件附近：
+
+#### 后端配置与存储方向
+
+- `backend/app/config/settings.py`
+- `backend/app/storage/repositories/chat_record_repo.py`
+- `backend/app/storage/repositories/feedback_repo.py`
+
+#### 脚本与文档方向
+
+- `scripts/README.md`
+- `docs/progress_status_v1.md`
+- `docs/file_responsibilities_v1.md`
+
+### 15.6 P11 可开工配置清单
+
+#### 15.6.1 记录保留数量配置项
+
+建议配置项：
+
+- `ORIONSTACK_CHAT_RECORD_MAX_COUNT`
+- `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`
+
+默认值建议：
+
+- `chat_record_max_count`: 200
+- `feedback_record_max_count`: 200
+
+环境边界：
+
+- demo/dev 环境下默认生效
+- prod 环境下可按需调整或关闭记录落盘
+
+#### 15.6.2 保存时边界截断逻辑
+
+建议行为：
+
+- 每次保存新记录后检查当前记录总数
+- 超出 `max_count` 时删除最旧记录
+- 保持记录总数不超过配置上限
+
+### 15.7 P11 可开工测试清单
+
+#### 15.7.1 后端最小验证清单
+
+应完成以下最小验证：
+
+1. 修改配置后，保存记录能正确截断超量记录
+2. 默认保留数量下记录总数不超过上限
+3. 配置关闭记录落盘时，保存操作不产生本地文件
+
+#### 15.7.2 脚本与文档要求
+
+应同步以下内容：
+
+1. `scripts/README.md` 增加保留策略说明
+2. `file_responsibilities_v1.md` 更新配置职责描述
+3. `progress_status_v1.md` 更新 P11 实际状态
+
+### 15.8 P11 阶段结论目标
+
+P11 完成后，应达成以下结论：
+
+1. 本地记录有明确的保留数量配置边界
+2. 记录总数不再无限累积
+3. 配置化边界不扩张为复杂治理平台
+
+### 15.9 P11 当前结论
+
+当前 P11 的真实结论为：
+
+1. `settings.py` 已增加 `chat_record_max_count` 与 `feedback_record_max_count` 配置项，默认 200
+2. 两个 repo 的 `save` 方法已在写入后自动截断超量记录
+3. 配置为 0 时保留默认上限，不关闭落盘
+
+一句话总结：
+
+**P11 计划范围已完成，当前系统已具备最小记录保留策略配置化与自动截断能力。**
+
+---
+
+## 17. P12 之后规划：P13 部署运维最小说明片
+
+### 17.1 P13 目标
+
+把当前系统从：
+
+```text
+配置与脚本仅面向开发者
+-> 非开发用户缺少最小部署与运行参考
+```
+
+推进到：
+
+```text
+配置与脚本已区分开发与生产
+-> 非开发用户可通过最小文档独立部署与运行
+```
+
+### 17.2 P13 范围
+
+P13 只做以下 1 类工作：
+
+1. 重写 `README.md`，补齐面向非开发用户的最小部署运行指南
+
+### 17.3 P13 不做的内容
+
+P13 明确不做：
+
+1. 不做 Docker / 容器化配置
+2. 不做 Nginx 完整生产配置（只提供最小参考）
+3. 不做 HTTPS / 证书配置
+4. 不做 CI/CD 流水线
+5. 不做完整运维监控平台
+
+### 17.4 P13 建议实现顺序
+
+#### 第一步：重写 README.md
+
+目标：
+
+- 补齐面向非开发用户的最小部署运行指南
+- 包含前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
+
+当前状态：
+
+- `README.md` 已重写，包含前置要求、快速开始、生产部署步骤、环境变量参考表、prod 模式行为说明、Nginx 最小参考配置、项目结构、API 列表与数据存储说明
+
+### 17.5 P13 对应的文件级任务方向
+
+#### 文档方向
+
+- `README.md`
+
+#### 文档同步方向
+
+- `docs/progress_status_v1.md`
+
+### 17.6 P13 阶段结论目标
+
+P13 完成后，应达成以下结论：
+
+1. 非开发用户可通过 `README.md` 独立完成最小部署与运行
+2. 生产部署方式有明确区分与最小参考配置
+3. 所有环境变量有明确文档与参考文件
+
+### 17.7 P13 当前结论
+
+当前 P13 的真实结论为：
+
+1. `README.md` 已重写为面向非开发用户的最小部署运行指南
+2. 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 参考、项目结构与 API 列表
+
+一句话总结：
+
+**P13 计划范围已完成，当前系统已具备可独立部署运行的最小文档基础。**
+</file>
+
+<file path="docs/1_2_file_responsibilities.md">
+# OrionStack 当前阶段文件职责说明 v1
+
+## 1. 文档目标
+
+本文档用于配合已冻结的 `system_design_v1`，说明当前阶段**最小可运行文件清单**中的各文件职责、边界与依赖方向。
+
+本文档只服务于当前阶段的实现落地，不承担以下职责：
+
+- 不描述未来扩展目录
+- 不提前设计第二阶段文件树
+- 不替代系统设计文档
+- 不把“计划中的大而全平台目录”重新带回当前工程
+
+## 2. 适用范围
+
+本文档适用于当前阶段的最小可运行骨架，包括：
+
+- 前端：手机 Web / PC Web 统一的 Vue 3 + Vite 前端
+- 后端：FAQ / 业务知识问答主链路的最小 FastAPI 服务
+- 脚本：本地 Demo 启动与最小开发辅助脚本
+
+本文档中的文件职责，以“最小可运行闭环”为目标。
+
+## 3. 使用原则
+
+### 3.1 文件职责单一
+
+每个文件只承担一类明确职责。
+
+### 3.2 不跨层偷逻辑
+
+- 前端组件不直接实现后端业务决策
+- API 路由文件不直接堆叠业务逻辑
+- 检索层不负责回答生成
+- 路由层不负责复杂状态管理
+
+### 3.3 先跑通，再细化
+
+当前文件划分只服务于：
+
+- `GET /healthz`
+- `POST /api/chat/ask`
+
+先完成最小闭环，再根据真实复杂度拆分。
+
+---
+
+## 4. 当前冻结目录与文件职责
+
+### `README.md`
+
+职责：
+
+- 作为项目入口文档
+- 提供前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
+- 面向非开发用户提供最小可独立部署运行的参考
+
+不负责：
+
+- 不负责替代系统设计文档
+- 不负责替代脚本详细参数说明（参见 `scripts/README.md`）
+
+## 4.1 前端文件职责
+
+### `frontend/package.json`
+
+职责：
+
+- 定义前端依赖
+- 定义开发与构建脚本
+- 作为前端工程入口配置文件
+
+不负责：
+
+- 不负责业务逻辑
+- 不负责环境变量注入策略之外的运行时配置
+
+### `frontend/vite.config.ts`
+
+职责：
+
+- 定义 Vite 构建配置
+- 定义开发环境代理规则
+- 定义最小前端开发行为
+
+不负责：
+
+- 不负责页面路由逻辑
+- 不负责业务 API 封装
+
+### `frontend/index.html`
+
+职责：
+
+- 提供单页应用挂载模板
+
+不负责：
+
+- 不负责应用逻辑
+
+### `frontend/src/main.ts`
+
+职责：
+
+- 创建并挂载 Vue 应用
+- 注册全局样式
+- 注入当前最小根组件
+
+不负责：
+
+- 不负责页面业务流程
+
+### `frontend/src/App.vue`
+
+职责：
+
+- 作为应用根组件承载当前单页问答入口
+
+不负责：
+
+- 不负责问答逻辑
+- 不负责 API 调用
+
+### `frontend/src/pages/chat/ChatPage.vue`
+
+职责：
+
+- 作为问答主页面
+- 串联文档上传、文档列表、范围选择、删除、输入、请求、回答、引用、反馈、最近记录与调试展示
+
+不负责：
+
+- 不负责 HTTP 细节封装
+- 不负责底层状态持久化
+
+### `frontend/src/components/chat/ChatInput.vue`
+
+职责：
+
+- 接收用户输入
+- 触发提交动作
+- 提供固定提问范式或最小输入引导入口（如后续接入）
+
+不负责：
+
+- 不负责直接调用后端 API
+
+### `frontend/src/components/chat/AnswerCard.vue`
+
+职责：
+
+- 展示回答正文
+- 展示回答状态，如正常回答、拒答、fallback
+
+不负责：
+
+- 不负责 citation 数据拼装
+
+### `frontend/src/components/chat/CitationList.vue`
+
+职责：
+
+- 展示 citation 列表
+- 展示最小引用片段与来源定位信息
+- 区分 FAQ 来源与文档来源的展示样式
+
+不负责：
+
+- 不负责 citation 生成逻辑
+
+### `frontend/src/components/chat/DocumentUpload.vue`
+
+职责：
+
+- 提供最小文档选择与上传触发入口
+- 展示当前上传状态与结果提示
+
+不负责：
+
+- 不负责直接发起上传请求
+
+### `frontend/src/services/api.ts`
+
+职责：
+
+- 封装基础 HTTP 客户端
+- 统一处理请求基址、超时、错误包装
+
+不负责：
+
+- 不负责具体业务接口语义
+
+### `frontend/src/services/chat.ts`
+
+职责：
+
+- 封装问答接口调用
+- 对接 `/api/chat/ask`、`/api/chat/feedback` 与记录查看接口
+
+不负责：
+
+- 不负责组件展示逻辑
+
+### `frontend/src/services/documents.ts`
+
+职责：
+
+- 封装文档上传、列表、删除接口调用
+- 对接 `/api/documents/upload`、`/api/documents`、`DELETE /api/documents/{document_id}`
+
+不负责：
+
+- 不负责上传组件交互状态管理
+
+### `frontend/src/styles/index.css`
+
+职责：
+
+- 定义首轮全局样式
+- 提供最小响应式布局规则
+
+不负责：
+
+- 不负责业务主题系统
+
+### `frontend/src/types/chat.ts`
+
+职责：
+
+- 定义前端问答相关请求/响应类型
+- 定义前端记录查看接口的最小记录类型
+
+不负责：
+
+- 不负责运行时校验实现
+
+### `frontend/src/components/chat/RecordList.vue`
+
+职责：
+
+- 展示开发态最近 ask / feedback 记录列表
+- 负责最近记录区的最小列表渲染与状态样式展示
+- 以摘要优先方式展示记录，把次要细节下沉到折叠区
+
+不负责：
+
+- 不负责直接调用后端 API
+
+### `frontend/src/types/document.ts`
+
+职责：
+
+- 定义文档上传响应类型
+
+不负责：
+
+- 不负责运行时校验实现
+
+### `frontend/src/vite-env.d.ts`
+
+职责：
+
+- 注入 Vite 默认类型声明
+
+不负责：
+
+- 不负责业务类型定义
+
+---
+
+## 4.2 后端文件职责
+
+### `backend/main.py`
+
+职责：
+
+- 创建 FastAPI 应用
+- 注册路由
+- 提供服务启动入口
+
+不负责：
+
+- 不负责具体业务实现
+
+### `backend/app/api/routes/health.py`
+
+职责：
+
+- 提供健康检查接口
+
+不负责：
+
+- 不负责业务状态聚合
+
+### `backend/app/api/routes/chat.py`
+
+职责：
+
+- 接收问答请求
+- 接收最小反馈提交请求
+- 提供 demo/dev 下的最小问答记录与反馈查看入口
+- 调用 `chat_service`
+- 返回统一响应结构
+- 生成与透传 `trace_id`
+
+不负责：
+
+- 不负责直接实现检索、路由、回答生成
+
+### `backend/app/api/routes/documents.py`
+
+职责：
+
+- 接收文档上传请求
+- 调用 `document_service`
+- 返回统一文档上传响应
+
+不负责：
+
+- 不负责直接实现文档解析与切块
+
+### `backend/app/schemas/request.py`
+
+职责：
+
+- 定义请求模型
+- 固定 `raw_query`、反馈等入参结构
+
+不负责：
+
+- 不负责业务执行
+
+### `backend/app/schemas/document.py`
+
+职责：
+
+- 定义文档上传响应模型
+- 固定 `document_id / text_length / chunk_count` 等结构
+
+不负责：
+
+- 不负责文件落盘或元数据保存
+
+### `backend/app/schemas/response.py`
+
+职责：
+
+- 定义响应模型
+- 固定 `response_status / answer / citations / trace_id` 等结构
+- 定义记录查看接口的最小响应模型
+
+不负责：
+
+- 不负责组装业务数据来源
+
+### `backend/app/services/chat_service.py`
+
+职责：
+
+- 串联最小主链路：归一化 -> 路由 -> document-first 检索 -> 回答 -> citation 返回
+- 作为问答业务主服务入口
+- 保留 FAQ fallback 边界
+- 为后续最小问答记录落盘提供统一业务写入点
+
+不负责：
+
+- 不负责 HTTP 协议层处理
+
+### `backend/app/routing/contracts.py`
+
+职责：
+
+- 定义 `IntentDecision` 等最小路由契约
+
+不负责：
+
+- 不负责具体路由判断逻辑
+
+### `backend/app/routing/resolver.py`
+
+职责：
+
+- 作为路由协调层入口
+- 统一调用具体 parser
+- 产出最小路由结果
+
+不负责：
+
+- 不负责复杂规划与工作流编排
+
+### `backend/app/routing/rule_parser.py`
+
+职责：
+
+- 实现当前首轮规则解析器
+- 优先处理规则强命中或最小 FAQ 路由判断
+
+不负责：
+
+- 不负责复杂 LLM 路由决策
+
+### `backend/app/retrieval/retriever.py`
+
+职责：
+
+- 基于 document chunks 与 FAQ fallback 执行最小检索
+- 返回候选内容与分数
+
+不负责：
+
+- 不负责生成最终回答
+
+### `backend/app/retrieval/citation_mapper.py`
+
+职责：
+
+- 将检索命中结果映射为统一 citation 结构
+
+不负责：
+
+- 不负责前端展示逻辑
+
+### `backend/app/guardrails/normalize.py`
+
+职责：
+
+- 对原始输入执行最小归一化
+- 生成 `normalized_query`
+
+不负责：
+
+- 不负责完整安全策略编排
+
+### `backend/app/storage/repositories/faq_repo.py`
+
+职责：
+
+- 读取 FAQ 数据源
+- 提供最小 FAQ 数据访问接口
+
+不负责：
+
+- 不负责检索打分逻辑
+
+### `backend/app/storage/repositories/feedback_repo.py`
+
+职责：
+
+- 记录最小反馈数据
+- 以本地 JSONL 形式持久化反馈记录
+- 为按 `trace_id` 回看反馈提供最小数据访问基础
+- 提供最近反馈记录读取接口
+- 保存后按 `max_count` 自动截断最旧记录
+
+不负责：
+
+- 不负责反馈分析与统计聚合
+
+### `backend/app/storage/repositories/chat_record_repo.py`
+
+职责：
+
+- 保存 `/api/chat/ask` 的最小请求与结果记录
+- 提供最近问答记录的本地读取接口
+- 为反馈与问答记录的 `trace_id` 对齐提供落盘基础
+- 为本地记录维护边界收口提供存储入口
+- 保存后按 `max_count` 自动截断最旧记录
+
+不负责：
+
+- 不负责检索、回答生成或复杂日志分析
+
+### `backend/app/services/document_service.py`
+
+职责：
+
+- 串联文档上传、解析、切块与落盘保存流程
+- 返回文档上传最小结果
+
+不负责：
+
+- 不负责问答检索逻辑
+
+### `backend/app/services/document_parser.py`
+
+职责：
+
+- 将 `.txt / .md / .pdf / .docx` 解析为纯文本
+
+不负责：
+
+- 不负责 chunk 切分与持久化
+
+### `backend/app/services/chunk_service.py`
+
+职责：
+
+- 对解析后的文本执行最小 chunk 切分
+
+不负责：
+
+- 不负责文件读取与存储
+
+### `backend/app/storage/repositories/document_repo.py`
+
+职责：
+
+- 保存原始上传文件
+- 保存最小文档元数据记录
+
+不负责：
+
+- 不负责解析文档内容
+
+### `backend/app/storage/repositories/chunk_repo.py`
+
+职责：
+
+- 保存文档 chunks 与最小回源元数据
+- 提供本地 chunk 列表读取接口
+
+不负责：
+
+- 不负责检索排序与回答生成
+
+### `backend/app/storage/repositories/knowledge_unit_repo.py`
+
+职责：
+
+- 统一 FAQ 与 document chunk 为同一知识单元结构（KnowledgeUnit）
+- 提供 FAQ 单元与 chunk 单元的映射
+- 为 Elasticsearch 索引入库提供统一数据源
+
+不负责：
+
+- 不负责检索逻辑
+- 不负责向量生成
+
+### `backend/app/retrieval/lexical_retriever.py`
+
+职责：
+
+- 承接 Elasticsearch BM25 lexical 检索
+- 支持 normalized_query、lexical_terms、metadata pre-filter
+- 输出 LexicalHit 列表
+
+不负责：
+
+- 不负责向量检索
+- 不负责融合与重排
+
+### `backend/app/indexing/elastic_indexer.py`
+
+职责：
+
+- 建立 / 更新 `knowledge_units_v1` 索引
+- 处理索引创建、文档写入
+- 支持 IK 分词器与标准分词器两套 mapping
+
+不负责：
+
+- 不负责检索查询
+- 不负责健康检查
+
+### `backend/app/indexing/index_health_checker.py`
+
+职责：
+
+- 检查 Elasticsearch 连通性
+- 检查索引是否存在、文档数量
+- 验证最小联通性
+
+不负责：
+
+- 不负责索引创建
+- 不负责数据写入
+
+### `backend/app/storage/seed/mock_faq.json`
+
+职责：
+
+- 作为 Demo 模式最小数据源
+- 支持本地一秒启动闭环
+
+不负责：
+
+- 不负责正式环境数据来源
+
+### `backend/app/config/settings.py`
+
+职责：
+
+- 定义最小配置读取入口
+- 维护默认配置、阈值与环境变量覆盖规则
+- 为记录查看接口维护 demo/dev 与 prod 的暴露边界开关
+- 维护本地记录保留数量配置项
+- 维护 CORS 来源配置项
+- 维护 Phase 2 搜索后端、Elasticsearch、Query Planner 配置项
+
+不负责：
+
+- 不负责业务逻辑
+- 不负责复杂治理策略编排
+
+### `backend/app/runtime/trace.py`
+
+职责：
+
+- 生成与透传 `trace_id`
+- 支撑最小链路追踪
+- 为后续 ask 记录与 feedback 记录关联提供统一标识基础
+
+不负责：
+
+- 不负责复杂观测平台集成
+
+---
+
+## 4.3 脚本文件职责
+
+### `scripts/dev-backend.py`
+
+职责：
+
+- 启动后端开发服务（带 `--reload`）
+
+### `scripts/start-backend.py`
+
+职责：
+
+- 以生产配置启动后端服务（不带 `--reload`，支持多 worker）
+
+### `scripts/dev-frontend.py`
+
+职责：
+
+- 启动前端开发服务
+
+### `scripts/dev-demo.py`
+
+职责：
+
+- 作为本地 Demo 一键启动入口
+- 串联前后端开发启动流程
+
+### `scripts/git-release.py`
+
+职责：
+
+- 提供交互式版本发布脚本入口
+- 同步 `pyproject.toml` 版本、git commit 与 git tag
+- 执行当前分支 push 与 tag push
+
+不负责：
+
+- 不负责替代发布说明编写
+- 不负责复杂多分支发布流程编排
+
+### `scripts/clean-local-records.py`
+
+职责：
+
+- 清理本地问答记录与反馈记录文件
+- 为开发态记录维护提供最小脚本入口
+- 提供最小检查与预演保护
+
+不负责：
+
+- 不负责清理文档上传数据
+- 不负责替代服务端管理接口
+
+### `scripts/README.md`
+
+职责：
+
+- 汇总 `scripts/` 目录下各脚本的用途、参数与示例
+- 汇总生产配置说明与环境变量参考
+
+不负责：
+
+- 不负责替代项目级 README
+
+### `.env.example`
+
+职责：
+
+- 作为环境变量配置参考文件
+- 列出所有可用环境变量及其默认值
+
+不负责：
+
+- 不负责自动加载环境变量
+- 不负责替代运行时配置
+
+---
+
+## 5. 当前最小依赖方向
+
+当前阶段建议保持以下依赖方向：
+
+```text
+frontend/page -> frontend/components -> frontend/services -> backend api
+backend api -> backend services -> routing / retrieval / guardrails / storage
+storage -> local jsonl data / seed/mock data
+```
+
+当前阶段不建议出现：
+
+- 前端组件直接拼接后端响应协议细节
+- API 路由文件直接读取 mock 数据
+- 检索层反向依赖回答生成层
+- 路由层依赖前端输入控件结构
+
+---
+
+## 6. 当前阶段结论
+
+当前文件职责冻结的核心目标是：
+
+1. 先把最小可运行文件集写清楚
+2. 避免同一逻辑在多个文件之间来回漂移
+3. 保持目录与职责一一对应
+4. 为实现阶段提供可直接开工的边界
+
+一句话总结就是：
+
+**当前文件职责说明只服务于最小可运行闭环，不预埋第二阶段的大型目录和重型职责。**
+</file>
+
+<file path="docs/1_3_field_definitions.md">
+# OrionStack 当前阶段新增字段说明 v1
+
+> 文档定位：`1_system_design.md` 的字段解释表  
+> 命名说明：仅按 `1_2_file_responsibilities.md` / `2_2_file_responsibilities.md` 的命名规范延续为 `1_3_field_definitions.md`，不假设未上传文件的具体内容与版式。  
+> 适用范围：`1_system_design.md`
+
+---
+
+## 1. 文档目标
+
+本文档只做一件事：
+
+**对 `1_system_design.md` 当前阶段冻结的关键字段做解释对照，避免后续实现时把字段语义写偏、写散或重复定义。**
+
+本文档不承担以下职责：
+
+- 不重新改写 `1_system_design.md`
+- 不补充未在当前阶段冻结的重型 schema
+- 不替代接口文档或数据库建表文档
+- 不提前定义 `2_system_design.md` 的新增字段
+
+---
+
+## 2. 使用原则
+
+1. 本文档优先解释“当前阶段已经冻结或明确建议冻结”的字段。
+2. 同名字段若在不同对象中出现，必须按“所属对象”区分语义。
+3. 本文档中的“说明 / 不要误解”为实现约束，不是可选备注。
+4. 若后续代码实现需要新增字段，应先判断是否属于当前阶段，避免把 `2_system_design.md` 的字段提前写回 `1_system_design.md`。
+
+---
+
+## 3. 当前阶段字段总览
+
+当前阶段的字段主要分为 5 组：
+
+1. citation 返回字段
+2. 最小对外结果状态字段
+3. 轻量路由对象字段
+4. 回源与入库辅助字段
+5. 反馈 / 观测 / 调试字段
+
+---
+
+## 4. citation 返回字段
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `citation_id` | citation item | 单条引用的稳定标识 | 只负责单条引用识别，不承担来源定位本身 |
+| `source_label` | citation item | 前端展示给用户看的来源名称 | 是展示名称，不等于唯一定位键 |
+| `source_locator` | citation item | 回源定位信息 | 必须能把引用定位回 FAQ / 文档位置；可由 `source_url`、`file_path`、`page_number`、`paragraph_id` 等组成 |
+| `snippet` | citation item | 最小引用片段 | 只保留最小必要片段，不等于整段正文 |
+
+### 4.1 `source_locator` 的拆分字段
+
+> 当前阶段允许 `source_locator` 由下列字段之一或其组合构成。
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `source_url` | locator component | 基于 URL 的回源 | 适用于网页或在线来源，不要求所有来源都必须有 |
+| `file_path` | locator component | 基于文件路径的回源 | 适用于本地或文档库场景，不应直接暴露为权限系统 |
+| `document_id` | locator component | 文档级唯一标识 | 是文档身份，不等于 chunk 身份 |
+| `page_number` | locator component | 页级定位 | 仅在分页文档可用时使用 |
+| `paragraph_id` | locator component | 段落级定位 | 适用于段落切分稳定的文档 |
+| `chunk_id` | locator component | chunk 级定位 | 适用于按 chunk 入库的内容；当前阶段允许作为等价定位标识 |
+
+---
+
+## 5. 最小对外结果状态字段
+
+| 字段 / 枚举值 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `ok` | response status | 正常回答 | 表示已进入标准回答路径，不代表答案一定完美 |
+| `refused` | response status | 明确拒答 | 表示命中安全边界或明确不能回答 |
+| `fallback` | response status | 统一兜底 | 表示未进入标准 FAQ 回答路径，不等于系统报错 |
+| `system_error` | response status | 系统异常 | 表示不可恢复错误，不应与 `fallback` 混用 |
+
+---
+
+## 6. 轻量路由对象字段（`IntentDecision`）
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `route` | `IntentDecision` | 指示当前请求走哪条最小路径 | 当前只允许 `faq_qa` / `fallback` |
+| `confidence` | `IntentDecision` | 统一后的逻辑置信度 | 是标准化后的逻辑接口，不承诺严格概率意义 |
+| `query_for_search` | `IntentDecision` | 下游检索使用的查询词 | 必须始终为字符串，不得输出复杂计划对象 |
+
+### 6.1 `route` 允许值
+
+| 取值 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|
+| `faq_qa` | 进入 FAQ / 知识问答主链路 | 不是“任何知识问题都能答” |
+| `fallback` | 进入统一兜底路径 | 不是系统错误码 |
+
+### 6.2 `fallback_reason` 最小枚举
+
+| 枚举值 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|
+| `low_confidence` | 路由或判断置信度不足 | 用于说明“判断不够稳”，不是检索未命中本身 |
+| `guardrail_blocked` | 命中护栏 | 优先表示边界阻断 |
+| `rule_no_match` | 规则未命中 | 表示规则兜底也没接住 |
+| `no_retrieval` | 检索未获得可用结果 | 不等于系统异常 |
+| `system_error` | 系统执行异常 | 只用于真正异常路径 |
+
+---
+
+## 7. 回源与入库辅助字段
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `embedding_model_version` | index / storage metadata | 标记向量或检索索引对应的 embedding 版本 | 用于避免升级模型后继续无感使用旧向量 |
+| `normalized_query` | request / debug | 归一化后的输入文本 | 当前阶段主要用于安全校验、缓存匹配、路由与检索；必须与 `raw_query` 区分 |
+| `raw_query` | request / log | 用户原始输入 | 用于审计、排错与观测，不应被归一化后覆盖 |
+
+---
+
+## 8. 反馈与观测字段
+
+### 8.1 核心必记字段
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `trace_id` | request / log | 串联输入、路由、检索、生成、反馈 | 是全链路追踪键，应在请求入口生成 |
+| `raw_query` | request / log | 记录原始问题 | 与 `normalized_query` 不是同一字段 |
+| `retrieved_chunk_ids` | retrieval log | 记录检索命中的候选内容 ID | 默认优先记录 ID，不要求默认落全文 |
+| `answer_text` | response / log | 最终返回给用户的回答 | 不应承担全部状态语义 |
+| `feedback_label` | feedback | 记录点赞 / 点踩等反馈结果 | 当前阶段建议最小为 `up` / `down` |
+| `token_input` | model log | 输入 token 数 | 用于评估成本与模型负载 |
+| `token_output` | model log | 输出 token 数 | 用于评估回答长度与成本 |
+| `total_latency_ms` | request metric | 整体请求耗时 | 是总耗时，不是首字延迟 |
+
+### 8.2 扩展观测字段
+
+| 字段 | 所属对象 | 当前阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `session_id` | session / log | 所属会话标识 | 仅在会话概念存在时记录 |
+| `created_at` | log | 请求时间戳 | 用于排序、排查、回放 |
+| `router_used` | routing log | 本次实际使用的路由器 / 解析器 | 用于排查不同 parser 行为差异 |
+| `route_result` | routing log | 最终路由结果 | 建议与 `IntentDecision.route` 保持一致语义 |
+| `raw_confidence` | routing log | 路由原始置信度 | 用于分析模型/规则原始输出，不替代标准化 `confidence` |
+| `threshold_used` | routing log | 本次判定采用的阈值 | 用于排查阈值漂移 |
+| `cache_hit` | cache log | 是否命中缓存 | 当前阶段主要服务高频 FAQ 拦截 |
+| `fallback_reason` | routing / response log | 兜底原因 | 应收敛为固定枚举，避免自由文本扩散 |
+| `response_status` | response log | 最终对外结果状态 | 建议与 `ok` / `refused` / `fallback` / `system_error` 对齐 |
+| `input_mode` | input log | 输入来源方式 | 例如自由输入、示例点击、模板生成 |
+| `question_template_used` | input log | 命中的固定问句模板标识 | 当前阶段仅用于输入引导观测 |
+| `raw_query_length` | input metric | 原始输入长度 | 用于观察超长输入问题 |
+| `normalized_query_length` | input metric | 归一化后输入长度 | 用于评估清洗影响 |
+| `first_token_latency_ms` | stream metric | 首字延迟 | 仅在流式生成场景下记录 |
+| `router_prompt_version` | config / debug | 路由 prompt 或规则版本 | 用于回放与定位版本差异 |
+| `answer_prompt_version` | config / debug | 回答生成 prompt 版本 | 不应与 router 版本混用 |
+| `config_version` | config / debug | 当前阈值与策略配置版本 | 作为整体配置快照标识 |
+| `normalized_query` | request / debug | 归一化后的实际查询文本 | 用于观察清洗后输入 |
+| `retrieved_chunk_scores` | retrieval log | 候选内容的相似度或排序分数 | 当前阶段用于调试，不要求前端默认展示 |
+| `final_prompt` | debug | 最终发送给模型的 prompt | 开发态可记录；生产态可按需关闭或脱敏 |
+| `debug_bundle_id` | debug | 一组调试上下文的标识 | 用于前端复制或回放调试上下文 |
+| `demo_mode_used` | debug / environment | 标记是否运行于 Demo 模式 | 用于隔离 Demo 与正式路径 |
+
+---
+
+## 9. 当前阶段最容易写偏的点
+
+### 9.1 不要把这些字段混成一类
+
+1. `response_status` 与 `answer_text` 不是同一层语义。  
+2. `confidence` 与 `raw_confidence` 不是同一字段。  
+3. `source_label` 与 `source_locator` 不是同一作用。  
+4. `raw_query` 与 `normalized_query` 必须同时保留。  
+5. `fallback_reason` 与 `system_error` 不能互相代替。  
+
+### 9.2 当前阶段不应提前引入的字段类型
+
+当前阶段不建议提前写入以下类型字段：
+
+- 多工具计划字段
+- 图执行状态字段
+- 多 Agent 协作字段
+- 复杂权限系统字段
+- `2_system_design.md` 中的 Query Planner / Hybrid Retrieval / Rerank 专用字段
+
+---
+
+## 10. 最终结论
+
+`1_3_field_definitions.md` 的目标不是补全一份大而全 schema，而是冻结当前阶段最容易跑偏的字段语义。
+
+一句话收敛：
+
+**`1_system_design.md` 当前应优先冻结 citation、结果状态、轻量路由、回源定位、反馈与观测字段；不要把下一阶段的检索增强字段提前混入当前实现。**
+</file>
+
+<file path="docs/2_1_progress.md">
+# OrionStack 第二阶段系统设计对应的文件级最小改造清单 v1
+
+> 状态：执行清单 v1  
+> 对应设计文档：`docs/designs/system_design_phase2_v1.md`  
+> 目标：把第二阶段设计从“系统设计基线”收成“第一轮最小可执行改造范围”  
+> 原则：**最小切入、分步替换、旧链路可回退、先数据统一再切检索**
+
+---
+
+## 1. 当前目标
+
+本清单只解决一件事：
+
+**把 Phase 2 的目标链路，拆成当前仓库中可落地的最小文件级改造范围。**
+
+当前不追求：
+
+- 一次性切完整 Query Planner + Hybrid + Rerank + Clarification 全链路
+- 直接删除旧 FAQ / document-first 代码
+- 在第一轮就把所有接口彻底冻结到最终形态
+
+当前优先级按 Phase 2 设计顺序收敛为：
+
+1. 统一 Knowledge Unit 入库
+2. 接 Elastic lexical-only 过渡链路
+3. 再接 vector + RRF
+4. 再接 rerank + evidence extraction
+5. 最后接 clarification / 按需 API fallback
+
+---
+
+## 2. 文件级改造总原则
+
+### 2.1 原则一：先并行，不先替换
+
+第一轮改造以“并行引入新模块”为主，不直接拆旧链路。
+
+含义：
+
+- 新文件优先新增
+- 旧文件先降职责，不先删除
+- 默认主链路先保持可运行
+- 新链路先通过 feature flag / 配置开关灰度启用
+
+### 2.2 原则二：先收数据，再切检索
+
+在 FAQ 与 document chunk 尚未统一成 Knowledge Unit 之前，不应直接切默认检索主链路。
+
+### 2.3 原则三：先 lexical-only，再 hybrid
+
+Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、rerank 全部一起打开。
+
+### 2.4 原则四：所有重型能力都必须可关闭
+
+以下能力第一轮必须支持关闭：
+
+- Query Planner 强改写
+- vector retrieval
+- rerank
+- clarification mode
+- online API fallback
+
+---
+
+## 3. 第一轮新增文件清单
+
+以下文件建议在第一轮新增。
+
+### 3.1 Query 与 LLM Provider
+
+#### `backend/app/query/query_planner.py`
+职责：
+
+- 生成 `normalized_query`
+- 生成 `domain_hint`
+- 生成 `semantic_expansions`
+- 生成 `lexical_terms`
+- 执行 planner guardrails：
+  - hard keyword locking
+  - circuit breaker
+  - drift guard
+  - domain anchoring
+
+第一轮要求：
+
+- 可由本地实现或简单 provider 调用驱动
+- 支持关闭 semantic expansion，仅保留 normalized + lexical_terms
+
+#### `backend/app/llm/providers/base.py`
+职责：
+
+- 定义统一 provider 接口：
+  - QueryPlannerProvider
+  - RerankProvider
+  - AnswerComposerProvider
+
+#### `backend/app/llm/providers/ollama_provider.py`
+职责：
+
+- 承接本地 Ollama 模型调用
+- 用于：
+  - planner
+  - 可选 rerank
+  - 可选 composer
+
+#### `backend/app/llm/providers/api_provider.py`
+职责：
+
+- 承接在线 LLM API
+- 默认关闭，仅按需启用
+
+---
+
+### 3.2 Retrieval 层
+
+#### `backend/app/retrieval/lexical_retriever.py`
+职责：
+
+- 承接 Elastic lexical-only 检索
+- 作为当前 `retriever.py` 的过渡替代层
+- 支持：
+  - normalized_query
+  - lexical_terms
+  - metadata pre-filter
+
+#### `backend/app/retrieval/vector_retriever.py`
+职责：
+
+- 承接 `question_vector` / `answer_vector` 双向量检索
+- 支持：
+  - normalized_query
+  - semantic_expansions
+
+第一轮要求：
+
+- 允许关闭
+- 不作为默认主路径强依赖
+
+#### `backend/app/retrieval/hybrid_retriever.py`
+职责：
+
+- 组合 lexical + vector
+- 应用 metadata pre-filter
+- 执行 RRF 融合
+- 输出：
+  - lexical_hits
+  - vector_hits
+  - rrf_hits
+  - 原始 retrieval signals
+
+#### `backend/app/retrieval/reranker.py`
+职责：
+
+- 执行候选重排
+- 判定：
+  - accept_threshold
+  - margin_threshold
+- 输出：
+  - top1_score
+  - top2_score
+  - accept / reject
+  - conflict_detected
+
+#### `backend/app/retrieval/evidence_extractor.py`
+职责：
+
+- 从 top 候选中提取 `evidence_spans`
+- 若无明确证据，直接标记弱证据
+
+---
+
+### 3.3 索引与数据层
+
+#### `backend/app/storage/repositories/knowledge_unit_repo.py`
+职责：
+
+- 统一 FAQ 与 document chunk 的入库读取接口
+- 提供：
+  - FAQ -> Knowledge Unit 映射
+  - chunk -> Knowledge Unit 映射
+  - 历史回填入口
+
+#### `backend/app/indexing/elastic_indexer.py`
+职责：
+
+- 建立 / 更新 `knowledge_units_v1`
+- 处理：
+  - 索引创建
+  - 文档写入
+  - question / answer 双向量写入
+  - version / valid_from / valid_until 元数据同步
+
+#### `backend/app/indexing/index_health_checker.py`
+职责：
+
+- 检查索引是否存在
+- 检查字段与 dims 是否匹配配置
+- 执行最小联通性查询
+- 验证 Hybrid + RRF 查询路径可用
+
+---
+
+### 3.4 运行与观测层
+
+#### `backend/app/observability/retrieval_trace.py`
+职责：
+
+- 统一生成 Retrieval Trace
+- 包含：
+  - raw_query
+  - normalized_query
+  - domain_hint
+  - lexical_hits
+  - vector_hits
+  - rrf_hits
+  - rerank_result
+  - evidence_spans
+  - final_status
+
+#### `backend/app/testing/hard_cases_repo.py`
+职责：
+
+- 管理 hard cases
+- 支持：
+  - 用户负反馈样本回流
+  - smoke set / regression set 读取
+
+#### `backend/app/cache/query_cache.py`
+职责：
+
+- 提供轻量缓存能力
+- key 至少包含：
+  - normalized_query
+  - domain_hint
+  - access_scope
+  - doc_version_snapshot
+
+---
+
+## 4. 第一轮需要改职责的旧文件
+
+以下旧文件建议“改职责”，而不是立即删除。
+
+### 4.1 `backend/app/services/chat_service.py`
+当前问题：
+
+- 仍围绕旧主链路组织
+- 直接依赖旧 resolver / retriever / faq fallback 习惯
+
+第一轮改造目标：
+
+- 保持它继续作为主服务入口
+- 但把内部流程改成可切换：
+
+```text
+normalize
+-> optional query planner
+-> fast track gate
+-> retrieval adapter
+-> optional rerank
+-> optional answer composer
+-> response builder
+```
+
+最小要求：
+
+- 能通过配置在旧链路 / lexical-only / hybrid 之间切换
+- 不直接把所有 phase2 逻辑硬编码在一个函数里
+
+---
+
+### 4.2 `backend/app/routing/rule_parser.py`
+当前问题：
+
+- 对 FAQ 短 query 有硬门效应
+
+第一轮改造目标：
+
+- 从“决定问题是否进入主链路”
+- 降级为：
+  - 空输入保护
+  - 明显无效输入保护
+  - 极少数安全拒答
+
+第一轮不再要求它负责：
+
+- 判断“请假”是否像 FAQ
+- 决定 query 是否值得检索
+
+---
+
+### 4.3 `backend/app/retrieval/retriever.py`
+当前问题：
+
+- 是旧最小检索器
+- 职责混合：
+  - lexical
+  - FAQ fallback
+  - 阈值判定
+
+第一轮改造目标：
+
+- 不立刻删除
+- 降级为：
+  - 兼容旧链路的过渡实现
+  - 或封装到 lexical-only adapter 中
+
+原则：
+
+- 旧链路仍可回退使用
+- 不再继续向这个文件堆 phase2 新逻辑
+
+---
+
+### 4.4 `backend/app/storage/repositories/faq_repo.py`
+当前问题：
+
+- 仍是独立 FAQ 数据源读取器
+- 容易继续强化“FAQ 一套、document 一套”的分裂结构
+
+第一轮改造目标：
+
+- 保留为 demo/mock provider
+- 不再作为 phase2 主数据源中心
+- 后续通过 `knowledge_unit_repo.py` 做统一映射
+
+---
+
+### 4.5 `backend/app/config/settings.py`
+第一轮改造目标：
+
+新增以下配置分组：
+
+- Query Planner
+- Elastic Search Backend
+- Embedding dims
+- Fast Track
+- RRF 参数
+- Rerank 阈值
+- API fallback
+- Index health check
+- Cache / trace / smoke test
+
+原则：
+
+- 当前值可先占位
+- 设计先冻结字段名与职责，不先冻结所有阈值数值
+
+---
+
+## 5. 第一轮建议保留不动的旧文件
+
+这些文件第一轮建议不主动大改，只在必要时做兼容补充。
+
+### `backend/app/api/routes/chat.py`
+原因：
+
+- API 入口尽量稳定
+- Phase 2 第一轮不应先改外部路由形态
+
+### `backend/app/schemas/request.py`
+原因：
+
+- 请求体第一轮不需要暴露复杂新参数
+- 内部可先通过配置开关驱动 phase2
+
+### `backend/app/schemas/document.py`
+原因：
+
+- 文档上传与基础 document 结构仍可继续使用
+- 知识单元转换逻辑放到 repo / indexing 层处理
+
+### `frontend/src/pages/chat/ChatPage.vue`
+原因：
+
+- 第一轮重点在后端链路
+- 前端只需兼容新增状态字段，不先重做页面结构
+
+---
+
+## 6. 第一轮前后端最小契约改动
+
+### 6.1 后端响应建议新增字段
+
+第一轮建议在现有响应基础上最少补：
+
+- `fallback_reason`
+- `clarification_required`
+- `conflict_detected`
+- `cache_served`
+- `trace_id`
+
+### 6.2 前端第一轮只需识别的新增状态
+
+前端第一轮不需要做完整新交互，只要能识别：
+
+- `no_evidence`
+- `low_confidence`
+- `stale_policy_blocked`
+- `conflict_requires_clarification`
+- `model_timeout`
+- `system_degraded`
+
+---
+
+## 7. 第一轮明确不做的文件/实现
+
+以下内容明确不在第一轮落地：
+
+### 7.1 不做的实现
+- Elasticsearch + Milvus 双系统
+- learned fusion
+- 全库人工同义词平台
+- 每次请求都跑的 Planner embedding self-check
+- 多 Agent / workflow graph
+- 全量 Clarification Mode 对话树
+- 默认开启 online API fallback
+
+### 7.2 不急着新增的文件
+- 复杂多租户权限文件
+- 独立的 workflow 编排器
+- 多索引分治管理器
+- 复杂 cache cluster 管理器
+
+---
+
+## 8. 第一轮文件级实施顺序
+
+### Step 1：数据与索引基座
+优先做：
+
+- `knowledge_unit_repo.py`
+- `elastic_indexer.py`
+- `index_health_checker.py`
+
+目标：
+
+- 先把 FAQ / chunk 统一进 `knowledge_units_v1`
+- 不切默认主链路
+
+### Step 2：lexical-only 过渡层
+优先做：
+
+- `lexical_retriever.py`
+- `chat_service.py` 中的 retrieval adapter 切换
+
+目标：
+
+- 先用 Elastic 承接 lexical
+- 保留旧 retriever 回退路径
+
+### Step 3：Planner 最小可用
+优先做：
+
+- `query_planner.py`
+- `ollama_provider.py`
+- settings 中的 planner 配置
+
+目标：
+
+- 先输出：
+  - normalized_query
+  - domain_hint
+  - lexical_terms
+- semantic expansions 可先弱化
+
+### Step 4：Hybrid + RRF
+优先做：
+
+- `vector_retriever.py`
+- `hybrid_retriever.py`
+
+目标：
+
+- 小范围灰度：
+  - 请假
+  - 病假材料
+  - 工资条
+  - 调休
+
+### Step 5：Rerank + Evidence
+优先做：
+
+- `reranker.py`
+- `evidence_extractor.py`
+- retrieval trace 落盘
+
+### Step 6：缓存 / hard cases / API fallback
+最后做：
+
+- `query_cache.py`
+- `hard_cases_repo.py`
+- `api_provider.py`
+
+---
+
+## 9. 第一轮最小验收清单
+
+第一轮文件级改造完成后，至少要满足：
+
+1. FAQ 与 document chunk 已能映射成统一 Knowledge Unit
+2. Elastic lexical-only 可独立跑通
+3. `请假`、`病假材料` 这类 query 至少能在灰度链路中进入新检索
+4. Retrieval Trace 可落盘
+5. 旧链路仍可通过配置回退
+6. phase2 新增文件职责清晰，不把逻辑重新堆回旧 `retriever.py`
+
+---
+
+## 10. 一句话收口
+
+这份文件级最小改造清单 v1 的核心不是“把所有第二阶段能力一次性写完”，而是：
+
+**把第二阶段系统设计拆成当前仓库里最小、可回退、可灰度、可执行的文件级落地范围。**
+</file>
+
+<file path="docs/2_2_file_responsibilities.md">
+
+</file>
+
+<file path="docs/2_3_field_definitions.md">
+# OrionStack 第二阶段新增字段说明 v1
+
+> 文档定位：`2_system_design.md` 的字段解释表  
+> 命名说明：仅按 `1_2_file_responsibilities.md` / `2_2_file_responsibilities.md` 的命名规范延续为 `2_3_field_definitions.md`，不假设未上传文件的具体内容与版式。  
+> 适用范围：`2_system_design.md` + `document_ingestion_boundary.md`
+
+---
+
+## 1. 文档目标
+
+本文档只做一件事：
+
+**对 `2_system_design.md` 第二阶段新增或显著扩展的关键字段做解释对照，避免实现时把字段提前下沉到 `1_system_design.md`，或把不同层的字段混写。**
+
+本文档不承担以下职责：
+
+- 不重写 `2_system_design.md` 的系统设计
+- 不重复解释 `1_system_design.md` 已冻结且语义未变化的字段
+- 不替代检索、索引、API、数据库的详细实现文档
+
+---
+
+## 2. 使用原则
+
+1. 本文档只解释第二阶段新增或在第二阶段语义明显升级的字段。
+2. 若字段已在 `1_system_design.md` 出现，但第二阶段语义发生扩展，应在“说明 / 不要误解”中明确写出。
+3. 文档接入与清洗层输出字段，只有在进入 `Knowledge Unit` 或第二阶段链路后才纳入本表。
+4. 配置常量（如阈值名）不等于业务字段；本文件优先解释对象字段、返回字段、追踪字段。
+
+---
+
+## 3. 第二阶段字段分组
+
+第二阶段新增字段主要分为 7 组：
+
+1. Query Planner 输出字段
+2. Fast Track / 缓存字段
+3. Knowledge Unit 字段
+4. 检索过滤与检索信号字段
+5. Rerank / Evidence / Clarification 字段
+6. 第二阶段失败类型与响应补充字段
+7. Retrieval Trace / hard_cases 字段
+
+---
+
+## 4. Query Planner 输出字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `normalized_query` | planner output | 规划后的基础检索输入 | 第二阶段它是 planner 输出的一部分，不仅是输入清洗结果 |
+| `intent` | planner output | 标识当前请求意图 | 当前目标场景仍应收敛到 FAQ / 知识问答，不扩展为通用意图中台 |
+| `domain_hint` | planner output | 为检索提供业务域提示 | 在第二阶段可下沉为 metadata pre-filter 依据 |
+| `semantic_expansions` | planner output | 向量检索使用的语义扩展 | 用于补足短 query 语义，不应改写用户原始意图 |
+| `lexical_terms` | planner output | 词法检索使用的稳定检索锚点 | 必须保留原 query 的核心原子词 |
+| `planner_confidence` | planner output | planner 输出的可信度 | 用于决定扩写是否保留或降级，不等于最终回答置信度 |
+
+---
+
+## 5. Fast Track / 缓存字段
+
+### 5.1 缓存 Key
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `normalized_query` | cache key | 标识归一化问题 | 作为缓存键的一部分，不应单独承担全部缓存语义 |
+| `domain_hint` | cache key | 限制业务域 | 防止跨域误命中缓存 |
+| `access_scope` | cache key | 隔离访问范围 | 避免不同访问范围共用缓存 |
+| `doc_version_snapshot` | cache key | 绑定文档版本快照 | 防止旧制度静默污染缓存 |
+| `department_scope` | cache key（可选） | 细化部门范围 | 仅在部门维度确实影响答案时加入 |
+
+### 5.2 缓存 Value
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `final_answer` | cache value | 缓存最终回答文本 | 仅适用于稳定 FAQ，不应用于个体态问题 |
+| `citations` | cache value | 缓存引用结果 | 应与对应版本快照一致 |
+| `top_unit_ids` | cache value | 缓存命中的知识单元 ID | 用于回放与排查，不替代 citations |
+| `trace_digest` | cache value | 记录本次关键路径摘要 | 是摘要，不是完整 trace |
+| `expires_at` | cache value | 缓存失效时间 | 仍需结合版本快照，不可只靠 TTL |
+
+---
+
+## 6. Knowledge Unit 字段
+
+### 6.1 最小字段结构
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `unit_id` | Knowledge Unit | 统一知识单元唯一标识 | 是单元 ID，不等于文档 ID |
+| `source_kind` | Knowledge Unit | 标识来源种类 | 用于区分 FAQ、document chunk 等来源 |
+| `question` | Knowledge Unit | FAQ 问题面 | 适用于 FAQ 型单元；非 FAQ 型可为空或不主用 |
+| `answer` | Knowledge Unit | FAQ 答案面 | 适用于 FAQ 型单元；不等于最终生成回答 |
+| `body_text` | Knowledge Unit | 可检索正文 | 必须是可检索文本，不是原始二进制引用 |
+| `keywords` | Knowledge Unit | 词法召回辅助锚点 | 用于 lexical retrieval，不应滥扩成人工同义词平台 |
+| `business_domain` | Knowledge Unit | 业务域 | 是检索过滤和分域召回的重要依据 |
+| `document_type` | Knowledge Unit | 文档类型 | 用于过滤和清洗后的语义分层 |
+| `source_type` | Knowledge Unit | 来源类型 | 用于区分 FAQ、制度文档、通知等来源语义 |
+| `source_label` | Knowledge Unit | 来源展示名称 | 展示字段，不替代定位字段 |
+| `source_locator` | Knowledge Unit | 回源定位信息 | 第二阶段依旧是 citations、缓存、版本判断的重要基础 |
+| `access_scope` | Knowledge Unit | 访问范围 | 必须参与过滤与缓存隔离 |
+| `lifecycle_status` | Knowledge Unit | 生命周期状态 | 默认仅召回 active 内容 |
+| `valid_from` | Knowledge Unit | 生效起始时间 | 用于时效过滤 |
+| `valid_until` | Knowledge Unit | 生效截止时间 | 缺失时通常表示仍有效 |
+| `version` | Knowledge Unit | 版本号 | 版本控制、缓存失效、冲突判断的重要依据 |
+| `department_scope` | Knowledge Unit | 部门范围 | 用于细化部门差异制度 |
+| `question_vector` | Knowledge Unit | 面向问法召回的向量 | 更适合命中用户问法 |
+| `answer_vector` | Knowledge Unit | 面向细节召回的向量 | 更适合命中答案细节描述 |
+
+### 6.2 文档接入 / 清洗层补充字段
+
+> 以下字段来自 `document_ingestion_boundary.md`，只有在进入第二阶段统一知识单元时才需要解释。
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `chunk_id` | ingest output / locator | chunk 级稳定定位标识 | 可作为 `source_locator` 的组成部分或等价定位标识 |
+| `question_aliases` | FAQ supplement | 高频 FAQ 别名白名单 | 只建议用于高频 FAQ fast track，不扩展为全库同义词平台 |
+
+### 6.3 默认值契约字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `version = v1` | migration default | 兼容旧 schema 的默认版本 | 仅在旧数据缺失版本时使用 |
+| `valid_until = null` | migration default | 表示当前仍有效 | 不是“未知时间” |
+| `department_scope = global` | migration default | 表示默认全局部门范围 | 不是精确部门归属 |
+
+---
+
+## 7. 检索过滤与检索信号字段
+
+### 7.1 metadata pre-filter 字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `business_domain` | retrieval filter | 按业务域硬过滤 | `domain_hint` 足够稳时应下沉到检索层 |
+| `access_scope` | retrieval filter | 按访问范围过滤 | 防止越权召回 |
+| `lifecycle_status` | retrieval filter | 按生命周期过滤 | 默认只召回 active |
+| `source_type` | retrieval filter | 按来源类型过滤 | 避免不同来源混召回 |
+| `document_type` | retrieval filter | 按文档类型过滤 | 用于缩小召回面 |
+| `valid_from` | retrieval filter | 生效时间下界 | 控制当前制度有效性 |
+| `valid_until` | retrieval filter | 生效时间上界 | 控制过期制度排除 |
+
+### 7.2 原始检索信号字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `bm25_score` | retrieval candidate | 词法检索分数 | 不代表最终相关性裁决 |
+| `vector_score` | retrieval candidate | 向量检索分数 | 不应直接与 `bm25_score` 做裸比较 |
+| `lexical_rank` | retrieval candidate | 词法检索排序位次 | 用于 RRF 与排障 |
+| `vector_rank` | retrieval candidate | 向量检索排序位次 | 用于 RRF 与排障 |
+| `rrf_rank` | retrieval candidate | RRF 融合后的位次 | 是融合结果，不是单路原始分数 |
+
+---
+
+## 8. Rerank / Evidence / Clarification 字段
+
+### 8.1 Rerank 与证据字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `rerank_score` | rerank result | 候选重排后的相关性分数 | 仅用于第二阶段接受 / 拒绝判断 |
+| `evidence_spans` | evidence result | 被抽取的证据片段 | 无明确证据时不应进入 Answer Composer |
+| `evidence_confidence` | evidence result | 证据可信度 | 用于辅助接受判断，不替代主分数 |
+| `accept` / `reject` | rerank result | 是否接受当前候选 | 是 rerank 结果，不是最终对外状态字段 |
+
+### 8.2 冲突与澄清字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `conflict_detected` | clarification result | 标记是否检测到冲突 | 只有高分、低分差、证据冲突时才应触发 |
+| `conflict_reason` | clarification result | 标记冲突原因 | 例如版本冲突、部门范围冲突、证据语义冲突 |
+| `clarification_required` | clarification result | 标记是否需要向用户发起澄清 | 不是默认对话分支 |
+
+---
+
+## 9. 第二阶段失败类型与响应补充字段
+
+### 9.1 响应补充字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `fallback_reason` | response / trace | 标记具体失败原因 | 第二阶段比当前阶段更细，但仍应收敛 |
+| `clarification_required` | response / trace | 表示进入澄清模式 | 不等于失败本身 |
+| `stale_policy_blocked` | response / trace | 表示被旧制度阻断 | 是时效 / 版本约束结果 |
+| `low_confidence_retrieval` | response / trace | 表示检索低置信 | 用于区分“找不到”和“证据不稳” |
+| `model_timeout` | response / trace | 表示模型超时 | 应与系统降级路径联动 |
+| `cache_served` | response / trace | 标记是否由缓存直接服务 | 便于区分短路径与完整链路 |
+
+### 9.2 失败子类型最小集合
+
+| 枚举值 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|
+| `no_evidence` | 找到了候选但没有可接受证据 | 不等于纯检索空结果 |
+| `low_confidence` | 相关性或判断不够稳 | 需要和 trace 一起看原因 |
+| `stale_policy_blocked` | 被过期 / 历史制度阻断 | 反映时间 / 状态过滤生效 |
+| `conflict_requires_clarification` | 高分冲突需澄清 | 不是普通 fallback |
+| `model_timeout` | 关键模型步骤超时 | 应进入降级或 fallback |
+| `system_degraded` | 系统进入降级运行 | 表示系统仍可运行但能力降级 |
+
+---
+
+## 10. Retrieval Trace / hard_cases 字段
+
+### 10.1 Retrieval Trace 最小字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `trace_id` | retrieval trace | 串联全链路 | 与当前阶段保持一致，但第二阶段更依赖可回放能力 |
+| `raw_query` | retrieval trace | 原始问题 | 便于复盘用户真实问法 |
+| `normalized_query` | retrieval trace | 归一化问题 | 是 planner 与检索的基础输入之一 |
+| `intent` | retrieval trace | 记录最终意图识别 | 便于对照 planner 输出 |
+| `domain_hint` | retrieval trace | 记录分域提示 | 用于分析域内/域外漂移 |
+| `semantic_expansions` | retrieval trace | 记录语义扩展结果 | 用于检查 planner 漂移 |
+| `lexical_terms` | retrieval trace | 记录词法检索词 | 用于检查硬关键词是否丢失 |
+| `filters` | retrieval trace | 记录实际下发的过滤条件 | 用于排查过滤是否过严或失效 |
+| `lexical_hits` | retrieval trace | 记录 lexical top-k | 用于对照 vector / RRF |
+| `vector_hits` | retrieval trace | 记录 vector top-k | 用于分析语义召回 |
+| `rrf_hits` | retrieval trace | 记录 RRF 融合结果 | 用于验证融合是否有效 |
+| `rerank_result` | retrieval trace | 记录 rerank 输出 | 用于区分检索与重排责任 |
+| `evidence_spans` | retrieval trace | 记录证据片段 | 用于定位 evidence extraction 是否有效 |
+| `final_status` | retrieval trace | 记录最终状态 | 用于对照 response status / fallback |
+
+### 10.2 hard_cases 样本池字段
+
+| 字段 | 所属对象 | 第二阶段作用 | 说明 / 不要误解 |
+|---|---|---|---|
+| `trace_id` | hard_cases item | 关联原请求 | 便于回放 |
+| `raw_query` | hard_cases item | 原始问题 | 保留用户真实表达 |
+| `normalized_query` | hard_cases item | 归一化问题 | 便于分析清洗后的偏移 |
+| `domain_hint` | hard_cases item | 记录域提示 | 便于识别跨域误召回 |
+| `fallback_reason` | hard_cases item | 标记失败原因 | 用于做问题聚类 |
+| `top_candidates` | hard_cases item | 记录 top 候选 | 用于检查错召回 |
+| `evidence_spans` | hard_cases item | 记录证据 | 便于判断是“没证据”还是“证据抽错” |
+| `user_feedback` | hard_cases item | 用户负反馈 | 是硬样本池入口，不是运营装饰数据 |
+| `created_at` | hard_cases item | 记录时间 | 用于时间窗口分析 |
+
+---
+
+## 11. 第二阶段最容易写偏的点
+
+1. 不要把 `domain_hint` 只停留在 planner 层；它在第二阶段可以成为检索层过滤依据。  
+2. 不要把 `question_vector` / `answer_vector` 合并回一个“总向量”概念。  
+3. 不要把 `source_label` 当成 `source_locator` 使用。  
+4. 不要把 `rerank_score`、`bm25_score`、`vector_score` 混成同一类分数。  
+5. 不要把 `clarification_required` 当成默认对话模式。  
+6. 不要把 `question_aliases` 扩展成全库人工同义词系统。  
+7. 不要把 `2_system_design.md` 的字段提前写回 `1_system_design.md` 的最小链路实现。  
+
+---
+
+## 12. 最终结论
+
+`2_3_field_definitions.md` 的目标不是制造更多字段，而是把第二阶段真正新增的字段分层解释清楚：
+
+- planner 用什么字段
+- retrieval 依赖什么字段
+- Knowledge Unit 至少要有什么字段
+- rerank / evidence / clarification 依赖什么字段
+- trace / hard_cases 如何回放
+
+一句话收敛：
+
+**`2_system_design.md` 的新增字段应围绕 Query Planner、Knowledge Unit、Hybrid Retrieval、Rerank / Evidence、Clarification、Trace 6 条主线收敛，不应回流污染 `1_system_design.md` 的当前最小实现。**
+</file>
+
+<file path="docs/designs/1_system_design.md">
+# OrionStack 当前阶段系统设计 v1
+
+## 1. 文档说明
+
+### 1.1 文档目标
+
+本文档用于重新定义 OrionStack 当前阶段的真实系统设计边界，作为当前已落地实现的唯一基线。
+
+下一阶段的检索链路升级方案（如 Query Planner、Elastic Hybrid Retrieval、RRF、Rerank 等）不在本文件展开，统一放入 `2_system_design.md`。
+
+原始文档进入问答主链路前的接入与清洗边界，不在本文件展开，统一放入 `document_ingestion_boundary.md`。
+
+这份文档只回答以下问题：
+
+1. 当前系统到底是什么
+2. 当前阶段到底做什么、不做什么
+3. 当前最小可执行链路是什么
+4. 当前模块边界如何划分
+5. 哪些设计明确暂不采用
+
+本文档不承担以下职责：
+
+- 不描述远期平台化蓝图
+- 不预埋复杂多场景扩展设计
+- 不提前设计多 Agent 编排体系
+- 不为了未来可能性而引入当前无必要复杂度
+
+### 1.2 适用范围
+
+本文档适用于 OrionStack 当前阶段的设计、开发、评审与文档整理。
+
+当前阶段以 **FAQ / 业务知识问答** 为唯一主场景，所有设计均围绕这一主场景收敛。
+
+当前主场景保持不变，但短自然问法的检索可用性优化属于下一阶段链路升级范围，不在本文件内重写为目标方案。
+
+### 1.3 文档原则
+
+本文档遵循以下原则：
+
+1. 只写当前真实需要落地的设计
+2. 只保留近期会进入代码的边界与结构
+3. 不把未来架构复杂度提前搬入当前系统
+4. 先保证主链路稳定，再讨论扩展性
+5. 扩展性只保留接口位，不保留重型实现
+
+---
+
+## 2. 当前系统定位
+
+### 2.1 一句话定位
+
+OrionStack 当前阶段是一个 **面向 FAQ / 业务知识问答场景的轻量应用系统**，目标是用最小复杂度建立当前可运行的“提问 -> 检索 -> 回答”主链路骨架。
+
+### 2.2 当前系统是什么
+
+当前系统是：
+
+- 一个以问答为核心的业务应用
+- 一个以 FAQ / 文档内容检索为基础的数据驱动系统
+- 一个优先保证稳定性、可控性和低复杂度的实现
+- 一个当前实现仍以轻量路由决策和轻量检索链路为主的系统
+
+### 2.3 当前系统不是什么
+
+当前系统不是：
+
+- 通用企业 AI 平台
+- 多场景统一编排底座
+- 复杂 Agent 运行时
+- 图执行工作流平台
+- 大而全知识中台
+- 统一意图中台
+- 为未来所有场景预留完备抽象的基础设施
+
+### 2.4 当前设计取向
+
+当前阶段的设计取向不是“先做大框架再填业务”，而是：
+
+- 先做最小可用主链路
+- 先做稳定问答结果
+- 先做可控的数据流
+- 先做清晰模块边界
+- 未来确有需要时再逐步替换局部实现
+
+---
+
+## 3. 当前阶段范围
+
+### 3.1 当前要做的内容
+
+当前阶段只做以下内容：
+
+1. 接收用户问题
+2. 对请求做轻量路由判断
+3. 执行 FAQ / 文档检索
+4. 基于检索结果生成回答
+5. 返回回答与必要引用信息
+6. 保留最小必要的请求记录与结果记录
+7. 为后续替换局部能力保留最小接口边界
+
+### 3.2 当前明确不做的内容
+
+当前阶段明确不做以下内容：
+
+1. 不做 LangGraph 图执行
+2. 不做复杂流式工作流编排
+3. 不做 LlamaIndex 知识框架接入
+4. 不做重型统一意图层
+5. 不做复杂 JSON 工具规划
+6. 不做多 Agent 协作
+7. 不做复杂工具编排中心
+8. 不做大而全平台化抽象
+9. 不做为未来多场景预埋的大量框架层
+10. 不做脱离当前业务的“中台化”设计
+11. 不做细粒度的行级/文档级权限控制（RBAC/ABAC）与独立的权限管理系统。
+
+### 3.3 当前范围边界的核心判断
+
+当前系统的核心任务只有一个：
+
+**让 FAQ / 业务知识问答主链路先形成当前可运行、可观测、可迭代的实现基线。**
+
+只要某个设计不能直接提升这条主链路的稳定性、可控性或维护成本表现，就不应在当前阶段进入系统。
+
+---
+
+## 4. 核心执行链路
+
+### 4.1 当前已落地主链路
+
+当前系统在现实现中的最小主链路定义如下：
+
+```text
+用户问题
+-> 路由判断（薄）
+-> FAQ / 文档检索
+-> 回答生成
+-> 返回结果
+```
+
+这是当前唯一必须稳定的执行链路。
+
+该链路用于表达当前系统的概念主链路。
+
+在实际运行中，允许在进入主链路前挂接少量前置步骤，例如输入归一化、基础安全校验与 FAQ 缓存匹配，但这些步骤不改变系统的核心执行目标，仍服务于“提问 -> 检索 -> 回答 -> 返回”的主路径。
+
+### 4.2 链路说明
+
+#### 第一步：接收用户问题
+
+系统接收前端传入的问题文本及必要上下文。
+
+当前阶段允许前端通过固定提问范式、示例问题或快捷提问入口，对用户输入做轻量引导与归一化，以降低输入随机性并提升 FAQ / 检索链路命中率。
+
+这类输入引导属于轻量输入约束，不构成复杂意图规划，也不构成独立的对话引导系统。
+
+当前阶段不要求复杂多轮意图规划，不要求工具计划生成，不要求复杂结构化执行计划。
+
+#### 第二步：路由判断（薄）
+
+系统对请求做轻量级判断，只回答以下问题：
+
+1. 当前请求是否属于 FAQ / 知识问答范围
+2. 当前请求是否可以直接进入检索问答链路
+3. 当前请求是否需要进入兜底路径
+
+这一层只做“是否走问答主链路”的判断，不承担复杂规划职责。
+
+#### 第三步：FAQ / 文档检索
+
+系统根据问题文本或轻量改写后的查询词执行检索。
+
+当前阶段允许采用轻量实现，例如：
+
+- SQLite FTS
+- 简单向量检索
+- pgvector
+- 自定义检索服务
+
+检索层的目标是返回足够可用的候选内容，不引入额外框架复杂度。
+
+#### 第四步：回答生成
+
+系统基于检索结果调用模型或模板逻辑生成回答。
+
+当前阶段可使用本地小模型，但必须控制其职责：
+
+- 小模型负责回答生成或简单分类
+- 小模型不负责复杂结构化意图路由
+- 小模型不负责多工具计划生成
+- 小模型不负责高风险复杂决策
+
+#### 第五步补充：最小 citation 返回结构
+
+当前阶段如返回 `citations`，前后端应尽量遵循最小一致结构。
+
+建议单条 citation 至少包含以下字段：
+
+- `citation_id`：引用标识
+- `source_label`：来源展示名称
+- `source_locator`：来源定位信息，例如 `source_url`、`file_path`、`page_number`、`paragraph_id` 或等价定位字段
+- `snippet`：最小引用片段
+
+当前阶段不要求建设复杂引用协议，但必须避免前后端对 citation 结构各自定义，导致展示与跳转能力不一致。
+
+结论：
+
+**当前 citations 除具备回源能力外，也应具备最小一致的返回结构。**
+
+#### 4.2.1 最小对外结果状态
+
+为了避免前端或调用方依赖回答文本自行猜测系统状态，当前阶段建议对外冻结最小结果状态字段，例如：
+
+- `ok`：正常回答
+- `refused`：命中安全边界或明确不能回答
+- `fallback`：未进入标准 FAQ 回答路径，进入统一兜底
+- `system_error`：系统异常或不可恢复错误
+
+当前阶段不要求建设复杂统一错误模型，但建议至少保证调用方能够区分：
+
+1. 正常回答
+2. 安全拒答
+3. 无依据或低置信度兜底
+4. 系统异常
+
+结论：
+
+**当前对外结果至少应具备最小状态分类，避免仅依赖 `answer_text` 承担全部语义。**
+
+### 4.3 关于 Streaming 的当前结论
+
+当前阶段允许保留流式输出能力，但需要明确：
+
+**流式输出只是响应输出方式，不构成引入图执行框架的理由。**
+
+也就是说：
+
+- 可以实现 SSE / 流式 token 输出
+- 但不因此引入 LangGraph 或复杂工作流状态机
+- 流式能力应作为回答生成层的输出能力，而不是系统架构中心
+
+---
+
+## 5. 模块划分
+
+### 5.1 模块划分原则
+
+当前阶段模块划分只服务于主链路，不为了宏大架构叙事而增加层次。
+
+模块划分原则如下：
+
+1. 只保留当前必要模块
+2. 模块命名尽量贴近实际职责
+3. 一个模块只解决一类问题
+4. 模块之间通过最小接口连接
+5. 不为了“看起来先进”而过度分层
+
+### 5.2 当前必要模块
+
+#### 5.2.1 前端页面层
+
+职责：
+
+- 接收用户输入
+- 展示回答结果
+- 展示引用信息
+- 提供最小交互页面
+- 提供最小反馈交互（如点赞 / 点踩）
+- 提供固定提问范式、示例问题或快捷提问入口，用于轻量引导用户输入
+- 提供最小 Debug 模式入口，用于开发态展示关键链路信息
+- 支持复制当前调试上下文（如 `trace_id`、`normalized_query`、`retrieved_chunks`、`final_prompt`）
+
+不负责：
+
+- 不负责业务决策
+- 不负责检索逻辑
+- 不负责模型调用
+- 不负责复杂评估体系
+- 不负责复杂对话引导系统或独立表单编排系统
+- 不负责独立调试平台建设
+
+#### 5.2.2 API 层
+
+职责：
+
+- 接收请求
+- 校验输入
+- 调用后端服务
+- 返回同步或流式结果
+- 接收最小反馈请求并写入后端记录
+- 在请求入口生成 `trace_id`，并通过请求上下文在整个调用链中透传
+- 支持开发态 Demo 模式入口与最小调试信息透传
+
+不负责：
+
+- 不负责复杂路由编排
+- 不负责直接实现检索细节
+- 不负责复杂模型策略决策
+- 不负责重型评估平台逻辑
+- 不负责复杂环境编排与多级反向代理链路
+
+当前阶段建议采用轻量方式贯穿 `trace_id`，例如 `contextvars` 或等效机制，以保证即使不引入复杂工作流框架，也能通过同一追踪标识串联输入、路由、检索、生成与反馈记录。
+
+#### 5.2.3 路由决策层
+
+职责：
+
+- 对请求进行轻量判断
+- 给出当前请求的最小路由决定
+- 为检索层提供稳定输入
+
+不负责：
+
+- 不负责复杂意图规划
+- 不负责多工具调度
+- 不负责复杂实体抽取
+- 不负责生成重型执行计划
+
+#### 5.2.4 检索层
+
+职责：
+
+- 接收查询词
+- 执行 FAQ / 文档检索
+- 返回候选内容与必要元数据
+- 为回答生成层提供可消费输入
+
+不负责：
+
+- 不负责前端展示
+- 不负责复杂工作流控制
+- 不负责未来知识平台抽象
+
+#### 5.2.5 回答生成层
+
+职责：
+
+- 基于检索结果生成最终回答
+- 组织最小必要引用信息
+- 输出最终回答内容
+
+不负责：
+
+- 不负责复杂工具编排
+- 不负责图状态管理
+- 不负责复杂意图识别
+
+#### 5.2.6 数据存储层
+
+职责：
+
+- 存储 FAQ / 文档数据
+- 存储必要索引数据
+- 存储最小必要日志或记录
+- 存储最小必要反馈数据
+- 为向量数据或检索索引记录必要版本信息，例如 `embedding_model_version`
+
+不负责：
+
+- 不负责业务控制逻辑
+- 不负责模型推理
+- 不负责路由判断
+
+当前阶段不要求复杂索引治理系统，但必须避免在升级 embedding 模型后继续无感使用旧版本向量，导致检索结果整体失真而难以排查。
+
+---
+
+## 6. 关键设计决策
+
+### 6.1 当前不使用 LangGraph
+
+当前阶段不引入 LangGraph。
+
+原因如下：
+
+1. 当前主链路不具备复杂图执行特征
+2. 当前业务不需要多状态持久化流程
+3. 当前没有明确的中断 / 恢复 / 多分支编排需求
+4. 引入图执行框架会显著增加理解成本与维护成本
+5. 当前收益不足以覆盖框架复杂度
+
+结论：
+
+**当前用普通服务调用链即可，不引入图执行工作流框架。**
+
+### 6.2 当前不使用 LlamaIndex
+
+当前阶段不引入 LlamaIndex。
+
+原因如下：
+
+1. 当前 FAQ / 文档问答链路可以由自研轻量检索实现
+2. 当前核心问题不是“知识框架能力不足”，而是“主链路应保持简单可控”
+3. 引入额外知识框架会增加排错路径与抽象负担
+4. 当前检索需求尚不足以支撑引入重型知识框架
+
+结论：
+
+**当前优先采用自研轻量检索链路，而不是引入知识框架。**
+
+### 6.3 当前不建设重型统一意图层
+
+当前阶段不建设重型统一意图层。
+
+原因如下：
+
+1. 当前只有单一主场景，复杂统一路由收益不足
+2. 当前 1B/8B 小模型不适合承担复杂结构化意图规划
+3. 小模型输出复杂 JSON 路由计划不稳定，容易使系统脆弱
+4. 当前系统需要的是“薄决策”，不是“意图中台”
+
+结论：
+
+**当前只保留轻量路由决策接口，不建设重型统一意图层。**
+
+### 6.4 当前不让小模型承担复杂规划职责
+
+当前阶段，小模型只承担以下职责之一：
+
+- 简单分类
+- 简单回答生成
+- 简单查询改写
+
+当前阶段，小模型不承担以下职责：
+
+- 复杂 JSON 路由输出
+- 多工具计划生成
+- 稳定实体抽取总控
+- 复杂执行计划生成
+- 系统级核心编排职责
+
+结论：
+
+**小模型只做其稳定擅长的事，不承担系统中最脆弱、最关键的复杂控制职责。**
+
+### 6.5 当前只保留薄接口，不保留重型未来实现
+
+当前阶段允许为未来预留接口位，但不允许把未来完整架构提前引入当前系统。
+
+可以保留：
+
+- 可替换的路由接口
+- 可替换的检索实现
+- 可替换的模型调用实现
+
+不保留：
+
+- 未来完整统一中台实现
+- 多层复杂抽象骨架
+- 不进入当前代码的重型设计
+
+---
+
+## 7. 最小接口边界
+
+### 7.1 设计目标
+
+最小接口边界的目标不是追求“完美架构”，而是实现：
+
+1. 当前代码足够简单
+2. 当前模块足够解耦
+3. 未来局部替换不推翻主链路
+
+### 7.2 当前路由决策对象
+
+当前建议仅保留最小决策对象，例如：
+
+```python
+from pydantic import BaseModel
+from typing import Literal
+
+class IntentDecision(BaseModel):
+    route: Literal["faq_qa", "fallback"]
+    confidence: float
+    query_for_search: str
+```
+
+### 7.3 当前路由层输入输出边界
+
+输入：
+
+- 用户原始问题
+- 请求级最小上下文（可选，仅供路由协调层使用）
+
+说明：
+
+- 路由协调层可接收请求级最小上下文。
+- 具体 Parser 的输入约束以 7.6.1 为准，不得私自扩大依赖范围。
+
+输出：
+
+- 当前请求走哪条最小路径
+- 一个可供检索使用的查询词
+- 一个可供兜底判断的置信度
+
+路由层不输出：
+
+- 复杂工具计划
+- 多级任务图
+- 长 JSON 结构
+- 下游执行细节
+
+### 7.4 检索层输入输出边界
+
+输入：
+
+- query_for_search
+- 可选过滤条件
+
+输出：
+
+- 命中的 FAQ / 文档内容
+- 最小必要元数据
+- 可供回答生成层消费的候选结果
+
+检索层不关心：
+
+- 请求来自哪个解析器
+- 是否未来会接更强模型
+- 是否未来会接复杂工作流
+
+### 7.5 回答生成层输入输出边界
+
+输入：
+
+- 用户问题
+- 检索结果
+
+输出：
+
+- answer
+- citations（如有）
+- 最小元信息
+
+回答生成层不关心：
+
+- 当前路由是规则做的还是模型做的
+- 未来是否会切换高级解析器
+- 是否接入复杂工具系统
+
+### 7.6 路由解析器输入输出契约
+
+为了保证当前薄路由层未来可以平滑替换内部实现，所有路由解析器必须遵循统一的输入输出契约。
+
+#### 7.6.1 输入契约
+
+当前阶段，Parser 只允许依赖最小输入：
+
+- `raw_query`
+- 固定路由说明文本（可选）
+
+当前阶段不允许 Parser 私自依赖以下输入：
+
+- 多轮历史对话
+- 复杂 session state
+- 检索结果预读
+- 外部工具返回值
+- 特定实现私有上下文
+
+结论：
+
+**当前 Parser 输入必须保持最小化与标准化，避免未来不同 Parser 之间产生上下文依赖不一致。**
+
+#### 7.6.2 输出契约
+
+无论当前使用规则、1B/8B 小模型，还是未来更强模型，Parser 对外都必须统一输出 `IntentDecision`：
+
+```python
+from pydantic import BaseModel
+from typing import Literal
+
+class IntentDecision(BaseModel):
+    route: Literal["faq_qa", "fallback"]
+    confidence: float
+    query_for_search: str
+```
+输出约束如下：
+
+route 只能使用固定枚举值
+confidence 对外统一映射到 0.0 - 1.0 区间，但当前阶段不要求其具备严格数学概率意义
+confidence 允许来源于规则映射、模型分类结果或等级映射，其作用是支持路由比较、阈值判断与观测分析
+query_for_search 必须始终为字符串
+不允许输出额外结构化计划对象作为下游依赖
+
+当前阶段允许将内部路由判断粗分为以下逻辑层级：
+
+Certain：规则强命中
+High：模型分类清晰且符合预期
+Low：进入 fallback
+
+结论：
+
+当前 confidence 是标准化后的逻辑置信度接口，而不是严格概率承诺。下游模块只依赖统一 DTO，不依赖具体 Parser 实现。
+
+
+---
+
+## 8. 当前推荐实现方式
+
+### 8.1 路由决策推荐实现
+
+当前推荐采用以下顺序：
+
+```text
+规则判断
+-> 轻量模型简单分类（可选）
+-> fallback
+```
+
+其中：
+
+- 规则判断优先
+- 小模型只做简单分类
+- 小模型输出尽量限制为少量标签
+- Python 代码负责把结果装配成稳定结构
+
+### 8.2 当前推荐检索实现
+
+当前推荐优先使用轻量可控实现，例如：
+
+- SQLite FTS
+- pgvector
+- 自定义 FAQ 检索服务
+- 轻量向量检索
+
+具体选型以实现复杂度、可控性、排错成本为准。
+
+#### 8.2.1 检索最低可回答边界
+
+当前阶段，检索命中并不自动等于可以生成回答。
+
+为了降低“无依据自由生成”的风险，当前阶段建议增加最小可回答边界，例如：
+
+1. 当检索结果相似度低于最低阈值时，直接进入拒答或 fallback。
+2. 当没有可用候选内容或引用依据时，不进入自由生成。
+3. 当最高命中结果低于最低可回答阈值时，应将其视为“未命中”，不向生成层传递伪上下文。
+4. 当前阶段优先遵循“无足够依据，进入拒答或 fallback”的原则。
+
+当前阶段不要求复杂检索评估体系，但必须避免把弱命中结果直接包装为高可信回答，也必须避免把似是而非的检索片段传给生成层诱发幻觉续写。
+
+### 8.3 当前推荐回答生成实现
+
+回答生成可以基于：
+
+- 模型生成
+- 模板拼接
+- 混合方式
+
+但必须满足：
+
+1. 输入来源明确
+2. 结果路径可追踪
+3. 不依赖复杂工作流框架
+4. 不让模型承担其不稳定的高阶规划职责
+5. 必须配置明确的输出截断策略，避免小模型重复输出、越界续写或泄露 Prompt 后续内容
+6. 在 FAQ 回答生成场景下，应优先采用低随机性参数，避免同一问题在短时间内产生明显语义漂移
+
+当前阶段建议至少具备以下工程约束：
+
+- `max_tokens`：限制单次回答最大输出长度
+- `stop_words` / `stop_sequences`：用于阻断模型继续吐出模板尾部、角色标识或无关续写内容
+- FAQ 回答生成场景下，`temperature` 应默认保持在接近 0 的低随机性范围
+- 流式输出场景下应具备明确的结束条件，避免模型持续重复生成
+
+当前阶段不要求复杂生成控制平台，但必须避免把回答生成层变成不受约束的自由续写过程。
+
+### 8.4 路由决策的降级与保护
+
+#### 8.4.1 目标
+
+当前阶段允许使用小模型参与轻量路由判断，但必须避免小模型不稳定导致主链路失效或兜底流量异常放大。
+
+因此，当前路由决策必须具备最小降级与保护机制。
+
+#### 8.4.2 置信度阈值配置化
+
+当前阶段，路由置信度阈值不得写死在代码中，必须通过配置项控制，例如：
+
+- `CONFIDENCE_THRESHOLD`
+
+该阈值用于判断当前 Parser 输出是否足够可信。
+
+当前阶段要求：
+
+- 阈值可通过配置快速调整
+- 不要求复杂动态控制平台
+- 但必须避免把阈值硬编码进核心逻辑
+
+#### 8.4.3 当前推荐降级链路
+
+当前推荐的路由决策链路如下：
+
+```text
+规则判断
+-> 小模型简单分类（可选）
+-> confidence check
+-> 规则兜底匹配
+-> fallback
+```
+
+其含义为：
+
+1. 优先使用确定性规则判断
+2. 小模型只做简单分类
+3. 当小模型置信度不足时，不立即进入高成本路径
+4. 先尝试一次轻量规则兜底
+5. 规则仍无法处理时，再进入统一 fallback
+
+#### 8.4.4 当前明确不做的内容
+
+当前阶段明确不做：
+
+- 复杂策略引擎
+- 多级熔断中心
+- 动态路由编排平台
+- 大规模在线策略调优系统
+
+结论：
+
+**当前降级机制只为防止小模型不稳定放大系统成本，不扩展为独立策略系统。**
+
+#### 8.4.5 当前建议冻结的 fallback_reason 最小枚举
+
+为了保证 fallback 路径可观测、可排错，当前阶段建议将 `fallback_reason` 收敛为最小固定枚举，例如：
+
+- `low_confidence`
+- `guardrail_blocked`
+- `rule_no_match`
+- `no_retrieval`
+- `system_error`
+
+当前阶段不要求覆盖所有未来场景，但要求避免自由文本原因码扩散。
+
+结论：
+
+**当前 fallback_reason 应尽量收敛为固定枚举，避免日志与实现语义漂移。**
+
+#### 8.4.6 非法输出的默认降级策略
+
+当前阶段允许使用小模型参与轻量路由判断，但不允许把模型输出格式正确性当作系统前提。
+
+因此，当前阶段必须具备最小非法输出兜底策略：
+
+1. 当路由模型输出为空、标签非法、字段缺失或不符合预期格式时，代码层必须捕获异常或解析失败。
+2. 一旦解析失败，不做二次猜测，不把非法输出继续向下游传播。
+3. 解析失败后的默认路径为统一 `fallback`，并记录相应的 `fallback_reason`。
+
+当前阶段不要求复杂输出修复器或二次纠错模型，但必须避免让非法路由输出直接破坏主链路稳定性。
+
+结论：
+
+**当前路由模型的非法输出必须默认导向 fallback，而不是让系统依赖模型格式稳定性。**
+
+---
+
+## 9. 支撑性链路设计
+
+### 9.1 设计目标
+
+当前阶段的系统设计虽然以在线问答主链路为中心，但为了保证系统能够稳定运行、低成本维护并支持后续迭代，仍需补齐少量必要的支撑性链路。
+
+这些支撑性链路的目标不是引入新框架，而是形成最小闭环，确保系统不仅能“跑通”，还能“稳健且可迭代”。
+
+当前阶段只补充以下 7 类支撑能力：
+
+1. 轻量离线数据入库链路
+2. 高频 FAQ 拦截缓存
+3. 基础安全与拒答边界
+4. 轻量反馈回流机制
+5. 固定提问范式与输入引导
+6. 核心 Prompt 与阈值的配置化管理
+7. 数据隔离与前置过滤权限接口预留
+   
+这些能力均遵循同一原则：
+
+- 只做当前主链路必需的最小实现
+- 不扩展为独立平台或重型子系统
+- 不为了未来可能需求提前引入复杂架构
+
+### 9.2 轻量离线数据入库链路
+
+#### 9.2.1 目标
+
+系统必须定义数据如何进入系统并变成可检索状态。
+
+当前阶段支持的输入对象包括：
+
+- FAQ 标准问答对
+- 简单业务文档
+- 结构相对规整的文本内容
+
+当输入超出上述范围时，原始文档不应直接进入当前离线入库链路，而应先经过文档清洗 / ingestion adapter，转换为可检索文本与最小回源元数据后，再进入下游索引与检索流程。
+
+#### 9.2.2 当前最小入库链路
+
+当前推荐的离线数据链路如下：
+
+```text
+原始 FAQ / 文档
+-> 文档接入判断
+-> direct ingest
+   或
+-> ingestion / cleaning adapter
+-> 基础解析 / 清洗后文本
+-> 简单文本切块（如需要）
+-> 向量化或全文索引构建
+-> 入库到 SQLite FTS / pgvector / 轻量检索存储
+```
+##### 9.2.2.1 最小回源元数据要求
+当前阶段，离线数据入库不仅要让内容变得可检索，还必须为后续引用展示保留最小回源能力。
+
+因此，当前入库链路应尽量为每个 FAQ 条目或文档 chunk 保留以下最小元数据之一或其组合：
+
+- `source_url`
+- `file_path`
+- `document_id`
+- `page_number`（如适用）
+- `paragraph_id` 或 `chunk_id`
+- 文档内定位所需的最小偏移信息（如适用）
+
+当前阶段不要求建设复杂引用管理系统，但必须避免只存 chunk 文本而完全失去原始来源定位能力。
+
+结论：
+
+**当前引用信息必须具备最小回源元数据，确保前端展示的 citations 可以指向原始 FAQ 或文档位置。**
+
+#### 9.2.3 当前只做的内容
+
+当前阶段只做：
+
+1. 基础文本解析
+2. 简单切块
+3. 基础索引构建
+4. FAQ 问答对导入
+5. 简单文档内容导入
+
+#### 9.2.4 当前明确不做的内容
+
+当前阶段明确不做：
+
+1. 复杂版式分析
+2. PDF 表格精准还原
+3. 自动知识图谱抽取
+4. 多源实时同步
+5. 重型数据治理流程
+6. 复杂离线任务编排系统
+7. 不在当前主系统内部建设通用文档清洗平台；复杂文档通过独立 ingestion / cleaning adapter 处理
+
+结论：
+
+**当前离线链路只服务于“让内容变得可检索”，不扩展成知识加工平台。**
+
+### 9.3 高频 FAQ 拦截缓存
+
+#### 9.3.1 目标
+
+FAQ 场景天然存在大量重复问题或高频近似问题。
+
+如果每次请求都进入“检索 -> 生成”链路，会增加延迟和资源消耗，也会让主链路不必要地变重。
+
+因此，当前阶段应在主链路前增加一层极轻量缓存拦截。
+
+#### 9.3.2 当前缓存位置
+
+当前建议将缓存拦截放在：
+
+```text
+用户问题
+-> 路由判断（薄）
+-> FAQ 缓存匹配
+-> 检索
+-> 回答生成
+```
+
+#### 9.3.3 当前缓存策略
+
+当前阶段仅允许以下缓存方式：
+
+1. 标准 FAQ 问答对精确匹配
+2. 高阈值的轻量近似匹配
+3. 命中后直接返回标准答案
+
+#### 9.3.4 当前最小缓存失效边界
+
+当前阶段虽然不建设复杂缓存治理系统，但仍需定义最小失效边界。
+
+当前建议至少满足以下规则：
+
+1. 当 FAQ 标准问答内容更新时，关联缓存应失效。
+2. 当检索语料或索引版本发生明显变化时，可按版本号使缓存失效。
+3. 当前阶段允许采用简单清理策略，不要求复杂 TTL 平台或自动治理体系。
+
+结论：
+
+**当前缓存必须具备最小失效边界，避免旧答案长期静默污染主链路。**
+
+#### 9.3.5 当前明确不做的内容
+
+当前阶段明确不做：
+
+1. 通用多级缓存架构
+2. 复杂语义缓存平台
+3. 自动缓存治理系统
+4. 大规模动态失效策略体系
+5. 跨场景统一缓存中台
+
+结论：
+
+**当前缓存的目标只是拦截高频 FAQ，不把缓存设计扩展成独立系统。**
+
+### 9.4 基础安全与拒答边界
+
+#### 9.4.1 目标
+
+系统不仅需要处理“答不出来”的情况，也必须处理“不能回答”的情况。
+
+即使当前系统聚焦内部 FAQ / 业务知识问答，仍需定义最小安全边界，避免模型被诱导输出不应回答的内容。
+
+#### 9.4.2 当前安全边界位置
+
+当前建议将基础安全校验放在主链路前部，即：
+
+```text
+用户问题
+-> 基础安全校验
+-> 路由判断（薄）
+-> FAQ 缓存匹配
+-> 检索
+-> 回答生成
+```
+
+或与路由判断合并实现，但逻辑边界必须清晰。
+
+#### 9.4.3 护栏设计原则：输入一致性为先
+
+为了使当前轻量级安全护栏稳定生效，API 接入层必须对用户输入执行最小必要的输入一致性约束。
+
+该约束的目标不是增强系统智能，而是降低输入噪声、避免规则绕过，并为后续安全校验、缓存匹配、路由判断与检索提供更稳定的输入基础。
+
+当前阶段至少包括以下两类约束：
+
+1. **长度限制**  
+   必须为用户输入设置明确的最大长度阈值（如 `MAX_QUERY_LENGTH`），超限请求直接拒绝或返回标准提示话术。  
+   该阈值必须通过配置项控制，不得硬编码在业务逻辑中。
+
+2. **字符清洗与归一化**  
+   在进入后续规则校验、缓存匹配、路由判断与检索前，系统必须生成规范化后的输入文本，例如：
+   - 去除不可见字符
+   - 规范化换行、空格与重复分隔符
+   - 对 HTML 标签做安全清洗
+   - 对 Markdown / 代码块做轻量归一化
+   - 保留核心文本语义，不做破坏性删除
+
+当前阶段要求同时保留：
+
+- `raw_query`：原始输入，用于审计、排查与观测
+- `normalized_query`：归一化输入，用于后续安全校验与主链路处理
+
+结论：
+
+**当前输入一致性约束属于轻量 Guardrails 的前置基础，不扩展为独立输入治理系统。**
+
+#### 9.4.4 当前允许的实现方式
+
+当前阶段只允许轻量实现方式，例如：
+
+1. 敏感词或规则拦截
+2. 基础正则判断
+3. 小模型 system prompt 中的严格拒答约束
+4. 命中后直接返回标准拒答话术
+5. API 接入层的输入长度限制与字符归一化
+
+#### 9.4.5 当前明确不做的内容
+
+当前阶段明确不做：
+
+1. 独立风控大模型
+2. 独立安全策略编排平台
+3. 复杂内容审核工作流
+4. 多级风险评分系统
+5. 复杂对抗防御体系
+
+结论：
+
+**当前安全边界只负责最小必要拒答，不扩展为独立安全系统。**
+
+#### 9.4.6 固定提问范式与输入引导
+
+##### 9.4.6.1 目标
+
+当前阶段允许通过固定提问范式、示例问题和快捷提问入口，对用户输入进行轻量约束与引导。
+
+该设计的目标是：
+
+1. 降低用户输入随机性
+2. 提升 FAQ / 检索链路命中率
+3. 提升高频问法缓存命中率
+4. 降低小模型路由波动
+5. 以更低成本减少部分越界输入与无效输入
+
+##### 9.4.6.2 当前允许的实现方式
+
+当前阶段只允许轻量实现方式，例如：
+
+1. 前端展示固定示例问题
+2. 提供按主题分类的快捷提问入口
+3. 提供少量固定问句模板，例如：
+   - 如何申请 X
+   - 在哪里查看 X
+   - X 的流程是什么
+   - X 失败后怎么处理
+4. 对用户输入做轻量归一化，例如去掉冗余语气词、保留核心关键词
+5. 在提交前提示用户尽量使用单主题、直接问题表达
+
+##### 9.4.6.3 当前设计边界
+
+该能力属于轻量输入引导，不属于复杂意图系统。
+
+其作用是帮助用户更容易进入当前 FAQ / 知识问答主链路，而不是替代检索、路由或回答生成。
+
+##### 9.4.6.4 当前明确不做的内容
+
+当前阶段明确不做：
+
+1. 复杂多轮提问引导系统
+2. 动态表单式问答编排
+3. 基于模型的输入教育代理
+4. 独立的用户行为纠正系统
+5. 重型输入治理平台
+
+结论：
+
+**当前固定提问范式只作为轻量 Guardrails 与输入归一化补充，不扩展为独立交互系统。**
+
+
+### 9.5 轻量反馈回流机制
+
+#### 9.5.1 目标
+
+当前阶段的日志与记录不仅用于排错，也用于为未来优化提供真实依据。
+
+如果没有最小反馈回流，后续关于检索质量、模型效果、缓存命中价值以及架构升级必要性的判断都将缺乏数据支撑。
+
+#### 9.5.2 当前前端交互要求
+
+当前建议前端提供最简单的反馈交互，例如：
+
+- 点赞
+- 点踩
+
+不要求当前阶段引入复杂评价组件。
+
+#### 9.5.3 当前后端记录要求
+
+当前阶段建议将记录字段分为“核心必记字段”和“扩展观测字段”，以保证最小数据闭环，同时避免记录结构过重或语义重复。
+
+##### （1）核心必记字段
+
+- `trace_id`：请求追踪标识，用于串联日志、反馈与排错。
+- `raw_query`：用户原始问题文本。
+- `retrieved_chunk_ids`：检索命中的候选内容或 chunks 标识列表，默认优先记录 ID，不要求默认落全文。
+- `answer_text`：最终返回给用户的回答文本。
+- `feedback_label`：用户反馈结果，如 `up` / `down`。
+- `token_input`：输入 Token 数，用于评估调用成本与模型负载。
+- `token_output`：输出 Token 数，用于评估调用成本与回答长度。
+- `total_latency_ms`：整体请求总耗时。
+
+##### （2）扩展观测字段
+
+如系统已有会话或请求记录机制，也可附带：
+
+- `session_id`：所属会话标识。
+- `created_at`：请求时间戳。
+- `router_used`：本次请求实际使用的路由器或解析器名称。
+- `route_result`：最终路由结果，如 `faq_qa` / `fallback`。
+- `raw_confidence`：路由模型原始置信度。
+- `threshold_used`：本次判定使用的置信度阈值。
+- `cache_hit`：是否命中缓存。
+- `fallback_reason`：进入 fallback 的原因。
+- `response_status`：最终对外结果状态，如 `ok` / `refused` / `fallback` / `system_error`
+- `input_mode`：本次输入来源方式，如自由输入、示例点击或固定模板生成。
+- `question_template_used`：命中的固定提问范式或模板标识（如有）。
+- `raw_query_length`：原始输入长度，用于观察是否经常出现超长输入。
+- `normalized_query_length`：归一化后输入长度，用于观察输入清洗影响。
+- `first_token_latency_ms`：首字延迟，仅在流式生成场景下记录。
+- `router_prompt_version`：当前路由 Prompt 或路由规则版本标识。
+- `answer_prompt_version`：当前回答生成 Prompt 版本标识。
+- `config_version`：当前阈值与策略配置版本标识。
+- `normalized_query`：归一化后的输入文本，用于观察输入清洗后的实际查询内容。
+- `retrieved_chunk_scores`：检索候选内容对应的相似度或排序分数（如适用）。
+- `final_prompt`：最终发送给模型的 Prompt 文本或其可调试版本（开发态可记录，生产态可按需关闭或脱敏）。
+- `debug_bundle_id`：当前调试上下文的标识，用于前端一键复制或回放。
+- `demo_mode_used`：标记本次请求是否运行于 Demo 模式。
+
+
+
+当请求未实际调用模型时，相关 token 字段允许为 0 或空值。
+
+##### （3）当前记录设计原则
+
+当前阶段的记录设计遵循以下原则：
+
+1. 默认优先记录可分析、可观测、可追踪的最小字段集合。
+2. 内容类字段与观测类字段分开定义，避免语义混杂。
+3. 不因记录需求而把日志系统扩展为重型评测平台。
+4. 字段命名统一使用稳定的 snake_case 风格。
+5. 开发态允许记录最小可视化调试字段，但应避免默认把调试日志扩展为生产环境重负载记录体系。
+
+##### （4）Prompt 签名与可回溯约束
+
+当前阶段，`router_prompt_version`、`answer_prompt_version` 与 `config_version` 不应只是展示性标识，而应具备最小可回溯能力。
+
+当前建议至少满足以下要求：
+
+1. `router_prompt_version` 与 `answer_prompt_version` 应能映射到不可变版本标识。
+2. 该标识可采用 Git Commit ID、内容哈希或等价签名机制实现。
+3. 当用户反馈“效果变差”或出现行为漂移时，应能通过版本标识回溯当时生效的 Prompt 与配置内容。
+
+当前阶段不要求建设复杂 Prompt 管理平台，但必须避免版本号存在而无法定位真实内容的情况。
+
+结论：
+
+**当前 Prompt 版本字段必须具备最小可回溯能力，而不是仅作为展示标签存在。**
+
+##### （5）调试信息脱敏边界
+
+当前阶段允许在开发环境中记录最小调试信息，但必须明确其脱敏与环境边界：
+
+1. `final_prompt`、`retrieved_chunks`、`answer_text` 等字段在开发态可记录完整版本，用于调试。
+2. 非开发态默认不记录完整 `final_prompt`，如需记录，应采用脱敏、摘要或显式开关方式。
+3. 如 `user_query`、`answer_text` 或 chunk 内容可能包含敏感信息，应优先最小化展示与最小化存储。
+4. 调试便利性不得凌驾于正式环境的最小暴露原则之上。
+
+结论：
+
+**当前调试信息应服务于开发效率，但必须具备最小脱敏边界与环境约束。**
+
+
+
+#### 9.5.4 当前反馈机制的用途
+
+当前阶段的反馈与记录机制，主要服务于以下目的：
+
+1. 排查错误回答与异常链路，定位问题发生在输入、路由、缓存、检索、生成还是拒答边界。
+2. 发现 FAQ 缺口与高频问题，判断哪些问题应沉淀为标准问答对或固定提问范式。
+3. 评估检索质量，观察检索命中内容是否足以支撑最终回答。
+4. 评估缓存价值，判断高频问题是否应优先走缓存拦截而不是重复进入检索与生成链路。
+5. 观察路由决策效果，评估不同路由器、置信度阈值与降级策略是否合理。
+6. 观察输入治理效果，判断固定提问范式、输入归一化与长度限制是否有效降低无效输入与越界输入。
+7. 评估系统成本与性能，结合 token 与时延数据判断当前实现是否仍满足轻量、可控、可维护的目标。
+8. 为后续是否升级 embedding、检索策略、路由决策或安全护栏提供真实依据。
+9. 评估不同 Prompt、阈值与配置版本的效果差异，为后续调整提供对照依据。
+
+结论：
+
+**当前反馈机制的目标，是建立最小可观测、可排错、可迭代的数据闭环，而不是扩展为独立评测平台。**
+
+#### 9.5.5 当前明确不做的内容
+
+当前阶段明确不做：
+
+1. 重型评测平台
+2. 自动标注平台
+3. 在线 AB 测试平台
+4. 复杂数据飞轮平台化建设
+5. 大规模反馈运营体系
+
+结论：
+
+**当前反馈回流只建立最小数据闭环与最小路由观测点，不扩展为独立评估系统。**
+
+
+### 9.6 提示词与阈值的配置管理边界
+
+#### 9.6.1 目标
+避免将核心策略硬编码在代码中导致频繁发版，但绝不建设过重的配置管理中台。
+
+#### 9.6.2 当前只做的内容
+核心 Prompt（路由、生成、兜底、风控）和核心参数（阈值、Top-K）必须从业务代码中抽离，维护在轻量的配置文件（如 yaml / json）或环境变量中，支持随服务重启或热加载更新。
+
+当前阶段在开发环境中建议支持最小 Prompt 热重载能力：
+
+1. `prompts/` 目录中的 Prompt 文件修改后，可通过热重载或最小重载机制快速生效。
+2. 开发者修改 Prompt 后，不应要求完整重启所有服务才能验证效果。
+3. 该能力仅服务于本地开发体验优化，不构成复杂 Prompt 运行时编排系统。
+
+#### 9.6.3 当前明确不做的内容
+坚决不做独立的 Prompt 编排管理后台、不做可视化的 Prompt 调试沙箱、不做复杂的 Prompt 多版本灰度发布系统。
+当前阶段也不建设复杂的 Prompt 在线调试平台或运行时可视化编排界面。
+
+#### 9.6.4 配置优先级与生效规则
+
+为了避免开发者在本地开发或调试过程中对“配置是否生效”产生歧义，当前阶段建议冻结最小配置优先级规则。
+
+当前建议优先级如下：
+
+1. 环境变量
+2. 本地配置文件（如 yaml / json）
+3. 内置默认值
+
+当前阶段同时约束：
+
+- 开发态热重载仅作用于开发环境
+- 生产态以显式配置加载结果为准
+- 当配置冲突时，应优先遵循更高优先级来源
+- 关键配置变更应可通过 `config_version` 或等价字段进行观测
+
+结论：
+
+**当前配置行为必须具备最小优先级规则，避免因配置来源不清导致调试与运行结果不一致。**
+
+### 9.7 数据隔离与权限预留边界 (RBAC Readiness)
+
+#### 9.7.1 目标
+未来本系统的权限控制将顺延自既有老系统（如 OA、ERP），OrionStack 不会作为权限源，而是作为权限执行节点（Policy Enforcement Point）。
+
+#### 9.7.2 当前预留的边界设计
+1. **数据存储预留**：向量/索引表中必须包含 `metadata` (JSON) 或特定标识字段，V1 阶段可默认全量开放或写入基础级隔离标识（如 `tenant_id`）。
+2. **检索前置过滤预留**：核心检索模块 `retriever.search()` 必须设计接收 `filters` 参数的接口。明确采用**前置过滤（Pre-filtering）**架构，避免先检索后鉴权导致的查全率问题。
+3. **上下文透传预留**：API 层需统一解析请求中的用户身份标识（如 `user_id`），并封装为 `UserContext` 向下透传，当前仅用于日志与 Trace 落表，暂不执行业务阻断。
+
+#### 9.7.3 当前明确不做的内容
+1. 坚决不在本系统中建设独立的权限管理后台、角色分配页面或用户树结构。
+2. 坚决不编写复杂的权限计算逻辑，V1 阶段 `filters` 参数保持最小可用或为空。
+
+#### 9.7.4 当前默认行为
+
+当前阶段，系统默认采用最小权限预留策略：
+
+1. 默认不在业务链路中执行复杂权限阻断。
+2. 默认以单租户或基础隔离方式运行。
+3. `UserContext` 当前主要用于日志、Trace 与后续扩展预留。
+4. `filters` 参数当前可保持为空或最小可用状态。
+
+结论：
+
+**当前权限相关设计仅做接口预留，不作为当前主链路复杂度来源。**
+
+### 9.8 当前支撑性链路的总体结论
+
+当前阶段，在线问答主链路之外，只补充以下最小支撑能力：
+
+1. 轻量离线数据入库
+2. 高频 FAQ 缓存拦截
+3. 基础安全拒答边界
+4. 轻量反馈回流落表
+5. 固定提问范式与输入引导
+6. 核心 Prompt 与阈值的配置化管理
+7. 数据隔离与前置过滤权限接口预留
+
+这七类能力的共同目标是：
+
+- 补齐系统闭环
+- 降低重复计算
+- 控制基本风险
+- 降低输入随机性
+- 为后续优化提供真实数据
+
+一句话概括就是：
+
+**当前阶段只补最小必要支撑链路，不引入新的重型架构中心。**
+
+---
+
+## 10. 当前目录与工程组织原则
+
+### 10.1 当前目录组织原则
+
+当前目录结构应围绕主链路，而不是围绕宏大架构概念。
+
+目录组织原则如下：
+
+1. 按当前职责组织
+2. 不为未来预建大量层次
+3. 命名以当前实现为准
+4. 目录数量适度收敛
+
+### 10.2 当前工程组织建议
+
+当前建议围绕以下真实模块组织代码：
+
+- api
+- services
+- retrieval
+- routing
+- storage
+- frontend pages/components
+
+如无真实复杂度，不建议再引入以下人为层次：
+
+- graph orchestration
+- agent runtime
+- unified intent platform
+- knowledge middleware framework wrapper
+
+---
+
+### 10.3 本地开发与 Vibe Coding 体验约束
+
+当前阶段，系统除保证运行时主链路稳定外，还应明确保证最小本地开发体验，降低新成员接入阻力与试错成本。
+
+#### 10.3.1 一秒启动的本地开发体验
+
+当前阶段应支持最小 Demo 模式，保证开发者在无外部服务依赖的条件下快速启动并看到完整闭环。
+
+当前建议至少满足以下要求：
+
+1. 启动脚本或主入口支持 `--demo` 模式。
+2. 开发环境支持 SQLite `:memory:` 或纯文件检索模式。
+3. 启动 Demo 模式时，不要求安装 PostgreSQL、Redis、Docker 或其他外部服务。
+4. 项目内应自带最小 mock 数据，例如 `mock_faq.json`，启动时可自动加载。
+5. 开发者应能在最短路径内完成一次“提问 -> 检索 -> 回答 -> 展示”的闭环。
+
+#### 10.3.2 开发态热重载与即时反馈
+
+当前阶段应尽量减少“改一点配置就必须整服务重启”的挫败感。
+
+当前建议至少满足以下要求：
+
+1. 开发态下，`prompts/` 目录中的 Prompt 文件支持热重载或最小重载机制。
+2. 修改 Prompt 后，不应要求开发者手工重启完整后端服务。
+3. 前端开发服务器应尽量直接代理到本地 Python 后端，避免引入复杂反向代理链路。
+4. 代码或配置变更后的反馈路径应尽量缩短到“保存 -> 刷新 -> 看到结果”。
+
+#### 10.3.3 可视化调试与最小 Debug Overlay
+
+当前阶段应为开发者提供最低限度的可视化调试能力，降低仅靠日志排错的认知负担。
+
+当前建议至少满足以下要求：
+
+1. 前端提供可切换的 Debug 模式。
+2. Debug 模式下可展示最小链路信息，例如：
+   - `normalized_query`
+   - `route_result`
+   - `router_used`
+   - `retrieved_chunks`
+   - `final_prompt`
+   - `fallback_reason`
+3. Debug 信息应服务于开发理解，不要求建设独立调试平台。
+
+#### 10.3.4 可复制的调试上下文
+
+当前阶段建议支持“一键复制当前调试上下文”，用于快速排错与沟通。
+
+建议复制内容包括：
+
+- `trace_id`
+- `normalized_query`
+- `route_result`
+- `router_used`
+- `retrieved_chunks`
+- `final_prompt`
+- `fallback_reason`
+
+#### 10.3.5 一键回到已知可用状态
+
+当前阶段建议提供最小环境重置能力，避免本地缓存、索引、配置残留影响开发判断。
+
+建议至少支持：
+
+1. 清空本地 demo 数据或缓存
+2. 重建最小 mock 数据
+3. 恢复到可运行的默认状态
+
+结论：
+
+**当前阶段的本地开发体验同样属于系统边界的一部分，应保证“易启动、易反馈、易调试、易恢复”，但不扩展为独立开发平台。**
+
+#### 10.3.6 Demo / Dev / Prod 模式边界
+
+为了避免开发便利性能力污染正式运行环境，当前阶段需要明确区分 Demo、Dev 与 Prod 三种模式的默认边界。
+
+当前建议冻结如下：
+
+- **Demo 模式**
+  - 允许自动加载 `mock_faq.json` 或等价 mock 数据
+  - 允许使用 SQLite `:memory:` 或纯文件检索
+  - 允许展示最小调试信息
+  - 目标是最短路径跑通“提问 -> 检索 -> 回答”闭环
+
+- **Dev 模式**
+  - 允许 Prompt 热重载
+  - 允许 Debug Overlay
+  - 允许记录最小调试字段，如 `normalized_query`、`retrieved_chunks`、`final_prompt`
+  - 目标是缩短修改后的反馈路径
+
+- **Prod 模式**
+  - 默认关闭 mock 数据自动加载
+  - 默认关闭 Debug Overlay
+  - 不默认记录完整 `final_prompt`，如需记录应采用脱敏、摘要或显式开关方式
+  - 目标是保证稳定性、最小暴露面与可控运行
+
+结论：
+
+**当前开发便利性能力必须受运行模式约束，不得默认泄漏到正式环境。**
+
+#### 10.3.7 本地最小 Smoke Cases
+  
+  当前阶段建议维护一组极小的本地冒烟样例，用于在修改 Prompt、路由、缓存或检索逻辑后快速验证主链路是否仍可用。
+  
+  当前建议至少覆盖以下场景：
+  
+  1. FAQ 直接命中
+  2. FAQ 缓存命中
+  3. 路由低置信度进入 fallback
+  4. 基础安全拒答
+  5. 检索弱命中后拒答或 fallback
+  6. 固定提问范式输入命中标准问答路径
+  
+  当前阶段不要求建设正式 benchmark 平台，但要求开发者在关键修改后能通过最小样例集快速判断：
+  
+  - 主链路是否还能跑通
+  - 行为是否出现明显退化
+  - 配置修改是否产生非预期影响
+  
+  当前阶段建议将本地 Smoke Cases 控制在少量核心样例范围内，优先覆盖：
+  
+  - 主链路可用性
+  - 基础安全拒答
+  - 路由 fallback
+  - 检索弱命中边界
+  - 固定提问范式命中
+  
+  当前阶段不要求把 Smoke Cases 扩展为完整测试矩阵，也不要求覆盖所有边缘输入。
+  
+  其目标是提供最小回归保护，而不是替代正式测试体系。
+
+结论：
+
+**当前本地 Smoke Cases 只作为最小回归保护带，不扩展为重型测试平台。**
+
+#### 10.3.8 Debug 信息隔离与会话无状态边界
+
+当前阶段在提供开发便利性时，必须同时保证调试信息隔离与后端无状态边界清晰。
+
+##### （1）Debug 信息隔离
+
+所有调试信息应通过独立的 `debug_info` 字段下发，而不与标准回答字段混合。
+
+当前阶段要求：
+
+1. Demo / Dev 模式下，允许下发最小调试信息，例如 `normalized_query`、`retrieved_chunks`、`final_prompt`、`fallback_reason`。
+2. Prod 模式下，后端 API 层必须默认物理剔除 `debug_info`，而不是仅在前端隐藏。
+3. 如确需在非开发环境中保留部分调试能力，应采用显式开关、脱敏或摘要方式处理。
+
+##### （2）会话无状态边界
+
+当前阶段虽然允许存在 `session_id` 与请求记录，但后端默认保持无状态处理，不自动将历史对话注入路由层与检索层。
+
+当前阶段要求：
+
+1. 路由层与检索层默认只处理当前请求输入。
+2. 不自动拼接历史多轮对话，不引入隐式短期记忆。
+3. 如需支持极简多轮，应由前端显式将必要上下文拼接到 `raw_query`，后端仍保持当前主链路无状态。
+
+结论：
+
+**当前阶段既要保证开发态调试体验，也要保证正式环境中的调试信息最小暴露；同时，后端默认保持无状态，以维持薄路由与轻检索架构的稳定性。**
+
+## 11. 后续允许升级设计的触发条件
+
+当前阶段不主动升级架构。只有在以下条件真实出现时，才考虑进入下一轮设计：
+
+### 11.1 考虑引入图执行框架的触发条件
+
+只有当以下情况明确出现时，才重新评估 LangGraph 或类似方案：
+
+1. 出现真实多分支长链路业务流程
+2. 明确需要状态持久化与恢复
+3. 明确需要人工审核插点
+4. 明确需要跨多个工具的稳定编排
+5. 普通服务调用链已无法维持可维护性
+
+### 11.2 考虑引入知识框架的触发条件
+
+只有当以下情况明确出现时，才重新评估 LlamaIndex 或类似方案：
+
+1. 文档来源快速增多
+2. 检索类型显著复杂化
+3. 节点组织、引用组织需求显著上升
+4. 自研轻量检索维护成本显著高于引入框架成本
+
+### 11.3 考虑升级意图层的触发条件
+
+只有当以下情况明确出现时，才重新评估更强的意图解析层：
+
+1. FAQ 之外出现第二个稳定业务场景
+2. 需要在多个明确场景间做稳定路由
+3. 当前规则 + 轻模型分类已明显不足
+4. 已具备更强模型或稳定外部推理能力
+5. 当前系统确实需要更强决策层，而不是想象中的未来扩展
+
+---
+
+## 12. 当前阶段结论
+
+当前阶段，OrionStack 的正确设计方向不是继续增加框架层，而是继续收缩系统复杂度。
+
+当前阶段的核心结论如下：
+
+1. 系统聚焦 FAQ / 业务知识问答单一主场景
+2. 主链路固定为“提问 -> 路由判断（薄） -> 检索 -> 回答 -> 返回”
+3. 当前不引入 LangGraph
+4. 当前不引入 LlamaIndex
+5. 当前不建设重型统一意图层
+6. 当前小模型只承担简单分类或回答生成职责
+7. 当前只保留最小必要接口边界
+8. 当前系统优先目标是稳定、可控、易维护
+9. 当前系统除保证运行时主链路稳定外，也应保证本地开发体验低阻力、可快速反馈、可最小可视化调试。
+
+一句话总结就是：
+
+**先把当前问答主链路做薄、做稳、做可替换，同时保证本地开发过程可快速启动、可快速反馈、可快速定位问题，不把未来复杂系统的负担提前压到今天的实现里。**
+</file>
+
+<file path="docs/designs/2_system_design.md">
+# OrionStack 第二阶段系统设计 v1
+
+> 状态：**阶段设计基线（待按迭代实现）**  
+> 目标方向：**Elasticsearch 单引擎 Hybrid Retrieval（Lexical + Vector + RRF）**  
+> 使用场景：**FAQ / 业务知识问答主链路的第二阶段升级**  
+> 与 `1_system_design.md` 的关系：`1_system_design.md` 继续作为**当前真实实现基线**；`2_system_design.md` 定义**下一阶段目标链路**，用于指导后续实现替换与接口冻结。
+
+---
+
+## 1. 文档定位
+
+### 1.1 文档目标
+
+本文档用于定义 OrionStack FAQ / 业务知识问答主链路的第二阶段系统设计，目标是将当前“可运行但对自然问法可用性不足”的检索链路，升级为“对自然问法稳定可召回、可证据化、可降级”的目标链路。
+
+### 1.2 与 `1_system_design.md` / `2_system_design.md` 的职责分工
+
+- `1_system_design.md`：当前真实实现基线
+- `2_system_design.md`：下一阶段目标设计基线
+
+本文档不再描述“当前代码已经做到什么”，而是描述“第二阶段应收敛成什么”。
+
+### 1.3 当前阶段问题定义
+
+当前 FAQ 主链路的核心问题不是“效果还可继续优化”，而是**检索可用性尚未成立**。  
+问题本质不是数据缺失，而是：
+
+- 用户自然问法不能稳定进入正确召回链路
+- 规则路由对短问法有硬门效应
+- 词法检索对语义变体与短 query 不够稳
+- FAQ 数据与文档数据仍未统一成同一知识单元体系
+
+因此，第二阶段的目标不是继续扩高频词匹配，而是把主链路切换为：
+
+```text
+用户自然问法
+-> Query Planner
+-> Fast Track / Query Rules / Cache
+-> Elasticsearch Hybrid Retrieval
+-> Rerank + Evidence Extraction
+-> Answer Composer
+-> citations / trace / debug_info
+```
+
+---
+
+## 2. 第二阶段设计目标与非目标
+
+### 2.1 设计目标
+
+第二阶段的目标是：
+
+1. 让用户自然问法可稳定召回正确 FAQ / 文档证据
+2. 让检索同时具备关键词精确命中与语义召回能力
+3. 让最终回答尽量基于证据，而不是自由生成
+4. 让高频、标准、稳定 FAQ 走更短更快的返回路径
+5. 让系统在低置信、证据冲突、模型超时、旧制度命中等场景下，能够可解释地失败
+6. 让链路具备可观测、可回放、可降级、可回滚能力
+
+### 2.2 第二阶段验收核心语句
+
+第二阶段的验收语句收敛为：
+
+**用户用自然语言提问时，系统应优先在当前有效、当前可访问、当前版本正确的知识单元中完成稳定召回；若无法可靠回答，则必须以可解释、可回退、可修复的方式失败。**
+
+### 2.3 当前优先要打通的问法
+
+以下输入必须稳定命中 HR FAQ，而不是 fallback：
+
+- `请假`
+- `怎么请假`
+- `如何请假`
+- `病假材料`
+- `请假进度怎么看`
+
+### 2.4 第二阶段明确不做的内容
+
+第二阶段明确不做：
+
+- Elasticsearch + Milvus 双系统并存
+- 多 Agent 编排
+- 重型 workflow graph
+- 全库人工同义词平台
+- learned fusion 取代默认 RRF
+- 无证据的自由长答案生成
+- 每次请求都跑的重型 self-correction loop
+
+第二阶段只解决一件事：
+
+**用户自然语言提问，系统也能找到，并且找到后能基于证据稳定回答。**
+
+---
+
+## 3. 为什么选择 Elasticsearch 单引擎 Hybrid
+
+第二阶段明确选择：
+
+**Elasticsearch 单引擎实现 Lexical + Vector + RRF**
+
+而不是：
+
+- 继续扩展现有纯规则 + 词法检索
+- Elasticsearch + Milvus 双系统并存
+- 让 LLM 直接绕过检索回答问题
+
+### 3.1 选择理由
+
+#### 理由 A：更符合当前问题本质
+
+当前 FAQ 失败，不是因为系统不会“说”，而是因为系统不会“找”。
+
+例如：
+
+- `请假` 需要召回到“如何申请年假”
+- `病假材料` 需要召回到“病假需要提交什么材料”
+- `请假怎么看` 需要召回到“请假审批进度在哪里查看”
+
+这类映射本质上需要：
+
+- **Lexical**：保住关键词精确命中
+- **Vector**：补足自然问法与 FAQ 题面之间的语义差异
+
+#### 理由 B：避免双系统过重
+
+双系统会带来：
+
+- 两套索引
+- 两套路由与召回
+- 两套运维与同步
+- 额外结果融合复杂度
+
+对当前 FAQ 单场景阶段偏重。
+
+#### 理由 C：便于把可用性、可观测、可回退收在同一引擎侧
+
+使用单引擎更容易统一处理：
+
+- metadata 过滤
+- RRF 融合
+- 向量索引量化
+- health check
+- trace 观测
+- deployment / rollback
+
+---
+
+## 4. 第二阶段目标链路
+
+### 4.1 目标主链路
+
+```text
+用户自然问法
+-> normalize
+-> Query Planner
+-> Fast Track Gate
+   -> exact_match_fast_track
+   -> high_confidence_lexical_fast_track
+   -> small_query_rules_layer
+-> Elasticsearch Hybrid Retrieval
+   -> lexical retrieval
+   -> vector retrieval
+   -> RRF fusion
+-> Rerank + Evidence Extraction
+-> Answer Composer
+-> citations / trace / debug_info
+```
+
+### 4.2 各层职责
+
+#### Normalize
+负责：
+
+- 输入清洗
+- 去除冗余空白
+- 保留用户原始语义
+
+不负责：
+
+- 复杂意图规划
+- 检索改写
+
+#### Query Planner
+负责：
+
+- 意图对齐
+- Domain Hint 输出
+- 多阶改写
+- 词法检索输入提取
+- 向量检索输入扩展
+
+不负责：
+
+- 文档召回
+- 最终回答生成
+
+#### Fast Track Gate
+负责：
+
+- 识别标准题面或极高置信 lexical 命中
+- 命中时跳过昂贵检索与重排
+- 作为本地性能保护层
+
+不负责：
+
+- 替代完整检索链路
+- 处理模糊问法的主召回逻辑
+
+#### Hybrid Retrieval
+负责：
+
+- 同时执行 lexical / vector 检索
+- 做 metadata pre-filter
+- 使用 RRF 融合结果
+- 输出 top-k 候选与原始信号
+
+不负责：
+
+- 最终答案裁决
+- 无证据回答
+
+#### Rerank + Evidence Extraction
+负责：
+
+- 候选重排
+- 最终相关性判定
+- 证据句抽取
+- 低置信与冲突场景识别
+
+不负责：
+
+- 替代检索
+- 无证据生成
+
+#### Answer Composer
+负责：
+
+- 基于证据生成简短稳定回答
+- 返回 citations、trace 关键字段与 debug_info
+- 在需要时进入澄清模式
+
+不负责：
+
+- 自由补全缺失制度
+- 无证据长篇发挥
+
+---
+
+## 5. Query Planner 设计
+
+### 5.1 基本原则
+
+Planner 的目标不是“替用户说得更漂亮”，而是：
+
+**把用户自然语言转换为检索层真正可用、可控、可约束的输入结构。**
+
+对短 query（如 `请假`）尤其重要。
+
+### 5.2 输出契约
+
+```json
+{
+  "normalized_query": "请假",
+  "intent": "faq_qa",
+  "domain_hint": "hr",
+  "semantic_expansions": [
+    "员工休假申请",
+    "请假申请流程",
+    "病假材料与审批"
+  ],
+  "lexical_terms": ["请假", "HR", "流程", "审批", "病假", "年假"],
+  "planner_confidence": 0.86
+}
+```
+
+### 5.3 多阶改写拆分
+
+#### Semantic Expansion
+用途：
+
+- 面向向量检索
+- 扩展短 query 的语义表征
+- 弥补短输入语义稀疏问题
+
+#### Keyword Extraction
+用途：
+
+- 面向 BM25 / lexical retrieval
+- 提取最稳定的检索锚点
+- 保住题面、标题、关键名词的硬命中能力
+
+### 5.4 Planner Guardrails
+
+#### Hard Keyword Locking
+`lexical_terms` 中必须保留原始 query 的核心原子词。
+
+#### Expansion Circuit Breaker
+若出现以下任一情况，应熔断降级：
+
+- 单条 expansion 过长
+- 改写与原 query 偏移过大
+- planner_confidence 明显不足
+- domain_hint 缺失或不稳定
+
+降级后只保留：
+
+- `normalized_query`
+- 原始核心 `lexical_terms`
+- 必要的 `domain_hint`
+
+#### Drift Guard
+若 semantic expansion 越界到明显无关主题，直接丢弃。
+
+#### Domain Anchoring
+当 `domain_hint=hr` 时，扩写不得跳转到无关主题。
+
+### 5.5 Planner 的运行策略
+
+本地弱性能环境下，Planner 默认采用轻量 guardrails，不启用每次请求都跑的 embedding 自校验。  
+只有在以下场景，才允许按需使用在线 LLM API 做更强 Planner：
+
+- 本地模型低置信
+- 高频短 query 多次失败
+- 干扰项样本显示 Planner 漂移严重
+- 当前总预算允许
+
+---
+
+## 6. Fast Track、Query Rules 与缓存
+
+### 6.1 Fast Track 的目标
+
+Fast Track 是性能保护层，不是检索主脑。  
+目标是让标准、稳定、高频 FAQ 在不调用完整重链路时也能快速返回。
+
+### 6.2 exact_match_fast_track
+
+触发条件：
+
+- 标准题面精确命中
+- 或同义词白名单命中 canonical FAQ
+
+结果：
+
+- 直接返回
+- 跳过 vector retrieval
+- 跳过 rerank
+- 视情况跳过 Elastic 请求
+
+### 6.3 high_confidence_lexical_fast_track
+
+触发条件：
+
+- phrase/title 命中极高
+- lexical top1 与 top2 差距显著
+- metadata 过滤后已足够稳定
+
+结果：
+
+- 可跳过 vector retrieval
+- 可按配置决定是否仍做轻量 rerank
+
+### 6.4 Small Query Rules Layer
+
+只针对极少数：
+
+- 高频
+- 业务价值高
+- 语义极短
+- 易跨域误召回
+
+的 query，提供小规模规则层：
+
+- pin 到 canonical FAQ id
+- boost 指定 domain
+- exclude 高噪音域
+- 指定 metadata filter
+
+约束：
+
+- 只维护 10–30 个高风险 query
+- 不扩展为全库规则系统
+- 不替代 Planner + Hybrid 主链路
+
+### 6.5 同义词兜底
+
+Knowledge Unit 入库阶段可为**高频 FAQ 白名单**维护最少量别名：
+
+- `canonical_question_id`
+- `question_aliases`
+
+作用仅限：
+
+- exact match fast track
+- 高频 FAQ 兜底
+
+不扩展成全库人工同义词平台。
+
+### 6.6 缓存击穿防御
+
+高频命中后，应优先走轻量缓存。
+
+推荐缓存 Key：
+
+- `normalized_query`
+- `domain_hint`
+- `access_scope`
+- `doc_version_snapshot`
+
+如有需要，再补：
+
+- `department_scope`
+
+缓存 Value：
+
+- `final_answer`
+- `citations`
+- `top_unit_ids`
+- `trace_digest`
+- `expires_at`
+
+TTL 建议：
+
+- 稳定 FAQ：1–24h
+- 半稳定 FAQ：更短
+- 个体态、状态态问题：默认不缓存最终答案
+
+原则：
+
+**缓存必须与版本快照绑定，否则缓存会放大旧制度问题。**
+
+---
+
+## 7. Unified Knowledge Units 设计
+
+### 7.1 统一知识单元目标
+
+第二阶段必须把 FAQ 与 document chunk 收为同一索引可消费的数据单元。  
+不再长期维持：
+
+- documents / chunks 一套
+- mock FAQ fallback 一套
+
+该统一的前提不是“任意原始文档可直接入库”，而是“任何进入下游索引的内容，最终都必须先被转换为满足最小契约的 Knowledge Unit”。对于复杂原始文档，该转换应通过 ingestion / cleaning adapter 完成。
+
+### 7.2 最小字段结构
+
+每条 Knowledge Unit 至少包含：
+
+- `unit_id`
+- `source_kind`
+- `question`
+- `answer`
+- `body_text`
+- `keywords`
+- `business_domain`
+- `document_type`
+- `source_type`
+- `source_label`
+- `source_locator`
+- `access_scope`
+- `lifecycle_status`
+- `valid_from`
+- `valid_until`
+- `version`
+- `department_scope`
+- `question_aliases`（高频 FAQ 场景可选）
+- `question_vector`
+- `answer_vector`
+
+以上字段由 `2_system_design.md` 统一冻结。`document_ingestion_boundary.md` 只负责定义原始文档如何进入标准化知识输入，不再单独维护字段清单。
+
+### 7.3 时间 / 状态感知
+
+默认检索仅召回：
+
+- `lifecycle_status = active`
+- `valid_from <= now`
+- `valid_until is null OR valid_until >= now`
+
+不显式查询历史制度时，不应让旧制度参与默认召回。
+
+### 7.4 Question / Answer 双向量
+
+FAQ 单元不再只生成一个总向量，而是至少分成：
+
+- `question_vector`
+- `answer_vector`
+
+用途：
+
+- `question_vector`：更适合命中用户问法
+- `answer_vector`：更适合命中细节描述
+
+v1 不采用 preview 的单字段多向量方案，先用两个独立向量字段。
+
+### 7.5 Embedding 维度契约与量化策略
+
+配置层必须冻结：
+
+- `EMBEDDING_MODEL_ID`
+- `EMBEDDING_DIMS`
+- `QUESTION_VECTOR_DIMS`
+- `ANSWER_VECTOR_DIMS`
+- `VECTOR_INDEX_MODE`
+
+原则：
+
+1. 索引字段 dims 必须与 Provider 配置一致
+2. 模型切换前必须通过索引一致性检查
+3. 优先使用 Elasticsearch 原生向量量化与索引能力
+4. 裁维 / Matryoshka 仅在模型明确支持时才开启
+
+### 7.6 老数据迁移与默认值契约
+
+为兼容旧 schema，建议默认值：
+
+- `version`: 缺失时视为 `v1`
+- `valid_from`: 若有 `created_at` 则取其值；否则取统一历史默认值
+- `valid_until`: 缺失时为 `null`
+- `department_scope`: 缺失时视为 `global`
+
+迁移期混跑时必须满足：
+
+- 缺字段时有安全默认语义
+- 缓存键构造能处理旧数据缺少 version
+- clarification / rerank 在元数据缺失时能自动降级
+
+---
+
+## 8. Elasticsearch Hybrid Retrieval 设计
+
+### 8.1 Lexical Retrieval
+
+字段：
+
+- `question`
+- `answer`
+- `keywords`
+- `source_label`
+
+输入：
+
+- `normalized_query`
+- `lexical_terms`
+
+作用：
+
+- 保住关键词、题面、标题的精确命中
+
+### 8.2 Vector Retrieval
+
+字段：
+
+- `question_vector`
+- `answer_vector`
+
+输入来源：
+
+- `normalized_query`
+- `semantic_expansions`
+
+作用：
+
+- 召回自然问法与 FAQ 题面的语义邻近结果
+
+### 8.3 Domain Hint 下沉为检索层硬过滤
+
+`domain_hint` 不能只停留在 Planner 层。  
+当 `planner_confidence` 足够高、且 query 属于目标域时，应在 lexical / vector 检索前做 metadata pre-filter。
+
+硬过滤字段至少包含：
+
+- `business_domain`
+- `access_scope`
+- `lifecycle_status`
+- `source_type`
+- `document_type`
+- `valid_from`
+- `valid_until`
+
+### 8.4 RRF 融合
+
+默认采用：
+
+- `RRF_RANK_CONSTANT = 60`
+- `RRF_RANK_WINDOW_SIZE = 50`
+- `LEXICAL_TOP_N = 50`
+- `VECTOR_TOP_N = 50`
+
+约束：
+
+- 两路 Top-N 数量应一致
+- v1 默认不启用复杂加权融合
+- 后续若需要更细粒度控制，再评估 linear retriever / weighted RRF
+
+### 8.5 保留原始检索信号
+
+传给 reranker 前，必须保留：
+
+- `bm25_score`
+- `vector_score`
+- `lexical_rank`
+- `vector_rank`
+- `rrf_rank`
+
+这些信号用于：
+
+- 排障
+- smoke test
+- “关键词作弊”识别
+- 语义漂移识别
+- rerank 接受判定辅助
+
+---
+
+
+### 8.6 Knowledge Unit 入库、回填与重建流程
+
+为让第二阶段不只是“检索方案”，而成为可执行的索引演进方案，需要明确统一知识单元的入库、历史回填与索引重建流程。
+
+#### 8.6.1 入库流程
+
+新的 FAQ / document chunk 进入系统后，建议按以下顺序处理：
+
+1. 文档接入判断
+2. 对可直接进入链路的输入执行 direct ingest
+3. 对复杂文档执行 ingestion / cleaning adapter
+4. 转换为统一 Knowledge Unit
+5. 补齐最小元数据：
+   - `business_domain`
+   - `access_scope`
+   - `lifecycle_status`
+   - `valid_from`
+   - `valid_until`
+   - `version`
+6. 生成：
+   - `question_vector`
+   - `answer_vector`
+7. 写入 `knowledge_units_v1`
+
+#### 8.6.2 历史 FAQ / 文档的回填流程
+
+对于已存在的 FAQ 种子与历史 document chunk，应支持一次性或批量回填。
+
+建议步骤：
+
+1. 扫描旧 FAQ / chunk 数据源
+2. 映射为统一 Knowledge Unit 结构
+3. 对缺失字段应用默认值契约：
+   - `version = v1`
+   - `valid_until = null`
+   - `department_scope = global`
+4. 批量生成双向量字段
+5. 写入新索引并记录回填批次
+
+#### 8.6.3 增量更新与全量重建的边界
+
+建议区分以下两类操作：
+
+**可增量回填的情况：**
+- 新增 FAQ
+- 新增 document chunk
+- `answer` 文本小幅更新
+- `keywords`、`source_label`、`source_locator` 更新
+
+**建议全量重建的情况：**
+- Embedding 模型更换
+- 向量维度变化
+- `question_vector` / `answer_vector` 生成逻辑变化
+- 重要 tokenizer / normalization 规则变化
+- 索引映射字段变化
+
+#### 8.6.4 与缓存失效的关系
+
+当以下字段发生变化时，应触发相关缓存失效：
+
+- `version`
+- `valid_from`
+- `valid_until`
+- `question`
+- `answer`
+- `question_aliases`
+- `department_scope`
+
+缓存失效至少应影响：
+
+- fast track 缓存
+- 高频短 query 缓存
+- trace 中的 doc version snapshot 校验
+
+#### 8.6.5 最小约束
+
+1. 任何可被检索的 FAQ / chunk，最终都应能映射到统一 Knowledge Unit
+2. 新旧 schema 混跑时，缺失字段必须有安全默认语义
+3. 索引重建必须先于默认链路切换
+4. 任何影响向量语义空间的变更，都不得仅做局部热更新
+
+## 9. Rerank、Evidence Extraction 与 Clarification Mode
+
+### 9.1 Rerank 的职责
+
+Reranker 的职责不是“写得更好”，而是：
+
+- 候选重排
+- 接受 / 拒绝判定
+- 证据句抽取
+- 低置信与冲突识别
+
+### 9.2 接受阈值与分差判定
+
+建议配置：
+
+- `RERANK_ACCEPT_THRESHOLD`
+- `RERANK_MARGIN_THRESHOLD`
+
+最小接受条件：
+
+- `top1_score >= accept_threshold`
+- `top1_score - top2_score >= margin_threshold`
+- `top1` 存在有效 `evidence_spans`
+
+否则直接 fallback。
+
+### 9.3 Evidence Extraction
+
+输出至少包含：
+
+- `rerank_score`
+- `evidence_spans`
+- `evidence_confidence`
+- `accept` / `reject`
+
+原则：
+
+**无明确证据，不进入 Answer Composer。**
+
+### 9.4 冲突证据识别
+
+当以下条件同时成立时，应标记冲突：
+
+1. `top1_score >= accept_threshold`
+2. `top2_score >= accept_threshold`
+3. `top1_score - top2_score < margin_threshold`
+4. 检测到以下任一冲突：
+   - `version` 冲突
+   - `department_scope` 冲突
+   - `evidence_spans` 语义冲突
+
+### 9.5 Clarification Mode
+
+Clarification Mode 不是默认对话分支，而是**冲突化解器**。
+
+只在高分 + 低分差 + 冲突证据同时成立时触发。  
+典型反问示例：
+
+- “您是想了解当前生效的请假制度，还是历史版本规定？”
+- “您是想了解研发部的请假规定，还是销售部的请假规定？”
+
+建议新增输出字段：
+
+- `conflict_detected`
+- `conflict_reason`
+- `clarification_required`
+
+---
+
+## 10. Answer Composer 与失败类型
+
+### 10.1 Answer Composer 的职责
+
+- 基于 top1 / topN 证据输出简短回答
+- 返回 citation 与 source_locator
+- 控制风格稳定、短、可引用
+- 遇到冲突时进入 clarification_mode
+- 遇到无证据时保守 fallback
+
+### 10.2 Fallback 子类型
+
+响应契约建议补充：
+
+- `fallback_reason`
+- `clarification_required`
+- `stale_policy_blocked`
+- `low_confidence_retrieval`
+- `conflict_detected`
+- `model_timeout`
+- `cache_served`
+
+建议的失败子类型最小集合：
+
+- `no_evidence`
+- `low_confidence`
+- `stale_policy_blocked`
+- `conflict_requires_clarification`
+- `model_timeout`
+- `system_degraded`
+
+原则：
+
+**Fallback 不是单一状态，而是用户可感知的失败类型集合。**
+
+### 10.3 实施顺序与切换路径表
+
+为避免第二阶段改造一次性切换过多组件，本阶段改造应按“先并行、再灰度、后替换”的顺序推进。
+
+#### Step 1：统一知识单元入库，不切默认链路
+
+目标：
+
+- 新增 `knowledge_unit_repo`
+- 将 FAQ 单元与 document chunk 统一转换为 `knowledge_units_v1`
+- 补齐最小字段：
+  - `unit_id`
+  - `source_kind`
+  - `question`
+  - `answer`
+  - `business_domain`
+  - `access_scope`
+  - `lifecycle_status`
+  - `valid_from`
+  - `valid_until`
+  - `version`
+
+约束：
+
+- 当前默认问答链路保持不变
+- 只建立并验证新索引，不替换线上主检索
+- 复杂原始文档的接入判断与清洗不在本 Step 1 的字段清单内展开，统一以 `document_ingestion_boundary.md` 为准。
+
+#### Step 2：先接 Elasticsearch lexical-only，作为过渡检索层
+
+目标：
+
+- 先用 Elastic full-text / BM25 承接当前 lexical 检索
+- 保留 `retriever.py` 作为回退路径
+- 验证：
+  - FAQ 标题命中
+  - 高置信 lexical fast track
+  - metadata pre-filter 是否正常工作
+
+约束：
+
+- 此阶段不强制启用向量检索
+- 重点先确认索引结构、filter 与 fast track 的稳定性
+
+#### Step 3：接入 vector retrieval + RRF，但默认只灰度少量 Query
+
+目标：
+
+- 引入 `question_vector` / `answer_vector`
+- 打通 lexical + vector + RRF
+- 先对少量高频 query 灰度：
+  - `请假`
+  - `病假材料`
+  - `工资条`
+  - `调休`
+
+约束：
+
+- 默认仍允许回退到 lexical-only
+- 不在此阶段直接放开全部 query
+
+#### Step 4：引入 rerank + evidence extraction
+
+目标：
+
+- 增加 `rerank_score`
+- 增加 `evidence_spans`
+- 启用 `RERANK_ACCEPT_THRESHOLD`
+- 启用 `RERANK_MARGIN_THRESHOLD`
+
+约束：
+
+- 无明确证据时直接 fallback
+- 此阶段仍可关闭 Answer Composer，仅返回模板化答案 + citations
+
+#### Step 5：最后接入 Clarification Mode 与按需 API fallback
+
+目标：
+
+- 仅在高分、低分差、冲突证据同时成立时开启 Clarification Mode
+- 仅在本地队列繁忙、低置信 query 或预算允许时启用在线 API
+
+约束：
+
+- Clarification Mode 不作为默认分支
+- API fallback 不得成为所有 query 的固定前置步骤
+
+#### 默认切换原则
+
+1. 先完成数据统一，再切检索
+2. 先完成 lexical-only，再切 hybrid
+3. 先完成 hybrid，再启用 rerank
+4. 先完成 rerank，再启用 clarification / API fallback
+5. 任一阶段不稳定时，按降级路径退回上一层稳定链路
+
+---
+
+
+
+## 11. LLM / Provider / 延迟预算
+
+### 11.1 LLM 的定位
+
+LLM 在第二阶段中的职责不是“直接替代 FAQ”，而是：
+
+- Query Planner
+- 条件触发的 Rerank
+- 条件触发的 Answer Composer
+
+### 11.2 本地优先、按需接 API
+
+默认策略：
+
+- 本地 LLM：Gemma 3 4B（第一轮主实现）
+- 在线 LLM API：仅在本地队列繁忙、低置信 query、或需要更强 Planner / Rerank 时启用
+
+### 11.3 Provider 抽象
+
+统一抽象：
+
+- `QueryPlannerProvider`
+- `EmbeddingProvider`
+- `RerankProvider`
+- `AnswerComposerProvider`
+
+业务链路只依赖接口，不绑定模型来源。
+
+### 11.4 延迟预算与降级表
+
+默认执行顺序：
+
+```text
+exact_match_fast_track
+-> high_confidence_lexical_fast_track
+-> hybrid retrieval
+-> local rerank
+-> local answer composer
+-> online API rerank / composer（仅按需）
+-> fallback
+```
+
+原则：
+
+1. 标准题面命中优先直接返回
+2. 高置信 lexical 命中优先跳过 vector / rerank
+3. 本地队列繁忙或预算不足时，跳过本地 composer
+4. 在线 API 只作为按需增强位
+5. 超过总预算仍不确定时，直接 fallback
+
+---
+
+## 12. 可观测性、测试与回归
+
+### 12.1 Hybrid Smoke Test Set
+
+必须包含：
+
+- 目标命中样本：`请假`、`怎么请假`、`病假材料`
+- 干扰项样本：同词异域、标题强匹配但正文无证据、跨域强 lexical 噪音
+- 近义但无证据样本
+
+必须记录：
+
+- lexical top-k
+- vector top-k
+- RRF top-k
+- rerank top-k
+- evidence_spans
+- 各阶段 domain 分布
+
+### 12.2 Retrieval Trace 契约
+
+每次请求建议最少记录：
+
+- `trace_id`
+- `raw_query`
+- `normalized_query`
+- `intent`
+- `domain_hint`
+- `semantic_expansions`
+- `lexical_terms`
+- `filters`
+- `lexical_hits`
+- `vector_hits`
+- `rrf_hits`
+- `rerank_result`
+- `evidence_spans`
+- `final_status`
+
+原则：
+
+**没有可回放 trace，后续调参与坏例复盘都不可靠。**
+
+### 12.3 负反馈回流为硬样本池
+
+以下请求应进入 `hard_cases`：
+
+- 用户点击“无帮助 / 不准确”
+- 进入 clarification_mode
+- 被 stale_policy_blocked 拦截
+- 高频 query 走降级路径仍失败
+
+样本池最少字段：
+
+- `trace_id`
+- `raw_query`
+- `normalized_query`
+- `domain_hint`
+- `fallback_reason`
+- `top_candidates`
+- `evidence_spans`
+- `user_feedback`
+- `created_at`
+
+原则：
+
+**用户负反馈不是运营数据，而是下一轮检索改造的硬样本。**
+
+---
+
+
+### 12.4 最小观测指标定义
+
+除功能验收外，`2_system_design.md` 对应方案还应冻结一组最小观测指标，用于判断链路是否真的变得更可用、更稳定，而不是只凭体感判断。
+
+#### 指标 1：fast_track_hit_rate
+
+定义：
+
+- 进入 `exact_match_fast_track` 或 `high_confidence_lexical_fast_track` 并直接返回的请求占比
+
+用途：
+
+- 评估标准 FAQ / 高频短 query 是否被更短路径正确承接
+- 评估是否减少了不必要的向量检索与 LLM 调用
+
+#### 指标 2：hybrid_retrieval_success_rate
+
+定义：
+
+- 进入 Hybrid Retrieval 后，top-k 中至少包含一个正确目标 Knowledge Unit 的占比
+
+用途：
+
+- 评估 lexical + vector + RRF 是否真的提升了召回
+- 区分“检索没找到”和“后续 rerank/composer 出问题”
+
+#### 指标 3：rerank_accept_rate
+
+定义：
+
+- 进入 rerank 后，最终满足 `accept_threshold` 且存在 `evidence_spans` 的请求占比
+
+用途：
+
+- 评估 rerank 是否在有效去噪
+- 评估 evidence extraction 是否足够稳定
+
+#### 指标 4：clarification_trigger_rate
+
+定义：
+
+- 触发 `clarification_mode` 的请求占比
+
+用途：
+
+- 监控澄清模式是否过度触发
+- 若触发率异常升高，应优先检查：
+  - version 冲突
+  - department_scope 冲突
+  - rerank 分差阈值设置过严
+
+#### 指标 5：stale_policy_block_rate
+
+定义：
+
+- 因 `valid_from / valid_until` 时间窗口过滤而被阻断的请求占比
+
+用途：
+
+- 监控是否存在旧制度误召回风险
+- 监控知识单元的时间字段是否缺失或迁移不完整
+
+#### 指标 6：fallback_rate_by_reason
+
+定义：
+
+- 按 `fallback_reason` 维度统计的失败占比
+
+建议至少拆分：
+
+- `no_evidence`
+- `low_confidence`
+- `stale_policy_blocked`
+- `conflict_requires_clarification`
+- `model_timeout`
+- `system_degraded`
+
+#### 使用原则
+
+1. 所有指标必须可按 `trace_id` 回放
+2. 指标异常时，应优先定位到具体层：
+   - fast track
+   - hybrid retrieval
+   - rerank
+   - composer
+3. 指标用于决定是否继续放量，不作为单次请求正确性的唯一依据
+
+## 13. 冷启动、健康检查、发布与回滚
+
+### 13.1 索引健康检查
+
+建议新增：
+
+- `backend/app/indexing/index_health_checker.py`
+
+职责：
+
+1. 检查索引是否存在
+2. 检查 `question_vector` / `answer_vector` dims 是否与当前配置一致
+3. 检查文本、keyword、alias、metadata 字段是否齐全
+4. 执行最小联通性请求，验证 Hybrid + RRF 查询路径可用
+
+### 13.2 发布前门槛
+
+切换默认链路前，至少满足：
+
+- smoke set 通过率达到预设下限
+- `hard_cases` 通过率不低于上一版
+- 高频 FAQ 不出现明显回归
+- 时间过滤与缓存版本快照校验通过
+
+### 13.3 回滚触发条件
+
+满足任一情况，建议立即回滚：
+
+- 高频 query fallback 比例显著上升
+- `stale_policy_blocked` 异常飙升
+- `model_timeout` / API 超时持续超预算
+- `hard_cases` 通过率显著下降
+- clarification mode 触发率异常升高且用户放弃率增加
+
+### 13.4 降级路径
+
+从重到轻建议为：
+
+1. `local_llm + hybrid + rerank`
+2. `hybrid + rerank`
+3. `hybrid without llm_composer`
+4. `high_confidence_lexical_fast_track`
+5. `exact_match_fast_track`
+6. `safe fallback`
+
+原则：
+
+**链路不稳时，应优先退回更短路径，而不是硬撑到完全不可用。**
+
+---
+
+
+### 13.5 敏感边界与日志脱敏
+
+当前 `2_system_design.md` 对应方案主要服务于 FAQ / 业务知识问答主链路，其中 HR FAQ 是首批重点场景之一。
+因此，除检索可用性外，还必须补齐最小的敏感边界与日志脱敏约束。
+
+#### 13.5.1 边界原则
+
+本方案用于：
+
+- 企业内部 FAQ / 制度问答
+- 对公开或内部可访问制度内容进行检索与解释
+- 返回可引用、可回源的制度答案
+
+本方案不用于：
+
+- 输出个人敏感人事数据
+- 替代正式审批系统
+- 处理员工编号、手机号、身份证号等身份识别型查询
+- 绕过 `access_scope` 返回越权内容
+
+#### 13.5.2 FAQ 主链路的最小敏感拦截
+
+对于包含以下内容的 query，默认不进入 FAQ 主链路：
+
+- 身份证号
+- 手机号
+- 银行卡号
+- 员工编号
+- 明显个人隐私字段
+
+这些请求应：
+
+- 直接拒绝进入 FAQ 检索链路
+- 或进入单独的受控业务系统
+- 不落入 `hard_cases` 的原文样本池
+
+#### 13.5.3 Trace 与日志脱敏原则
+
+`raw_query`、`Retrieval Trace`、`hard_cases`、反馈记录默认遵循以下约束：
+
+1. 不记录可直接识别个人身份的完整字段
+2. 必要时仅保留脱敏片段或哈希摘要
+3. `trace_digest` 优先替代长原文落盘
+4. `evidence_spans` 仅保留制度证据，不保留用户隐私原文
+
+#### 13.5.4 access_scope 的最小职责
+
+`access_scope` 当前不是完整权限系统，但至少承担以下职责：
+
+- 防止跨访问范围的 FAQ / 制度内容被误召回
+- 防止高敏感知识单元进入默认 FAQ 主链路
+- 为后续更严格权限控制预留 metadata 基础
+
+#### 13.5.5 最小约束
+
+1. FAQ 主链路优先回答“制度问题”，而不是“个人数据问题”
+2. 日志、trace、样本池优先保留问题模式，不保留完整个人身份信息
+3. 若 query 同时包含制度问答与个人敏感信息，优先按敏感拦截处理
+
+## 14. 配置草案
+
+```text
+ORIONSTACK_QUERY_PLANNER_PROVIDER=local_ollama
+ORIONSTACK_QUERY_PLANNER_MODEL=gemma3:4b
+
+ORIONSTACK_RERANK_PROVIDER=local_ollama
+ORIONSTACK_RERANK_MODEL=gemma3:4b
+
+ORIONSTACK_ANSWER_PROVIDER=local_ollama
+ORIONSTACK_ANSWER_MODEL=gemma3:4b
+
+ORIONSTACK_EMBEDDING_PROVIDER=local
+ORIONSTACK_EMBEDDING_MODEL=bge-small-zh-v1.5
+ORIONSTACK_EMBEDDING_DIMS=768
+ORIONSTACK_QUESTION_VECTOR_DIMS=768
+ORIONSTACK_ANSWER_VECTOR_DIMS=768
+ORIONSTACK_VECTOR_INDEX_MODE=elastic_native_quantized
+ORIONSTACK_ENABLE_MATRYOSHKA=false
+
+ORIONSTACK_SEARCH_BACKEND=elasticsearch
+ORIONSTACK_ELASTIC_INDEX=knowledge_units_v1
+ORIONSTACK_ELASTIC_ENABLE_RRF=true
+
+ORIONSTACK_ENABLE_FAST_TRACK=true
+ORIONSTACK_EXACT_MATCH_FAST_TRACK=true
+ORIONSTACK_HIGH_CONFIDENCE_LEXICAL_FAST_TRACK=true
+ORIONSTACK_FAST_TRACK_SYNONYM_MATCH=true
+
+ORIONSTACK_PLANNER_HARD_KEYWORD_LOCKING=true
+ORIONSTACK_PLANNER_ENABLE_CIRCUIT_BREAKER=true
+ORIONSTACK_PLANNER_MAX_SEMANTIC_EXPANSION_CHARS=50
+ORIONSTACK_PLANNER_ENABLE_DRIFT_GUARD=true
+ORIONSTACK_PLANNER_ENABLE_DOMAIN_ANCHORING=true
+ORIONSTACK_PLANNER_ENABLE_EMBEDDING_SELF_CHECK=false
+
+ORIONSTACK_RRF_RANK_CONSTANT=60
+ORIONSTACK_RRF_RANK_WINDOW_SIZE=50
+ORIONSTACK_LEXICAL_TOP_N=50
+ORIONSTACK_VECTOR_TOP_N=50
+
+ORIONSTACK_ENABLE_API_FALLBACK=false
+ORIONSTACK_API_FALLBACK_ON_LOCAL_QUEUE_BUSY=true
+ORIONSTACK_API_FALLBACK_ON_LOW_CONFIDENCE=true
+ORIONSTACK_RERANK_ACCEPT_THRESHOLD=0.60
+ORIONSTACK_RERANK_MARGIN_THRESHOLD=0.05
+
+ORIONSTACK_ENABLE_SMOKE_TEST_LOG=true
+ORIONSTACK_ENABLE_INDEX_HEALTH_CHECK=true
+```
+
+说明：
+
+- 阈值先作占位，后续以测试集结果冻结
+- dims 与 index mode 可先作为索引契约冻结
+- 量化实现优先依赖 Elasticsearch 原生能力
+- 本地/API 切换条件仍允许按阶段迭代
+
+---
+
+## 15. 第一轮实现优先级
+
+### P1：Query Planner 最小可用
+- `normalized_query`
+- `domain_hint`
+- `semantic_expansions`
+- `lexical_terms`
+- 基础 guardrails
+
+### P2：Knowledge Units + Elastic Hybrid
+- FAQ / chunk 统一入库
+- lexical + vector 双路检索
+- metadata 过滤
+- RRF 融合
+
+### P3：Fast Track + 高风险 Query 规则层
+- 标准题面命中
+- 高频 FAQ 别名白名单
+- 小规模 query rules
+
+### P4：Rerank + Evidence Extraction
+- accept threshold
+- margin threshold
+- evidence_spans
+- conflict_detected
+
+### P5：Trace / Hard Cases / Rollback
+- retrieval trace
+- smoke test
+- hard_cases
+- 发布与回滚门槛
+
+---
+
+## 16. 第一轮验收标准
+
+以下输入必须通过：
+
+- `请假`
+- `怎么请假`
+- `如何请假`
+- `病假材料`
+- `请假进度怎么看`
+
+要求：
+
+1. 不返回 fallback（除确实无证据）
+2. 能稳定命中正确 HR FAQ 单元
+3. citation 返回 `HR FAQ` 与 `hr_faq_seed_v1#...`
+4. debug_info 至少包含：
+   - planner 输出
+   - fast track 命中情况
+   - lexical top-k
+   - vector top-k
+   - RRF 合并结果
+   - rerank top-k
+   - evidence_spans
+   - top1/top2 分差
+   - 最终命中 unit
+5. 干扰项测试中，domain 过滤必须能抑制明显跨域误召回
+
+---
+
+## 17. 实施边界总结
+
+第二阶段设计收敛为：
+
+**Elasticsearch 单引擎 Hybrid Retrieval（Lexical + Vector + RRF）+ Query Planner + Fast Track + Evidence-based Answering**
+
+同时补齐：
+
+- Planner guardrails
+- 高风险 query 白名单兜底
+- 时间窗口过滤
+- 版本感知缓存
+- 冲突澄清
+- retrieval trace
+- hard cases 回流
+- fallback 子类型
+- 发布 / 回滚 / 降级门槛
+
+这套设计不再是“FAQ 检索改造草案的增补合集”，而是：
+
+**OrionStack FAQ / 业务知识问答第二阶段的目标系统设计基线。**
+</file>
+
+<file path="docs/designs/document_ingestion_boundary.md">
+# OrionStack 文档接入与清洗边界说明 v1
+
+> 状态：边界冻结文档（新增）  
+> 适用范围：`1_system_design.md` + `2_system_design.md`  
+> 文档位置建议：`docs/architecture/document_ingestion_boundary.md`  
+> 关联文档：`1_system_design.md`、`2_system_design.md`
+
+---
+
+## 1. 文档目标
+
+本文档用于明确 OrionStack 在“原始文档进入问答系统之前”所需的最小接入与清洗边界。
+
+本文档只回答以下问题：
+
+1. 哪些输入可以直接进入当前 FAQ / 文档问答主链路
+2. 哪些输入必须先经过文档清洗 / ingestion adapter
+3. 文档清洗层负责什么、不负责什么
+4. `1_system_design.md` 与 `2_system_design.md` 应如何衔接该边界
+
+本文档不承担以下职责：
+
+- 不把 OrionStack 重写为通用文档平台
+- 不把当前主系统改写为重型知识中台
+- 不预埋大而全的多源治理与复杂编排平台
+- 不冻结完整 `Knowledge Unit` 字段契约
+- 不承担字段定义表职责
+- 不讨论与当前主链路无关的远期平台化蓝图
+
+---
+
+## 2. 文档定位
+
+### 2.1 一句话定位
+
+OrionStack 的主系统仍然是 **FAQ / 业务知识问答系统**；  
+`document_ingestion_boundary.md` 只负责定义：
+
+**原始文档如何在进入检索问答主链路前，被判断、接入、清洗，并转换为下游可消费的知识输入。**
+
+### 2.2 与现有系统设计文档的关系
+
+- `1_system_design.md`：继续定义当前问答主链路，不改为通用文档处理平台
+- `2_system_design.md`：继续定义检索升级与 `Knowledge Unit` 统一方案
+- `document_ingestion_boundary.md`：只补齐两者之间此前默认存在、但尚未单独冻结的“文档接入与清洗边界”
+
+### 2.3 当前边界判断
+
+当前系统可以继续保持以下事实不变：
+
+1. 主场景仍是 FAQ / 业务知识问答
+2. 主链路仍是“提问 -> 检索 -> 回答 -> 返回”
+3. 不把当前系统改成大而全平台
+4. 扩展性仍只保留薄接口
+
+但需要补充一条此前未单独冻结的边界：
+
+**当输入超出“FAQ / 简单业务文档 / 结构相对规整文本”范围时，不应直接把原始文档送入检索链路，而应先进入文档清洗 / ingestion adapter。**
+
+---
+
+## 3. 为什么需要单独冻结该边界
+
+当前 `1_system_design.md` 已明确：
+
+- 当前输入对象主要是 FAQ 标准问答对、简单业务文档、结构相对规整的文本内容
+- 当前离线入库链路只做基础解析、简单切块、基础索引构建
+- 当前明确不做复杂版式分析、PDF 表格精准还原、重型数据治理流程与复杂离线任务编排
+
+与此同时，`2_system_design.md` 又要求：
+
+- FAQ 与 document chunk 最终统一映射为同一 `Knowledge Unit`
+- 下游检索、证据抽取、citation、缓存与回滚都依赖该统一输入结构
+
+因此，当前真实缺口并不在问答链路本身，而在于：
+
+**原始文档如何被可靠地转换为下游真正可消费的知识输入。**
+
+---
+
+## 4. 总体边界
+
+### 4.1 总体链路
+
+```text
+原始 FAQ / 原始文档
+-> 文档接入判断
+-> 直接入库
+   或
+-> ingestion / cleaning adapter
+-> 标准化知识输入
+-> 索引构建
+-> FAQ / 文档检索
+-> 回答生成
+```
+
+### 4.2 核心原则
+
+1. 不是所有文档都应直接进入当前主链路
+2. 文档清洗层是上游适配层，不是系统主脑
+3. 下游检索与回答只消费“已被清洗并标准化后的知识输入”
+4. 当前不追求全行业、全格式、全自动通吃
+5. 当前先冻结边界，再决定内部是自建、半人工还是接第三方能力
+
+---
+
+## 5. 输入分级
+
+### 5.1 A 类：可直接进入当前链路的输入
+
+以下输入允许不经过独立清洗服务，直接进入当前轻量离线入库链路：
+
+1. FAQ 标准问答对
+2. Markdown / 纯文本制度文档
+3. 标题层级清晰、正文规整的 Word 导出文本
+4. 已人工整理过的 FAQ 列表或知识条目
+5. 已具备稳定来源定位信息的简单 chunk 数据
+
+判断标准：
+
+- 版式噪音低
+- 字段边界清晰
+- 不依赖复杂表格恢复
+- 不依赖 OCR 才能获取正文
+- 可较低成本保留回源定位
+
+### 5.2 B 类：必须先经过 ingestion / cleaning adapter 的输入
+
+以下输入不应直接进入检索主链路：
+
+1. 扫描件 PDF
+2. 多栏、复杂版式 PDF
+3. 表格为主的制度文档
+4. 页眉页脚、附件、盖章、批注噪音较重的文档
+5. 多版本制度混杂、时效不清的文档
+6. 多来源导出、字段不统一的历史文档集合
+7. 需要补齐访问范围、部门范围、有效期语义的原始材料
+
+判断标准：
+
+- 不做清洗就难以可靠切块
+- 不做清洗就难以保留 citation 回源
+- 不做清洗就难以补齐版本 / 生命周期 / 访问范围
+- 不做清洗就会明显污染检索质量或证据可信度
+
+### 5.3 C 类：当前阶段明确不承诺处理的输入
+
+当前阶段不承诺以下类型可自动稳定接入：
+
+1. 高度依赖视觉理解的复杂图文混排材料
+2. 需要精确恢复跨页表格关系的文档
+3. 大量扫描件 + 手写内容 + 多语混合材料
+4. 需要跨系统长期自动同步治理的异构知识源
+5. 强依赖复杂审批状态或个人态数据拼装的动态文档
+
+结论：
+
+**当前阶段的文档通用性是“弱通用”，不是“任意文档即插即用”。**
+
+---
+
+## 6. ingestion / cleaning adapter 的职责
+
+### 6.1 负责什么
+
+文档清洗 / ingestion adapter 负责：
+
+1. 文档类型识别与接入判断
+2. 基础去噪
+3. 正文抽取
+4. 标题层级与块边界恢复（在可行范围内）
+5. 文档切块
+6. 回源定位信息保留
+7. 最小元数据补齐
+8. FAQ / 文档向下游统一知识输入映射
+9. 为下游索引构建提供稳定输入
+
+### 6.2 不负责什么
+
+文档清洗 / ingestion adapter 不负责：
+
+1. 用户问题理解
+2. Query Planner
+3. 检索召回
+4. Rerank
+5. Answer Composer
+6. 最终回答生成
+7. 独立的工作流编排中心
+8. 通用数据中台治理平台
+
+### 6.3 当前允许的实现方式
+
+当前边界只冻结职责，不冻结具体技术路线。允许包括：
+
+1. 纯规则解析
+2. OCR + 规则清洗
+3. LLM 辅助结构抽取
+4. 第三方文档解析能力接入
+5. 半自动人工校验流程
+
+结论：
+
+**当前阶段先冻结“必须有这一层”，不强制冻结“这一层必须完全自研”。**
+
+---
+
+## 7. AI 在文档清洗中的使用边界
+
+### 7.1 当前允许 AI 加速的环节
+
+AI 可以用于加速以下环节：
+
+1. 版面理解后的结构恢复
+2. 标题与段落层级识别
+3. FAQ 候选问答对抽取
+4. 噪音段落识别
+5. chunk 标题补全
+6. 表格转文字摘要（仅在可接受误差范围内）
+7. 初步业务域 / 文档类型 / 来源类型归类
+
+### 7.2 当前不应把 AI 当作唯一真相来源的环节
+
+以下环节不应只依赖自由生成：
+
+1. 回源定位信息生成
+2. 版本号、有效期、访问范围的关键业务字段确定
+3. 高风险制度条款的最终结构化落盘
+4. 影响 citation 回源能力的关键定位信息
+5. 影响缓存失效与版本快照判断的关键字段
+
+### 7.3 当前原则
+
+AI 可以提升清洗速度，但不能替代关键字段的可追踪性与确定性。
+
+结论：
+
+**当前文档清洗可以利用 AI 快速清洗，但下游依赖的关键元数据仍必须具备确定性、回源能力与可复核性。**
+
+---
+
+## 8. 与 `1_system_design.md` 的衔接方式
+
+### 8.1 不改主定位
+
+`1_system_design.md` 继续保持：
+
+- FAQ / 业务知识问答是唯一主场景
+- 当前主链路仍以问答为中心
+- 当前不做大而全平台化抽象
+
+### 8.2 需要新增的衔接语义
+
+`1_system_design.md` 不需要重写方向，但需要补充一句明确边界：
+
+**当输入超出 FAQ、简单业务文档、结构相对规整文本范围时，原始文档不直接进入当前离线入库链路，而应先由文档清洗 / ingestion adapter 转换为可检索文本与最小回源元数据，再进入下游存储与检索流程。**
+
+### 8.3 当前阶段的实现建议
+
+当前阶段允许：
+
+1. 保持 A 类输入直接入库
+2. 将 B 类输入暂时标记为“需清洗后再接入”
+3. 文档清洗能力可先以人工整理、半自动脚本或外部能力接入方式补齐
+
+结论：
+
+**`1_system_design.md` 只需要补边界，不需要改主系统定位。**
+
+---
+
+## 9. 与 `2_system_design.md` 的衔接方式
+
+### 9.1 需要改写的默认假设
+
+`2_system_design.md` 当前默认写法中，`解析原始输入 -> 转换为统一 Knowledge Unit` 过于压缩。
+
+建议改写为：
+
+```text
+原始 FAQ / 原始文档
+-> 文档接入判断
+-> direct ingest
+   或
+-> ingestion / cleaning adapter
+-> 标准化知识输入映射
+-> 元数据补齐
+-> question / answer 向量生成
+-> 写入 knowledge_units_v1
+```
+
+### 9.2 `2_system_design.md` 的原则
+
+1. Hybrid Retrieval 只处理“已被清洗且已标准化”的知识输入
+2. Query Planner 不承担原始文档理解职责
+3. Rerank / Evidence Extraction 不修复上游脏数据
+4. Citation、版本控制、缓存失效都依赖上游正确输出的回源定位、版本与时效信息
+
+### 9.3 实施顺序建议
+
+在 `2_system_design.md` 的 Step 1 中，应先补齐：
+
+1. 文档接入判断
+2. ingestion / cleaning adapter 接口
+3. 标准化知识输入映射逻辑
+4. 默认值契约
+5. 回填批次记录
+
+而不是默认所有原始文档都能直接被“解析原始输入”一步安全吞掉。
+
+---
+
+## 10. 当前明确不做的内容
+
+当前文档清洗边界说明明确不做：
+
+1. 通用文档平台产品定义
+2. 全行业、全格式、全自动稳定接入承诺
+3. 独立的数据治理中台
+4. 复杂工作流编排与多级审核平台
+5. 对所有扫描件、表格、历史制度自动无误恢复的承诺
+6. 独立的字段定义表与完整 `Knowledge Unit` 契约文档
+
+结论：
+
+**当前阶段卖点应是“把指定范围内的文档清洗成 OrionStack 可消费的知识输入”，而不是宣称“任意文档即插即用”。**
+
+---
+
+## 11. 最终结论
+
+OrionStack 当前不需要改成通用文档产品。
+
+更准确的边界应为：
+
+1. 主系统继续是 FAQ / 业务知识问答系统
+2. 文档清洗 / ingestion adapter 是上游适配层
+3. 弱通用输入直接入库
+4. 复杂文档先清洗再进入下游统一知识输入
+5. 文档清洗层可以半产品化、可服务化、可替换
+
+一句话收敛：
+
+**OrionStack 当前最合理的演进，不是把问答系统改写成通用文档平台，而是在其上游冻结一层“文档接入与清洗边界”，把复杂文档转换为可检索、可引用、可控版本的标准化知识输入，再交给下游问答主链路处理。**
+</file>
+
+<file path="docs/README.md">
+# docs 使用说明
+
+## 1. 文档目标
+
+`/docs` 是当前主仓的正式文档目录。
+
+本目录的目标是：
+
+- 为当前仓提供统一的正式文档入口
+- 统一设计文档、进度文档、文件职责文档的外部命名规则
+- 让人和 AI 都能快速判断：某份文档属于哪条主线、处于哪一层、对应哪份设计
+- 在调整命名规则时，坚持“外部命名与引用先收口，正文主体最小修改”
+
+本文件只约束：
+
+- 文档目录层级
+- 文件命名规则
+- 文档之间的引用关系
+- 文档新增与迁移时的最小修改原则
+
+本文件不承担：
+
+- 具体业务设计说明
+- 实时进度记录
+- 文件职责明细
+- 项目总体定位说明
+
+---
+
+## 2. 最小修改原则
+
+当前阶段如果决定调整文档命名规则，默认只做以下改动：
+
+1. 修改文件名
+2. 修改文档标题
+3. 修改文档开头的定位说明
+4. 修改文档之间的引用名称
+
+默认不做以下动作：
+
+1. 不因改名而重写正文主体
+2. 不因改名而顺手重构章节结构
+3. 不把历史内容整体改写成另一套表达
+4. 不把命名收口任务扩展成文档内容重写任务
+
+一句话原则：
+
+**先收口外部命名与引用，再决定是否需要调整正文；没有必要时，正文不动。**
+
+---
+
+## 3. 文档层级模型
+
+`/docs` 下当前主线文档统一按“顶层设计 / 子层进度 / 子层文件职责”组织。
+
+层级语义固定如下：
+
+- `1`：第 1 条顶层设计主线
+- `1.1`：第 1 条主线对应的进度文档
+- `1.2`：第 1 条主线对应的文件职责文档
+- `2`：第 2 条顶层设计主线
+- `2.1`：第 2 条主线对应的进度文档
+- `2.2`：第 2 条主线对应的文件职责文档
+
+也就是说：
+
+- 顶层设计文档定义“这条线是什么、边界是什么”
+- 进度文档定义“这条线当前做到哪里、下一步是什么”
+- 文件职责文档定义“这条线落到哪些文件、各文件负责什么”
+
+---
+
+## 4. 文件命名规则
+
+### 4.1 命名格式
+
+统一格式：
+
+```text
+<level>_<doc_type>.md
+```
+
+说明：
+
+- `<level>`：层级编号，承担主线分类与排序作用
+- `<doc_type>`：文档类型
+
+### 4.2 层级编号写法
+
+为了避免文件扩展名歧义，文件名前缀不用 `1.1` 直接落地，统一改写为：
+
+- `1`   → `1`
+- `1.1` → `1_1`
+- `1.2` → `1_2`
+- `2`   → `2`
+- `2.1` → `2_1`
+- `2.2` → `2_2`
+
+也就是：
+
+- 逻辑层级写作：`1 / 1.1 / 1.2`
+- 文件名前缀写作：`1 / 1_1 / 1_2`
+
+### 4.3 文档类型固定集合
+
+当前只允许以下类型：
+
+- `system_design`
+- `progress`
+- `file_responsibilities`
+
+### 4.4 不再追加主题后缀
+
+当前规则下：
+
+- 主线区分已经由层级编号承担
+- 排序关系已经由层级编号承担
+- 同层文档职责已经由 `doc_type` 承担
+
+因此，文件名末尾不再追加：
+
+- `_faq`
+- `_retrieval`
+- 其他重复表达主线含义的主题后缀
+
+一句话原则：
+
+**编号负责主线分类与排序，类型负责文档职责；文件名不再重复编码同一层信息。**
+
+### 4.5 不推荐使用的命名词
+
+当前活文档命名中，不推荐继续使用：
+
+- `current`
+- `latest`
+- `final`
+- `new`
+- `integrated`
+- `phase1`
+- `phase2`
+- `p1`
+- `p2`
+- `v1`
+- `v2`
+
+---
+
+## 5. 当前主线文件命名
+
+当前阶段统一按以下方式命名：
+
+```text
+docs/
+├── README.md
+├── 1_system_design.md
+├── 1_1_progress.md
+├── 1_2_file_responsibilities.md
+├── 2_system_design.md
+├── 2_1_progress.md
+└── 2_2_file_responsibilities.md
+```
+
+含义固定为：
+
+- `1_system_design.md`
+  - 第 1 条主线的顶层设计文档
+- `1_1_progress.md`
+  - 第 1 条主线的当前进度与下一步计划
+- `1_2_file_responsibilities.md`
+  - 第 1 条主线对应的文件职责文档
+- `2_system_design.md`
+  - 第 2 条主线的顶层设计文档
+- `2_1_progress.md`
+  - 第 2 条主线的当前进度与下一步计划
+- `2_2_file_responsibilities.md`
+  - 第 2 条主线对应的文件职责文档
+
+主线的具体主题含义，不再放在文件名后缀中重复表达，而应写在：
+
+- 文档标题
+- 文档开头定位说明
+- README 中的主线说明
+
+---
+
+## 6. 各类文档职责边界
+
+### 6.1 `system_design`
+
+负责：
+
+- 这条主线的目标
+- 边界与约束
+- 模块关系
+- 方案选择
+- In Scope / Out of Scope
+
+不负责：
+
+- 逐条记录当前执行状态
+- 承担任务流水账
+- 逐文件变更清单
+
+### 6.2 `progress`
+
+负责：
+
+- 当前执行到哪一步
+- 已完成什么
+- 未完成什么
+- 下一步计划是什么
+- 与顶层设计相比，当前落地差距在哪里
+
+不负责：
+
+- 重复写一遍完整设计
+- 替代文件职责文档
+- 变成杂乱的临时备忘录
+
+### 6.3 `file_responsibilities`
+
+负责：
+
+- 当前主线涉及哪些文件
+- 每个文件在该主线下承担什么职责
+- 哪些文件已落地，哪些文件待落地
+- 哪些文件只允许最小修改
+
+不负责：
+
+- 代替设计文档定义总体方案
+- 代替进度文档记录时间顺序
+- 写成通用排查笔记
+
+---
+
+## 7. 引用规则
+
+### 7.1 顶层设计文档引用
+
+顶层设计文档应优先引用：
+
+- `README.md`
+- `docs/architecture/*`
+- `docs/product/*`
+- `docs/workflows/*`
+
+### 7.2 子层文档引用
+
+`1.1 / 1.2 / 2.1 / 2.2` 这类子层文档应优先引用：
+
+- 对应的顶层设计文档
+- 同主线的兄弟文档
+- 必要的正式架构 / 产品文档
+
+### 7.3 禁止引用
+
+当前主仓文档默认不再引用：
+
+- 已删除路径
+- 临时草稿目录
+- 旧双仓路径
+- 无正式入口的聊天式结论文件
+
+---
+
+## 8. 新增文档规则
+
+新增文档前，先判断它属于哪条主线：
+
+### 属于已有主线
+如果只是补充已有主线，优先落到现有 `1 / 2` 体系下，不新开一条主线。
+
+### 需要新开主线
+只有在主题边界已经明显独立时，才新增：
+
+- `3_system_design.md`
+- `3_1_progress.md`
+- `3_2_file_responsibilities.md`
+
+新主线一旦建立，后续子文档必须按同样层级扩展，不允许随意平铺。
+
+---
+
+## 9. 迁移规则
+
+从旧命名迁移到新命名时，默认步骤如下：
+
+1. 先确定该文档属于哪条主线
+2. 再确定它是 `system_design`、`progress` 还是 `file_responsibilities`
+3. 只修改文件名
+4. 只修改文档标题与开头定位说明
+5. 只修改互相引用的文件名
+6. 正文主体默认不重写
+
+---
+
+## 10. 当前执行结论
+
+当前 `/docs` 目录统一采用：
+
+**层级编号 + 文档类型**
+
+来命名正式文档。
+
+这套规则的核心目的不是“名字好看”，而是：
+
+- 一眼看出主从关系
+- 一眼看出属于哪条主线
+- 一眼看出它是设计、进度还是文件职责
+- 在不重写正文的前提下，先结束命名混乱
+
+一句话总结：
+
+**编号负责主线分类与排序，类型负责文档职责；正文主题放在文档标题与开头说明中表达。**
+</file>
 
 <file path="docs/designs/document_library/domain_finance_library_v1.md">
 # 第一阶段业务域文档库说明：Finance
@@ -2804,4053 +9957,6 @@ docs/
 - 可执行的文档分类基线
 - 可复用的业务域标准
 - 可落地的入库判断依据
-</file>
-
-<file path="docs/designs/system_design_phase2_v1.md">
-
-</file>
-
-<file path="docs/designs/system_design_v1.md">
-# OrionStack 当前阶段系统设计 v1
-
-## 1. 文档说明
-
-### 1.1 文档目标
-
-本文档用于重新定义 OrionStack 当前阶段的真实系统设计边界，作为后续代码实现与文档拆分的唯一基线。
-
-这份文档只回答以下问题：
-
-1. 当前系统到底是什么
-2. 当前阶段到底做什么、不做什么
-3. 当前最小可执行链路是什么
-4. 当前模块边界如何划分
-5. 哪些设计明确暂不采用
-
-本文档不承担以下职责：
-
-- 不描述远期平台化蓝图
-- 不预埋复杂多场景扩展设计
-- 不提前设计多 Agent 编排体系
-- 不为了未来可能性而引入当前无必要复杂度
-
-### 1.2 适用范围
-
-本文档适用于 OrionStack 当前阶段的设计、开发、评审与文档整理。
-
-当前阶段以 **FAQ / 业务知识问答** 为唯一主场景，所有设计均围绕这一主场景收敛。
-
-### 1.3 文档原则
-
-本文档遵循以下原则：
-
-1. 只写当前真实需要落地的设计
-2. 只保留近期会进入代码的边界与结构
-3. 不把未来架构复杂度提前搬入当前系统
-4. 先保证主链路稳定，再讨论扩展性
-5. 扩展性只保留接口位，不保留重型实现
-
----
-
-## 2. 当前系统定位
-
-### 2.1 一句话定位
-
-OrionStack 当前阶段是一个 **面向 FAQ / 业务知识问答场景的轻量应用系统**，目标是用最小复杂度实现稳定的“提问 -> 检索 -> 回答”主链路。
-
-### 2.2 当前系统是什么
-
-当前系统是：
-
-- 一个以问答为核心的业务应用
-- 一个以 FAQ / 文档内容检索为基础的数据驱动系统
-- 一个优先保证稳定性、可控性和低复杂度的实现
-- 一个以轻量路由决策和轻量检索链路为主的系统
-
-### 2.3 当前系统不是什么
-
-当前系统不是：
-
-- 通用企业 AI 平台
-- 多场景统一编排底座
-- 复杂 Agent 运行时
-- 图执行工作流平台
-- 大而全知识中台
-- 统一意图中台
-- 为未来所有场景预留完备抽象的基础设施
-
-### 2.4 当前设计取向
-
-当前阶段的设计取向不是“先做大框架再填业务”，而是：
-
-- 先做最小可用主链路
-- 先做稳定问答结果
-- 先做可控的数据流
-- 先做清晰模块边界
-- 未来确有需要时再逐步替换局部实现
-
----
-
-## 3. 当前阶段范围
-
-### 3.1 当前要做的内容
-
-当前阶段只做以下内容：
-
-1. 接收用户问题
-2. 对请求做轻量路由判断
-3. 执行 FAQ / 文档检索
-4. 基于检索结果生成回答
-5. 返回回答与必要引用信息
-6. 保留最小必要的请求记录与结果记录
-7. 为后续替换局部能力保留最小接口边界
-
-### 3.2 当前明确不做的内容
-
-当前阶段明确不做以下内容：
-
-1. 不做 LangGraph 图执行
-2. 不做复杂流式工作流编排
-3. 不做 LlamaIndex 知识框架接入
-4. 不做重型统一意图层
-5. 不做复杂 JSON 工具规划
-6. 不做多 Agent 协作
-7. 不做复杂工具编排中心
-8. 不做大而全平台化抽象
-9. 不做为未来多场景预埋的大量框架层
-10. 不做脱离当前业务的“中台化”设计
-11. 不做细粒度的行级/文档级权限控制（RBAC/ABAC）与独立的权限管理系统。
-
-### 3.3 当前范围边界的核心判断
-
-当前系统的核心任务只有一个：
-
-**让 FAQ / 业务知识问答主链路稳定可用。**
-
-只要某个设计不能直接提升这条主链路的稳定性、可控性或维护成本表现，就不应在当前阶段进入系统。
-
----
-
-## 4. 核心执行链路
-
-### 4.1 当前主链路
-
-当前系统的最小主链路定义如下：
-
-```text
-用户问题
--> 路由判断（薄）
--> FAQ / 文档检索
--> 回答生成
--> 返回结果
-```
-
-这是当前唯一必须稳定的执行链路。
-
-该链路用于表达当前系统的概念主链路。
-
-在实际运行中，允许在进入主链路前挂接少量前置步骤，例如输入归一化、基础安全校验与 FAQ 缓存匹配，但这些步骤不改变系统的核心执行目标，仍服务于“提问 -> 检索 -> 回答 -> 返回”的主路径。
-
-### 4.2 链路说明
-
-#### 第一步：接收用户问题
-
-系统接收前端传入的问题文本及必要上下文。
-
-当前阶段允许前端通过固定提问范式、示例问题或快捷提问入口，对用户输入做轻量引导与归一化，以降低输入随机性并提升 FAQ / 检索链路命中率。
-
-这类输入引导属于轻量输入约束，不构成复杂意图规划，也不构成独立的对话引导系统。
-
-当前阶段不要求复杂多轮意图规划，不要求工具计划生成，不要求复杂结构化执行计划。
-
-#### 第二步：路由判断（薄）
-
-系统对请求做轻量级判断，只回答以下问题：
-
-1. 当前请求是否属于 FAQ / 知识问答范围
-2. 当前请求是否可以直接进入检索问答链路
-3. 当前请求是否需要进入兜底路径
-
-这一层只做“是否走问答主链路”的判断，不承担复杂规划职责。
-
-#### 第三步：FAQ / 文档检索
-
-系统根据问题文本或轻量改写后的查询词执行检索。
-
-当前阶段允许采用轻量实现，例如：
-
-- SQLite FTS
-- 简单向量检索
-- pgvector
-- 自定义检索服务
-
-检索层的目标是返回足够可用的候选内容，不引入额外框架复杂度。
-
-#### 第四步：回答生成
-
-系统基于检索结果调用模型或模板逻辑生成回答。
-
-当前阶段可使用本地小模型，但必须控制其职责：
-
-- 小模型负责回答生成或简单分类
-- 小模型不负责复杂结构化意图路由
-- 小模型不负责多工具计划生成
-- 小模型不负责高风险复杂决策
-
-#### 第五步补充：最小 citation 返回结构
-
-当前阶段如返回 `citations`，前后端应尽量遵循最小一致结构。
-
-建议单条 citation 至少包含以下字段：
-
-- `citation_id`：引用标识
-- `source_label`：来源展示名称
-- `source_locator`：来源定位信息，例如 `source_url`、`file_path`、`page_number`、`paragraph_id` 或等价定位字段
-- `snippet`：最小引用片段
-
-当前阶段不要求建设复杂引用协议，但必须避免前后端对 citation 结构各自定义，导致展示与跳转能力不一致。
-
-结论：
-
-**当前 citations 除具备回源能力外，也应具备最小一致的返回结构。**
-
-#### 4.2.1 最小对外结果状态
-
-为了避免前端或调用方依赖回答文本自行猜测系统状态，当前阶段建议对外冻结最小结果状态字段，例如：
-
-- `ok`：正常回答
-- `refused`：命中安全边界或明确不能回答
-- `fallback`：未进入标准 FAQ 回答路径，进入统一兜底
-- `system_error`：系统异常或不可恢复错误
-
-当前阶段不要求建设复杂统一错误模型，但建议至少保证调用方能够区分：
-
-1. 正常回答
-2. 安全拒答
-3. 无依据或低置信度兜底
-4. 系统异常
-
-结论：
-
-**当前对外结果至少应具备最小状态分类，避免仅依赖 `answer_text` 承担全部语义。**
-
-### 4.3 关于 Streaming 的当前结论
-
-当前阶段允许保留流式输出能力，但需要明确：
-
-**流式输出只是响应输出方式，不构成引入图执行框架的理由。**
-
-也就是说：
-
-- 可以实现 SSE / 流式 token 输出
-- 但不因此引入 LangGraph 或复杂工作流状态机
-- 流式能力应作为回答生成层的输出能力，而不是系统架构中心
-
----
-
-## 5. 模块划分
-
-### 5.1 模块划分原则
-
-当前阶段模块划分只服务于主链路，不为了宏大架构叙事而增加层次。
-
-模块划分原则如下：
-
-1. 只保留当前必要模块
-2. 模块命名尽量贴近实际职责
-3. 一个模块只解决一类问题
-4. 模块之间通过最小接口连接
-5. 不为了“看起来先进”而过度分层
-
-### 5.2 当前必要模块
-
-#### 5.2.1 前端页面层
-
-职责：
-
-- 接收用户输入
-- 展示回答结果
-- 展示引用信息
-- 提供最小交互页面
-- 提供最小反馈交互（如点赞 / 点踩）
-- 提供固定提问范式、示例问题或快捷提问入口，用于轻量引导用户输入
-- 提供最小 Debug 模式入口，用于开发态展示关键链路信息
-- 支持复制当前调试上下文（如 `trace_id`、`normalized_query`、`retrieved_chunks`、`final_prompt`）
-
-不负责：
-
-- 不负责业务决策
-- 不负责检索逻辑
-- 不负责模型调用
-- 不负责复杂评估体系
-- 不负责复杂对话引导系统或独立表单编排系统
-- 不负责独立调试平台建设
-
-#### 5.2.2 API 层
-
-职责：
-
-- 接收请求
-- 校验输入
-- 调用后端服务
-- 返回同步或流式结果
-- 接收最小反馈请求并写入后端记录
-- 在请求入口生成 `trace_id`，并通过请求上下文在整个调用链中透传
-- 支持开发态 Demo 模式入口与最小调试信息透传
-
-不负责：
-
-- 不负责复杂路由编排
-- 不负责直接实现检索细节
-- 不负责复杂模型策略决策
-- 不负责重型评估平台逻辑
-- 不负责复杂环境编排与多级反向代理链路
-
-当前阶段建议采用轻量方式贯穿 `trace_id`，例如 `contextvars` 或等效机制，以保证即使不引入复杂工作流框架，也能通过同一追踪标识串联输入、路由、检索、生成与反馈记录。
-
-#### 5.2.3 路由决策层
-
-职责：
-
-- 对请求进行轻量判断
-- 给出当前请求的最小路由决定
-- 为检索层提供稳定输入
-
-不负责：
-
-- 不负责复杂意图规划
-- 不负责多工具调度
-- 不负责复杂实体抽取
-- 不负责生成重型执行计划
-
-#### 5.2.4 检索层
-
-职责：
-
-- 接收查询词
-- 执行 FAQ / 文档检索
-- 返回候选内容与必要元数据
-- 为回答生成层提供可消费输入
-
-不负责：
-
-- 不负责前端展示
-- 不负责复杂工作流控制
-- 不负责未来知识平台抽象
-
-#### 5.2.5 回答生成层
-
-职责：
-
-- 基于检索结果生成最终回答
-- 组织最小必要引用信息
-- 输出最终回答内容
-
-不负责：
-
-- 不负责复杂工具编排
-- 不负责图状态管理
-- 不负责复杂意图识别
-
-#### 5.2.6 数据存储层
-
-职责：
-
-- 存储 FAQ / 文档数据
-- 存储必要索引数据
-- 存储最小必要日志或记录
-- 存储最小必要反馈数据
-- 为向量数据或检索索引记录必要版本信息，例如 `embedding_model_version`
-
-不负责：
-
-- 不负责业务控制逻辑
-- 不负责模型推理
-- 不负责路由判断
-
-当前阶段不要求复杂索引治理系统，但必须避免在升级 embedding 模型后继续无感使用旧版本向量，导致检索结果整体失真而难以排查。
-
----
-
-## 6. 关键设计决策
-
-### 6.1 当前不使用 LangGraph
-
-当前阶段不引入 LangGraph。
-
-原因如下：
-
-1. 当前主链路不具备复杂图执行特征
-2. 当前业务不需要多状态持久化流程
-3. 当前没有明确的中断 / 恢复 / 多分支编排需求
-4. 引入图执行框架会显著增加理解成本与维护成本
-5. 当前收益不足以覆盖框架复杂度
-
-结论：
-
-**当前用普通服务调用链即可，不引入图执行工作流框架。**
-
-### 6.2 当前不使用 LlamaIndex
-
-当前阶段不引入 LlamaIndex。
-
-原因如下：
-
-1. 当前 FAQ / 文档问答链路可以由自研轻量检索实现
-2. 当前核心问题不是“知识框架能力不足”，而是“主链路应保持简单可控”
-3. 引入额外知识框架会增加排错路径与抽象负担
-4. 当前检索需求尚不足以支撑引入重型知识框架
-
-结论：
-
-**当前优先采用自研轻量检索链路，而不是引入知识框架。**
-
-### 6.3 当前不建设重型统一意图层
-
-当前阶段不建设重型统一意图层。
-
-原因如下：
-
-1. 当前只有单一主场景，复杂统一路由收益不足
-2. 当前 1B/8B 小模型不适合承担复杂结构化意图规划
-3. 小模型输出复杂 JSON 路由计划不稳定，容易使系统脆弱
-4. 当前系统需要的是“薄决策”，不是“意图中台”
-
-结论：
-
-**当前只保留轻量路由决策接口，不建设重型统一意图层。**
-
-### 6.4 当前不让小模型承担复杂规划职责
-
-当前阶段，小模型只承担以下职责之一：
-
-- 简单分类
-- 简单回答生成
-- 简单查询改写
-
-当前阶段，小模型不承担以下职责：
-
-- 复杂 JSON 路由输出
-- 多工具计划生成
-- 稳定实体抽取总控
-- 复杂执行计划生成
-- 系统级核心编排职责
-
-结论：
-
-**小模型只做其稳定擅长的事，不承担系统中最脆弱、最关键的复杂控制职责。**
-
-### 6.5 当前只保留薄接口，不保留重型未来实现
-
-当前阶段允许为未来预留接口位，但不允许把未来完整架构提前引入当前系统。
-
-可以保留：
-
-- 可替换的路由接口
-- 可替换的检索实现
-- 可替换的模型调用实现
-
-不保留：
-
-- 未来完整统一中台实现
-- 多层复杂抽象骨架
-- 不进入当前代码的重型设计
-
----
-
-## 7. 最小接口边界
-
-### 7.1 设计目标
-
-最小接口边界的目标不是追求“完美架构”，而是实现：
-
-1. 当前代码足够简单
-2. 当前模块足够解耦
-3. 未来局部替换不推翻主链路
-
-### 7.2 当前路由决策对象
-
-当前建议仅保留最小决策对象，例如：
-
-```python
-from pydantic import BaseModel
-from typing import Literal
-
-class IntentDecision(BaseModel):
-    route: Literal["faq_qa", "fallback"]
-    confidence: float
-    query_for_search: str
-```
-
-### 7.3 当前路由层输入输出边界
-
-输入：
-
-- 用户原始问题
-- 请求级最小上下文（可选，仅供路由协调层使用）
-
-说明：
-
-- 路由协调层可接收请求级最小上下文。
-- 具体 Parser 的输入约束以 7.6.1 为准，不得私自扩大依赖范围。
-
-输出：
-
-- 当前请求走哪条最小路径
-- 一个可供检索使用的查询词
-- 一个可供兜底判断的置信度
-
-路由层不输出：
-
-- 复杂工具计划
-- 多级任务图
-- 长 JSON 结构
-- 下游执行细节
-
-### 7.4 检索层输入输出边界
-
-输入：
-
-- query_for_search
-- 可选过滤条件
-
-输出：
-
-- 命中的 FAQ / 文档内容
-- 最小必要元数据
-- 可供回答生成层消费的候选结果
-
-检索层不关心：
-
-- 请求来自哪个解析器
-- 是否未来会接更强模型
-- 是否未来会接复杂工作流
-
-### 7.5 回答生成层输入输出边界
-
-输入：
-
-- 用户问题
-- 检索结果
-
-输出：
-
-- answer
-- citations（如有）
-- 最小元信息
-
-回答生成层不关心：
-
-- 当前路由是规则做的还是模型做的
-- 未来是否会切换高级解析器
-- 是否接入复杂工具系统
-
-### 7.6 路由解析器输入输出契约
-
-为了保证当前薄路由层未来可以平滑替换内部实现，所有路由解析器必须遵循统一的输入输出契约。
-
-#### 7.6.1 输入契约
-
-当前阶段，Parser 只允许依赖最小输入：
-
-- `raw_query`
-- 固定路由说明文本（可选）
-
-当前阶段不允许 Parser 私自依赖以下输入：
-
-- 多轮历史对话
-- 复杂 session state
-- 检索结果预读
-- 外部工具返回值
-- 特定实现私有上下文
-
-结论：
-
-**当前 Parser 输入必须保持最小化与标准化，避免未来不同 Parser 之间产生上下文依赖不一致。**
-
-#### 7.6.2 输出契约
-
-无论当前使用规则、1B/8B 小模型，还是未来更强模型，Parser 对外都必须统一输出 `IntentDecision`：
-
-```python
-from pydantic import BaseModel
-from typing import Literal
-
-class IntentDecision(BaseModel):
-    route: Literal["faq_qa", "fallback"]
-    confidence: float
-    query_for_search: str
-```
-输出约束如下：
-
-route 只能使用固定枚举值
-confidence 对外统一映射到 0.0 - 1.0 区间，但当前阶段不要求其具备严格数学概率意义
-confidence 允许来源于规则映射、模型分类结果或等级映射，其作用是支持路由比较、阈值判断与观测分析
-query_for_search 必须始终为字符串
-不允许输出额外结构化计划对象作为下游依赖
-
-当前阶段允许将内部路由判断粗分为以下逻辑层级：
-
-Certain：规则强命中
-High：模型分类清晰且符合预期
-Low：进入 fallback
-
-结论：
-
-当前 confidence 是标准化后的逻辑置信度接口，而不是严格概率承诺。下游模块只依赖统一 DTO，不依赖具体 Parser 实现。
-
-
----
-
-## 8. 当前推荐实现方式
-
-### 8.1 路由决策推荐实现
-
-当前推荐采用以下顺序：
-
-```text
-规则判断
--> 轻量模型简单分类（可选）
--> fallback
-```
-
-其中：
-
-- 规则判断优先
-- 小模型只做简单分类
-- 小模型输出尽量限制为少量标签
-- Python 代码负责把结果装配成稳定结构
-
-### 8.2 当前推荐检索实现
-
-当前推荐优先使用轻量可控实现，例如：
-
-- SQLite FTS
-- pgvector
-- 自定义 FAQ 检索服务
-- 轻量向量检索
-
-具体选型以实现复杂度、可控性、排错成本为准。
-
-#### 8.2.1 检索最低可回答边界
-
-当前阶段，检索命中并不自动等于可以生成回答。
-
-为了降低“无依据自由生成”的风险，当前阶段建议增加最小可回答边界，例如：
-
-1. 当检索结果相似度低于最低阈值时，直接进入拒答或 fallback。
-2. 当没有可用候选内容或引用依据时，不进入自由生成。
-3. 当最高命中结果低于最低可回答阈值时，应将其视为“未命中”，不向生成层传递伪上下文。
-4. 当前阶段优先遵循“无足够依据，进入拒答或 fallback”的原则。
-
-当前阶段不要求复杂检索评估体系，但必须避免把弱命中结果直接包装为高可信回答，也必须避免把似是而非的检索片段传给生成层诱发幻觉续写。
-
-### 8.3 当前推荐回答生成实现
-
-回答生成可以基于：
-
-- 模型生成
-- 模板拼接
-- 混合方式
-
-但必须满足：
-
-1. 输入来源明确
-2. 结果路径可追踪
-3. 不依赖复杂工作流框架
-4. 不让模型承担其不稳定的高阶规划职责
-5. 必须配置明确的输出截断策略，避免小模型重复输出、越界续写或泄露 Prompt 后续内容
-6. 在 FAQ 回答生成场景下，应优先采用低随机性参数，避免同一问题在短时间内产生明显语义漂移
-
-当前阶段建议至少具备以下工程约束：
-
-- `max_tokens`：限制单次回答最大输出长度
-- `stop_words` / `stop_sequences`：用于阻断模型继续吐出模板尾部、角色标识或无关续写内容
-- FAQ 回答生成场景下，`temperature` 应默认保持在接近 0 的低随机性范围
-- 流式输出场景下应具备明确的结束条件，避免模型持续重复生成
-
-当前阶段不要求复杂生成控制平台，但必须避免把回答生成层变成不受约束的自由续写过程。
-
-### 8.4 路由决策的降级与保护
-
-#### 8.4.1 目标
-
-当前阶段允许使用小模型参与轻量路由判断，但必须避免小模型不稳定导致主链路失效或兜底流量异常放大。
-
-因此，当前路由决策必须具备最小降级与保护机制。
-
-#### 8.4.2 置信度阈值配置化
-
-当前阶段，路由置信度阈值不得写死在代码中，必须通过配置项控制，例如：
-
-- `CONFIDENCE_THRESHOLD`
-
-该阈值用于判断当前 Parser 输出是否足够可信。
-
-当前阶段要求：
-
-- 阈值可通过配置快速调整
-- 不要求复杂动态控制平台
-- 但必须避免把阈值硬编码进核心逻辑
-
-#### 8.4.3 当前推荐降级链路
-
-当前推荐的路由决策链路如下：
-
-```text
-规则判断
--> 小模型简单分类（可选）
--> confidence check
--> 规则兜底匹配
--> fallback
-```
-
-其含义为：
-
-1. 优先使用确定性规则判断
-2. 小模型只做简单分类
-3. 当小模型置信度不足时，不立即进入高成本路径
-4. 先尝试一次轻量规则兜底
-5. 规则仍无法处理时，再进入统一 fallback
-
-#### 8.4.4 当前明确不做的内容
-
-当前阶段明确不做：
-
-- 复杂策略引擎
-- 多级熔断中心
-- 动态路由编排平台
-- 大规模在线策略调优系统
-
-结论：
-
-**当前降级机制只为防止小模型不稳定放大系统成本，不扩展为独立策略系统。**
-
-#### 8.4.5 当前建议冻结的 fallback_reason 最小枚举
-
-为了保证 fallback 路径可观测、可排错，当前阶段建议将 `fallback_reason` 收敛为最小固定枚举，例如：
-
-- `low_confidence`
-- `guardrail_blocked`
-- `rule_no_match`
-- `no_retrieval`
-- `system_error`
-
-当前阶段不要求覆盖所有未来场景，但要求避免自由文本原因码扩散。
-
-结论：
-
-**当前 fallback_reason 应尽量收敛为固定枚举，避免日志与实现语义漂移。**
-
-#### 8.4.6 非法输出的默认降级策略
-
-当前阶段允许使用小模型参与轻量路由判断，但不允许把模型输出格式正确性当作系统前提。
-
-因此，当前阶段必须具备最小非法输出兜底策略：
-
-1. 当路由模型输出为空、标签非法、字段缺失或不符合预期格式时，代码层必须捕获异常或解析失败。
-2. 一旦解析失败，不做二次猜测，不把非法输出继续向下游传播。
-3. 解析失败后的默认路径为统一 `fallback`，并记录相应的 `fallback_reason`。
-
-当前阶段不要求复杂输出修复器或二次纠错模型，但必须避免让非法路由输出直接破坏主链路稳定性。
-
-结论：
-
-**当前路由模型的非法输出必须默认导向 fallback，而不是让系统依赖模型格式稳定性。**
-
----
-
-## 9. 支撑性链路设计
-
-### 9.1 设计目标
-
-当前阶段的系统设计虽然以在线问答主链路为中心，但为了保证系统能够稳定运行、低成本维护并支持后续迭代，仍需补齐少量必要的支撑性链路。
-
-这些支撑性链路的目标不是引入新框架，而是形成最小闭环，确保系统不仅能“跑通”，还能“稳健且可迭代”。
-
-当前阶段只补充以下 7 类支撑能力：
-
-1. 轻量离线数据入库链路
-2. 高频 FAQ 拦截缓存
-3. 基础安全与拒答边界
-4. 轻量反馈回流机制
-5. 固定提问范式与输入引导
-6. 核心 Prompt 与阈值的配置化管理
-7. 数据隔离与前置过滤权限接口预留
-   
-这些能力均遵循同一原则：
-
-- 只做当前主链路必需的最小实现
-- 不扩展为独立平台或重型子系统
-- 不为了未来可能需求提前引入复杂架构
-
-### 9.2 轻量离线数据入库链路
-
-#### 9.2.1 目标
-
-系统必须定义数据如何进入系统并变成可检索状态。
-
-当前阶段支持的输入对象包括：
-
-- FAQ 标准问答对
-- 简单业务文档
-- 结构相对规整的文本内容
-
-#### 9.2.2 当前最小入库链路
-
-当前推荐的离线数据链路如下：
-
-```text
-原始 FAQ / 文档
--> 基础解析
--> 简单文本切块（如需要）
--> 向量化或全文索引构建
--> 入库到 SQLite FTS / pgvector / 轻量检索存储
-```
-##### 9.2.2.1 最小回源元数据要求
-当前阶段，离线数据入库不仅要让内容变得可检索，还必须为后续引用展示保留最小回源能力。
-
-因此，当前入库链路应尽量为每个 FAQ 条目或文档 chunk 保留以下最小元数据之一或其组合：
-
-- `source_url`
-- `file_path`
-- `document_id`
-- `page_number`（如适用）
-- `paragraph_id` 或 `chunk_id`
-- 文档内定位所需的最小偏移信息（如适用）
-
-当前阶段不要求建设复杂引用管理系统，但必须避免只存 chunk 文本而完全失去原始来源定位能力。
-
-结论：
-
-**当前引用信息必须具备最小回源元数据，确保前端展示的 citations 可以指向原始 FAQ 或文档位置。**
-
-#### 9.2.3 当前只做的内容
-
-当前阶段只做：
-
-1. 基础文本解析
-2. 简单切块
-3. 基础索引构建
-4. FAQ 问答对导入
-5. 简单文档内容导入
-
-#### 9.2.4 当前明确不做的内容
-
-当前阶段明确不做：
-
-1. 复杂版式分析
-2. PDF 表格精准还原
-3. 自动知识图谱抽取
-4. 多源实时同步
-5. 重型数据治理流程
-6. 复杂离线任务编排系统
-
-结论：
-
-**当前离线链路只服务于“让内容变得可检索”，不扩展成知识加工平台。**
-
-### 9.3 高频 FAQ 拦截缓存
-
-#### 9.3.1 目标
-
-FAQ 场景天然存在大量重复问题或高频近似问题。
-
-如果每次请求都进入“检索 -> 生成”链路，会增加延迟和资源消耗，也会让主链路不必要地变重。
-
-因此，当前阶段应在主链路前增加一层极轻量缓存拦截。
-
-#### 9.3.2 当前缓存位置
-
-当前建议将缓存拦截放在：
-
-```text
-用户问题
--> 路由判断（薄）
--> FAQ 缓存匹配
--> 检索
--> 回答生成
-```
-
-#### 9.3.3 当前缓存策略
-
-当前阶段仅允许以下缓存方式：
-
-1. 标准 FAQ 问答对精确匹配
-2. 高阈值的轻量近似匹配
-3. 命中后直接返回标准答案
-
-#### 9.3.4 当前最小缓存失效边界
-
-当前阶段虽然不建设复杂缓存治理系统，但仍需定义最小失效边界。
-
-当前建议至少满足以下规则：
-
-1. 当 FAQ 标准问答内容更新时，关联缓存应失效。
-2. 当检索语料或索引版本发生明显变化时，可按版本号使缓存失效。
-3. 当前阶段允许采用简单清理策略，不要求复杂 TTL 平台或自动治理体系。
-
-结论：
-
-**当前缓存必须具备最小失效边界，避免旧答案长期静默污染主链路。**
-
-#### 9.3.5 当前明确不做的内容
-
-当前阶段明确不做：
-
-1. 通用多级缓存架构
-2. 复杂语义缓存平台
-3. 自动缓存治理系统
-4. 大规模动态失效策略体系
-5. 跨场景统一缓存中台
-
-结论：
-
-**当前缓存的目标只是拦截高频 FAQ，不把缓存设计扩展成独立系统。**
-
-### 9.4 基础安全与拒答边界
-
-#### 9.4.1 目标
-
-系统不仅需要处理“答不出来”的情况，也必须处理“不能回答”的情况。
-
-即使当前系统聚焦内部 FAQ / 业务知识问答，仍需定义最小安全边界，避免模型被诱导输出不应回答的内容。
-
-#### 9.4.2 当前安全边界位置
-
-当前建议将基础安全校验放在主链路前部，即：
-
-```text
-用户问题
--> 基础安全校验
--> 路由判断（薄）
--> FAQ 缓存匹配
--> 检索
--> 回答生成
-```
-
-或与路由判断合并实现，但逻辑边界必须清晰。
-
-#### 9.4.3 护栏设计原则：输入一致性为先
-
-为了使当前轻量级安全护栏稳定生效，API 接入层必须对用户输入执行最小必要的输入一致性约束。
-
-该约束的目标不是增强系统智能，而是降低输入噪声、避免规则绕过，并为后续安全校验、缓存匹配、路由判断与检索提供更稳定的输入基础。
-
-当前阶段至少包括以下两类约束：
-
-1. **长度限制**  
-   必须为用户输入设置明确的最大长度阈值（如 `MAX_QUERY_LENGTH`），超限请求直接拒绝或返回标准提示话术。  
-   该阈值必须通过配置项控制，不得硬编码在业务逻辑中。
-
-2. **字符清洗与归一化**  
-   在进入后续规则校验、缓存匹配、路由判断与检索前，系统必须生成规范化后的输入文本，例如：
-   - 去除不可见字符
-   - 规范化换行、空格与重复分隔符
-   - 对 HTML 标签做安全清洗
-   - 对 Markdown / 代码块做轻量归一化
-   - 保留核心文本语义，不做破坏性删除
-
-当前阶段要求同时保留：
-
-- `raw_query`：原始输入，用于审计、排查与观测
-- `normalized_query`：归一化输入，用于后续安全校验与主链路处理
-
-结论：
-
-**当前输入一致性约束属于轻量 Guardrails 的前置基础，不扩展为独立输入治理系统。**
-
-#### 9.4.4 当前允许的实现方式
-
-当前阶段只允许轻量实现方式，例如：
-
-1. 敏感词或规则拦截
-2. 基础正则判断
-3. 小模型 system prompt 中的严格拒答约束
-4. 命中后直接返回标准拒答话术
-5. API 接入层的输入长度限制与字符归一化
-
-#### 9.4.5 当前明确不做的内容
-
-当前阶段明确不做：
-
-1. 独立风控大模型
-2. 独立安全策略编排平台
-3. 复杂内容审核工作流
-4. 多级风险评分系统
-5. 复杂对抗防御体系
-
-结论：
-
-**当前安全边界只负责最小必要拒答，不扩展为独立安全系统。**
-
-#### 9.4.6 固定提问范式与输入引导
-
-##### 9.4.6.1 目标
-
-当前阶段允许通过固定提问范式、示例问题和快捷提问入口，对用户输入进行轻量约束与引导。
-
-该设计的目标是：
-
-1. 降低用户输入随机性
-2. 提升 FAQ / 检索链路命中率
-3. 提升高频问法缓存命中率
-4. 降低小模型路由波动
-5. 以更低成本减少部分越界输入与无效输入
-
-##### 9.4.6.2 当前允许的实现方式
-
-当前阶段只允许轻量实现方式，例如：
-
-1. 前端展示固定示例问题
-2. 提供按主题分类的快捷提问入口
-3. 提供少量固定问句模板，例如：
-   - 如何申请 X
-   - 在哪里查看 X
-   - X 的流程是什么
-   - X 失败后怎么处理
-4. 对用户输入做轻量归一化，例如去掉冗余语气词、保留核心关键词
-5. 在提交前提示用户尽量使用单主题、直接问题表达
-
-##### 9.4.6.3 当前设计边界
-
-该能力属于轻量输入引导，不属于复杂意图系统。
-
-其作用是帮助用户更容易进入当前 FAQ / 知识问答主链路，而不是替代检索、路由或回答生成。
-
-##### 9.4.6.4 当前明确不做的内容
-
-当前阶段明确不做：
-
-1. 复杂多轮提问引导系统
-2. 动态表单式问答编排
-3. 基于模型的输入教育代理
-4. 独立的用户行为纠正系统
-5. 重型输入治理平台
-
-结论：
-
-**当前固定提问范式只作为轻量 Guardrails 与输入归一化补充，不扩展为独立交互系统。**
-
-
-### 9.5 轻量反馈回流机制
-
-#### 9.5.1 目标
-
-当前阶段的日志与记录不仅用于排错，也用于为未来优化提供真实依据。
-
-如果没有最小反馈回流，后续关于检索质量、模型效果、缓存命中价值以及架构升级必要性的判断都将缺乏数据支撑。
-
-#### 9.5.2 当前前端交互要求
-
-当前建议前端提供最简单的反馈交互，例如：
-
-- 点赞
-- 点踩
-
-不要求当前阶段引入复杂评价组件。
-
-#### 9.5.3 当前后端记录要求
-
-当前阶段建议将记录字段分为“核心必记字段”和“扩展观测字段”，以保证最小数据闭环，同时避免记录结构过重或语义重复。
-
-##### （1）核心必记字段
-
-- `trace_id`：请求追踪标识，用于串联日志、反馈与排错。
-- `raw_query`：用户原始问题文本。
-- `retrieved_chunk_ids`：检索命中的候选内容或 chunks 标识列表，默认优先记录 ID，不要求默认落全文。
-- `answer_text`：最终返回给用户的回答文本。
-- `feedback_label`：用户反馈结果，如 `up` / `down`。
-- `token_input`：输入 Token 数，用于评估调用成本与模型负载。
-- `token_output`：输出 Token 数，用于评估调用成本与回答长度。
-- `total_latency_ms`：整体请求总耗时。
-
-##### （2）扩展观测字段
-
-如系统已有会话或请求记录机制，也可附带：
-
-- `session_id`：所属会话标识。
-- `created_at`：请求时间戳。
-- `router_used`：本次请求实际使用的路由器或解析器名称。
-- `route_result`：最终路由结果，如 `faq_qa` / `fallback`。
-- `raw_confidence`：路由模型原始置信度。
-- `threshold_used`：本次判定使用的置信度阈值。
-- `cache_hit`：是否命中缓存。
-- `fallback_reason`：进入 fallback 的原因。
-- `response_status`：最终对外结果状态，如 `ok` / `refused` / `fallback` / `system_error`
-- `input_mode`：本次输入来源方式，如自由输入、示例点击或固定模板生成。
-- `question_template_used`：命中的固定提问范式或模板标识（如有）。
-- `raw_query_length`：原始输入长度，用于观察是否经常出现超长输入。
-- `normalized_query_length`：归一化后输入长度，用于观察输入清洗影响。
-- `first_token_latency_ms`：首字延迟，仅在流式生成场景下记录。
-- `router_prompt_version`：当前路由 Prompt 或路由规则版本标识。
-- `answer_prompt_version`：当前回答生成 Prompt 版本标识。
-- `config_version`：当前阈值与策略配置版本标识。
-- `normalized_query`：归一化后的输入文本，用于观察输入清洗后的实际查询内容。
-- `retrieved_chunk_scores`：检索候选内容对应的相似度或排序分数（如适用）。
-- `final_prompt`：最终发送给模型的 Prompt 文本或其可调试版本（开发态可记录，生产态可按需关闭或脱敏）。
-- `debug_bundle_id`：当前调试上下文的标识，用于前端一键复制或回放。
-- `demo_mode_used`：标记本次请求是否运行于 Demo 模式。
-
-
-
-当请求未实际调用模型时，相关 token 字段允许为 0 或空值。
-
-##### （3）当前记录设计原则
-
-当前阶段的记录设计遵循以下原则：
-
-1. 默认优先记录可分析、可观测、可追踪的最小字段集合。
-2. 内容类字段与观测类字段分开定义，避免语义混杂。
-3. 不因记录需求而把日志系统扩展为重型评测平台。
-4. 字段命名统一使用稳定的 snake_case 风格。
-5. 开发态允许记录最小可视化调试字段，但应避免默认把调试日志扩展为生产环境重负载记录体系。
-
-##### （4）Prompt 签名与可回溯约束
-
-当前阶段，`router_prompt_version`、`answer_prompt_version` 与 `config_version` 不应只是展示性标识，而应具备最小可回溯能力。
-
-当前建议至少满足以下要求：
-
-1. `router_prompt_version` 与 `answer_prompt_version` 应能映射到不可变版本标识。
-2. 该标识可采用 Git Commit ID、内容哈希或等价签名机制实现。
-3. 当用户反馈“效果变差”或出现行为漂移时，应能通过版本标识回溯当时生效的 Prompt 与配置内容。
-
-当前阶段不要求建设复杂 Prompt 管理平台，但必须避免版本号存在而无法定位真实内容的情况。
-
-结论：
-
-**当前 Prompt 版本字段必须具备最小可回溯能力，而不是仅作为展示标签存在。**
-
-##### （5）调试信息脱敏边界
-
-当前阶段允许在开发环境中记录最小调试信息，但必须明确其脱敏与环境边界：
-
-1. `final_prompt`、`retrieved_chunks`、`answer_text` 等字段在开发态可记录完整版本，用于调试。
-2. 非开发态默认不记录完整 `final_prompt`，如需记录，应采用脱敏、摘要或显式开关方式。
-3. 如 `user_query`、`answer_text` 或 chunk 内容可能包含敏感信息，应优先最小化展示与最小化存储。
-4. 调试便利性不得凌驾于正式环境的最小暴露原则之上。
-
-结论：
-
-**当前调试信息应服务于开发效率，但必须具备最小脱敏边界与环境约束。**
-
-
-
-#### 9.5.4 当前反馈机制的用途
-
-当前阶段的反馈与记录机制，主要服务于以下目的：
-
-1. 排查错误回答与异常链路，定位问题发生在输入、路由、缓存、检索、生成还是拒答边界。
-2. 发现 FAQ 缺口与高频问题，判断哪些问题应沉淀为标准问答对或固定提问范式。
-3. 评估检索质量，观察检索命中内容是否足以支撑最终回答。
-4. 评估缓存价值，判断高频问题是否应优先走缓存拦截而不是重复进入检索与生成链路。
-5. 观察路由决策效果，评估不同路由器、置信度阈值与降级策略是否合理。
-6. 观察输入治理效果，判断固定提问范式、输入归一化与长度限制是否有效降低无效输入与越界输入。
-7. 评估系统成本与性能，结合 token 与时延数据判断当前实现是否仍满足轻量、可控、可维护的目标。
-8. 为后续是否升级 embedding、检索策略、路由决策或安全护栏提供真实依据。
-9. 评估不同 Prompt、阈值与配置版本的效果差异，为后续调整提供对照依据。
-
-结论：
-
-**当前反馈机制的目标，是建立最小可观测、可排错、可迭代的数据闭环，而不是扩展为独立评测平台。**
-
-#### 9.5.5 当前明确不做的内容
-
-当前阶段明确不做：
-
-1. 重型评测平台
-2. 自动标注平台
-3. 在线 AB 测试平台
-4. 复杂数据飞轮平台化建设
-5. 大规模反馈运营体系
-
-结论：
-
-**当前反馈回流只建立最小数据闭环与最小路由观测点，不扩展为独立评估系统。**
-
-
-### 9.6 提示词与阈值的配置管理边界
-
-#### 9.6.1 目标
-避免将核心策略硬编码在代码中导致频繁发版，但绝不建设过重的配置管理中台。
-
-#### 9.6.2 当前只做的内容
-核心 Prompt（路由、生成、兜底、风控）和核心参数（阈值、Top-K）必须从业务代码中抽离，维护在轻量的配置文件（如 yaml / json）或环境变量中，支持随服务重启或热加载更新。
-
-当前阶段在开发环境中建议支持最小 Prompt 热重载能力：
-
-1. `prompts/` 目录中的 Prompt 文件修改后，可通过热重载或最小重载机制快速生效。
-2. 开发者修改 Prompt 后，不应要求完整重启所有服务才能验证效果。
-3. 该能力仅服务于本地开发体验优化，不构成复杂 Prompt 运行时编排系统。
-
-#### 9.6.3 当前明确不做的内容
-坚决不做独立的 Prompt 编排管理后台、不做可视化的 Prompt 调试沙箱、不做复杂的 Prompt 多版本灰度发布系统。
-当前阶段也不建设复杂的 Prompt 在线调试平台或运行时可视化编排界面。
-
-#### 9.6.4 配置优先级与生效规则
-
-为了避免开发者在本地开发或调试过程中对“配置是否生效”产生歧义，当前阶段建议冻结最小配置优先级规则。
-
-当前建议优先级如下：
-
-1. 环境变量
-2. 本地配置文件（如 yaml / json）
-3. 内置默认值
-
-当前阶段同时约束：
-
-- 开发态热重载仅作用于开发环境
-- 生产态以显式配置加载结果为准
-- 当配置冲突时，应优先遵循更高优先级来源
-- 关键配置变更应可通过 `config_version` 或等价字段进行观测
-
-结论：
-
-**当前配置行为必须具备最小优先级规则，避免因配置来源不清导致调试与运行结果不一致。**
-
-### 9.7 数据隔离与权限预留边界 (RBAC Readiness)
-
-#### 9.7.1 目标
-未来本系统的权限控制将顺延自既有老系统（如 OA、ERP），OrionStack 不会作为权限源，而是作为权限执行节点（Policy Enforcement Point）。
-
-#### 9.7.2 当前预留的边界设计
-1. **数据存储预留**：向量/索引表中必须包含 `metadata` (JSON) 或特定标识字段，V1 阶段可默认全量开放或写入基础级隔离标识（如 `tenant_id`）。
-2. **检索前置过滤预留**：核心检索模块 `retriever.search()` 必须设计接收 `filters` 参数的接口。明确采用**前置过滤（Pre-filtering）**架构，避免先检索后鉴权导致的查全率问题。
-3. **上下文透传预留**：API 层需统一解析请求中的用户身份标识（如 `user_id`），并封装为 `UserContext` 向下透传，当前仅用于日志与 Trace 落表，暂不执行业务阻断。
-
-#### 9.7.3 当前明确不做的内容
-1. 坚决不在本系统中建设独立的权限管理后台、角色分配页面或用户树结构。
-2. 坚决不编写复杂的权限计算逻辑，V1 阶段 `filters` 参数保持最小可用或为空。
-
-#### 9.7.4 当前默认行为
-
-当前阶段，系统默认采用最小权限预留策略：
-
-1. 默认不在业务链路中执行复杂权限阻断。
-2. 默认以单租户或基础隔离方式运行。
-3. `UserContext` 当前主要用于日志、Trace 与后续扩展预留。
-4. `filters` 参数当前可保持为空或最小可用状态。
-
-结论：
-
-**当前权限相关设计仅做接口预留，不作为当前主链路复杂度来源。**
-
-### 9.8 当前支撑性链路的总体结论
-
-当前阶段，在线问答主链路之外，只补充以下最小支撑能力：
-
-1. 轻量离线数据入库
-2. 高频 FAQ 缓存拦截
-3. 基础安全拒答边界
-4. 轻量反馈回流落表
-5. 固定提问范式与输入引导
-6. 核心 Prompt 与阈值的配置化管理
-7. 数据隔离与前置过滤权限接口预留
-
-这七类能力的共同目标是：
-
-- 补齐系统闭环
-- 降低重复计算
-- 控制基本风险
-- 降低输入随机性
-- 为后续优化提供真实数据
-
-一句话概括就是：
-
-**当前阶段只补最小必要支撑链路，不引入新的重型架构中心。**
-
----
-
-## 10. 当前目录与工程组织原则
-
-### 10.1 当前目录组织原则
-
-当前目录结构应围绕主链路，而不是围绕宏大架构概念。
-
-目录组织原则如下：
-
-1. 按当前职责组织
-2. 不为未来预建大量层次
-3. 命名以当前实现为准
-4. 目录数量适度收敛
-
-### 10.2 当前工程组织建议
-
-当前建议围绕以下真实模块组织代码：
-
-- api
-- services
-- retrieval
-- routing
-- storage
-- frontend pages/components
-
-如无真实复杂度，不建议再引入以下人为层次：
-
-- graph orchestration
-- agent runtime
-- unified intent platform
-- knowledge middleware framework wrapper
-
----
-
-### 10.3 本地开发与 Vibe Coding 体验约束
-
-当前阶段，系统除保证运行时主链路稳定外，还应明确保证最小本地开发体验，降低新成员接入阻力与试错成本。
-
-#### 10.3.1 一秒启动的本地开发体验
-
-当前阶段应支持最小 Demo 模式，保证开发者在无外部服务依赖的条件下快速启动并看到完整闭环。
-
-当前建议至少满足以下要求：
-
-1. 启动脚本或主入口支持 `--demo` 模式。
-2. 开发环境支持 SQLite `:memory:` 或纯文件检索模式。
-3. 启动 Demo 模式时，不要求安装 PostgreSQL、Redis、Docker 或其他外部服务。
-4. 项目内应自带最小 mock 数据，例如 `mock_faq.json`，启动时可自动加载。
-5. 开发者应能在最短路径内完成一次“提问 -> 检索 -> 回答 -> 展示”的闭环。
-
-#### 10.3.2 开发态热重载与即时反馈
-
-当前阶段应尽量减少“改一点配置就必须整服务重启”的挫败感。
-
-当前建议至少满足以下要求：
-
-1. 开发态下，`prompts/` 目录中的 Prompt 文件支持热重载或最小重载机制。
-2. 修改 Prompt 后，不应要求开发者手工重启完整后端服务。
-3. 前端开发服务器应尽量直接代理到本地 Python 后端，避免引入复杂反向代理链路。
-4. 代码或配置变更后的反馈路径应尽量缩短到“保存 -> 刷新 -> 看到结果”。
-
-#### 10.3.3 可视化调试与最小 Debug Overlay
-
-当前阶段应为开发者提供最低限度的可视化调试能力，降低仅靠日志排错的认知负担。
-
-当前建议至少满足以下要求：
-
-1. 前端提供可切换的 Debug 模式。
-2. Debug 模式下可展示最小链路信息，例如：
-   - `normalized_query`
-   - `route_result`
-   - `router_used`
-   - `retrieved_chunks`
-   - `final_prompt`
-   - `fallback_reason`
-3. Debug 信息应服务于开发理解，不要求建设独立调试平台。
-
-#### 10.3.4 可复制的调试上下文
-
-当前阶段建议支持“一键复制当前调试上下文”，用于快速排错与沟通。
-
-建议复制内容包括：
-
-- `trace_id`
-- `normalized_query`
-- `route_result`
-- `router_used`
-- `retrieved_chunks`
-- `final_prompt`
-- `fallback_reason`
-
-#### 10.3.5 一键回到已知可用状态
-
-当前阶段建议提供最小环境重置能力，避免本地缓存、索引、配置残留影响开发判断。
-
-建议至少支持：
-
-1. 清空本地 demo 数据或缓存
-2. 重建最小 mock 数据
-3. 恢复到可运行的默认状态
-
-结论：
-
-**当前阶段的本地开发体验同样属于系统边界的一部分，应保证“易启动、易反馈、易调试、易恢复”，但不扩展为独立开发平台。**
-
-#### 10.3.6 Demo / Dev / Prod 模式边界
-
-为了避免开发便利性能力污染正式运行环境，当前阶段需要明确区分 Demo、Dev 与 Prod 三种模式的默认边界。
-
-当前建议冻结如下：
-
-- **Demo 模式**
-  - 允许自动加载 `mock_faq.json` 或等价 mock 数据
-  - 允许使用 SQLite `:memory:` 或纯文件检索
-  - 允许展示最小调试信息
-  - 目标是最短路径跑通“提问 -> 检索 -> 回答”闭环
-
-- **Dev 模式**
-  - 允许 Prompt 热重载
-  - 允许 Debug Overlay
-  - 允许记录最小调试字段，如 `normalized_query`、`retrieved_chunks`、`final_prompt`
-  - 目标是缩短修改后的反馈路径
-
-- **Prod 模式**
-  - 默认关闭 mock 数据自动加载
-  - 默认关闭 Debug Overlay
-  - 不默认记录完整 `final_prompt`，如需记录应采用脱敏、摘要或显式开关方式
-  - 目标是保证稳定性、最小暴露面与可控运行
-
-结论：
-
-**当前开发便利性能力必须受运行模式约束，不得默认泄漏到正式环境。**
-
-#### 10.3.7 本地最小 Smoke Cases
-  
-  当前阶段建议维护一组极小的本地冒烟样例，用于在修改 Prompt、路由、缓存或检索逻辑后快速验证主链路是否仍可用。
-  
-  当前建议至少覆盖以下场景：
-  
-  1. FAQ 直接命中
-  2. FAQ 缓存命中
-  3. 路由低置信度进入 fallback
-  4. 基础安全拒答
-  5. 检索弱命中后拒答或 fallback
-  6. 固定提问范式输入命中标准问答路径
-  
-  当前阶段不要求建设正式 benchmark 平台，但要求开发者在关键修改后能通过最小样例集快速判断：
-  
-  - 主链路是否还能跑通
-  - 行为是否出现明显退化
-  - 配置修改是否产生非预期影响
-  
-  当前阶段建议将本地 Smoke Cases 控制在少量核心样例范围内，优先覆盖：
-  
-  - 主链路可用性
-  - 基础安全拒答
-  - 路由 fallback
-  - 检索弱命中边界
-  - 固定提问范式命中
-  
-  当前阶段不要求把 Smoke Cases 扩展为完整测试矩阵，也不要求覆盖所有边缘输入。
-  
-  其目标是提供最小回归保护，而不是替代正式测试体系。
-
-结论：
-
-**当前本地 Smoke Cases 只作为最小回归保护带，不扩展为重型测试平台。**
-
-#### 10.3.8 Debug 信息隔离与会话无状态边界
-
-当前阶段在提供开发便利性时，必须同时保证调试信息隔离与后端无状态边界清晰。
-
-##### （1）Debug 信息隔离
-
-所有调试信息应通过独立的 `debug_info` 字段下发，而不与标准回答字段混合。
-
-当前阶段要求：
-
-1. Demo / Dev 模式下，允许下发最小调试信息，例如 `normalized_query`、`retrieved_chunks`、`final_prompt`、`fallback_reason`。
-2. Prod 模式下，后端 API 层必须默认物理剔除 `debug_info`，而不是仅在前端隐藏。
-3. 如确需在非开发环境中保留部分调试能力，应采用显式开关、脱敏或摘要方式处理。
-
-##### （2）会话无状态边界
-
-当前阶段虽然允许存在 `session_id` 与请求记录，但后端默认保持无状态处理，不自动将历史对话注入路由层与检索层。
-
-当前阶段要求：
-
-1. 路由层与检索层默认只处理当前请求输入。
-2. 不自动拼接历史多轮对话，不引入隐式短期记忆。
-3. 如需支持极简多轮，应由前端显式将必要上下文拼接到 `raw_query`，后端仍保持当前主链路无状态。
-
-结论：
-
-**当前阶段既要保证开发态调试体验，也要保证正式环境中的调试信息最小暴露；同时，后端默认保持无状态，以维持薄路由与轻检索架构的稳定性。**
-
-## 11. 后续允许升级设计的触发条件
-
-当前阶段不主动升级架构。只有在以下条件真实出现时，才考虑进入下一轮设计：
-
-### 11.1 考虑引入图执行框架的触发条件
-
-只有当以下情况明确出现时，才重新评估 LangGraph 或类似方案：
-
-1. 出现真实多分支长链路业务流程
-2. 明确需要状态持久化与恢复
-3. 明确需要人工审核插点
-4. 明确需要跨多个工具的稳定编排
-5. 普通服务调用链已无法维持可维护性
-
-### 11.2 考虑引入知识框架的触发条件
-
-只有当以下情况明确出现时，才重新评估 LlamaIndex 或类似方案：
-
-1. 文档来源快速增多
-2. 检索类型显著复杂化
-3. 节点组织、引用组织需求显著上升
-4. 自研轻量检索维护成本显著高于引入框架成本
-
-### 11.3 考虑升级意图层的触发条件
-
-只有当以下情况明确出现时，才重新评估更强的意图解析层：
-
-1. FAQ 之外出现第二个稳定业务场景
-2. 需要在多个明确场景间做稳定路由
-3. 当前规则 + 轻模型分类已明显不足
-4. 已具备更强模型或稳定外部推理能力
-5. 当前系统确实需要更强决策层，而不是想象中的未来扩展
-
----
-
-## 12. 当前阶段结论
-
-当前阶段，OrionStack 的正确设计方向不是继续增加框架层，而是继续收缩系统复杂度。
-
-当前阶段的核心结论如下：
-
-1. 系统聚焦 FAQ / 业务知识问答单一主场景
-2. 主链路固定为“提问 -> 路由判断（薄） -> 检索 -> 回答 -> 返回”
-3. 当前不引入 LangGraph
-4. 当前不引入 LlamaIndex
-5. 当前不建设重型统一意图层
-6. 当前小模型只承担简单分类或回答生成职责
-7. 当前只保留最小必要接口边界
-8. 当前系统优先目标是稳定、可控、易维护
-9. 当前系统除保证运行时主链路稳定外，也应保证本地开发体验低阻力、可快速反馈、可最小可视化调试。
-
-一句话总结就是：
-
-**先把当前问答主链路做薄、做稳、做可替换，同时保证本地开发过程可快速启动、可快速反馈、可快速定位问题，不把未来复杂系统的负担提前压到今天的实现里。**
-</file>
-
-<file path="docs/file_responsibilities_v1.md">
-# OrionStack 当前阶段文件职责说明 v1
-
-## 1. 文档目标
-
-本文档用于配合已冻结的 `system_design_v1`，说明当前阶段**最小可运行文件清单**中的各文件职责、边界与依赖方向。
-
-本文档只服务于当前阶段的实现落地，不承担以下职责：
-
-- 不描述未来扩展目录
-- 不提前设计第二阶段文件树
-- 不替代系统设计文档
-- 不把“计划中的大而全平台目录”重新带回当前工程
-
-## 2. 适用范围
-
-本文档适用于当前阶段的最小可运行骨架，包括：
-
-- 前端：手机 Web / PC Web 统一的 Vue 3 + Vite 前端
-- 后端：FAQ / 业务知识问答主链路的最小 FastAPI 服务
-- 脚本：本地 Demo 启动与最小开发辅助脚本
-
-本文档中的文件职责，以“最小可运行闭环”为目标。
-
-## 3. 使用原则
-
-### 3.1 文件职责单一
-
-每个文件只承担一类明确职责。
-
-### 3.2 不跨层偷逻辑
-
-- 前端组件不直接实现后端业务决策
-- API 路由文件不直接堆叠业务逻辑
-- 检索层不负责回答生成
-- 路由层不负责复杂状态管理
-
-### 3.3 先跑通，再细化
-
-当前文件划分只服务于：
-
-- `GET /healthz`
-- `POST /api/chat/ask`
-
-先完成最小闭环，再根据真实复杂度拆分。
-
----
-
-## 4. 当前冻结目录与文件职责
-
-### `README.md`
-
-职责：
-
-- 作为项目入口文档
-- 提供前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
-- 面向非开发用户提供最小可独立部署运行的参考
-
-不负责：
-
-- 不负责替代系统设计文档
-- 不负责替代脚本详细参数说明（参见 `scripts/README.md`）
-
-## 4.1 前端文件职责
-
-### `frontend/package.json`
-
-职责：
-
-- 定义前端依赖
-- 定义开发与构建脚本
-- 作为前端工程入口配置文件
-
-不负责：
-
-- 不负责业务逻辑
-- 不负责环境变量注入策略之外的运行时配置
-
-### `frontend/vite.config.ts`
-
-职责：
-
-- 定义 Vite 构建配置
-- 定义开发环境代理规则
-- 定义最小前端开发行为
-
-不负责：
-
-- 不负责页面路由逻辑
-- 不负责业务 API 封装
-
-### `frontend/index.html`
-
-职责：
-
-- 提供单页应用挂载模板
-
-不负责：
-
-- 不负责应用逻辑
-
-### `frontend/src/main.ts`
-
-职责：
-
-- 创建并挂载 Vue 应用
-- 注册全局样式
-- 注入当前最小根组件
-
-不负责：
-
-- 不负责页面业务流程
-
-### `frontend/src/App.vue`
-
-职责：
-
-- 作为应用根组件承载当前单页问答入口
-
-不负责：
-
-- 不负责问答逻辑
-- 不负责 API 调用
-
-### `frontend/src/pages/chat/ChatPage.vue`
-
-职责：
-
-- 作为问答主页面
-- 串联文档上传、文档列表、范围选择、删除、输入、请求、回答、引用、反馈、最近记录与调试展示
-
-不负责：
-
-- 不负责 HTTP 细节封装
-- 不负责底层状态持久化
-
-### `frontend/src/components/chat/ChatInput.vue`
-
-职责：
-
-- 接收用户输入
-- 触发提交动作
-- 提供固定提问范式或最小输入引导入口（如后续接入）
-
-不负责：
-
-- 不负责直接调用后端 API
-
-### `frontend/src/components/chat/AnswerCard.vue`
-
-职责：
-
-- 展示回答正文
-- 展示回答状态，如正常回答、拒答、fallback
-
-不负责：
-
-- 不负责 citation 数据拼装
-
-### `frontend/src/components/chat/CitationList.vue`
-
-职责：
-
-- 展示 citation 列表
-- 展示最小引用片段与来源定位信息
-- 区分 FAQ 来源与文档来源的展示样式
-
-不负责：
-
-- 不负责 citation 生成逻辑
-
-### `frontend/src/components/chat/DocumentUpload.vue`
-
-职责：
-
-- 提供最小文档选择与上传触发入口
-- 展示当前上传状态与结果提示
-
-不负责：
-
-- 不负责直接发起上传请求
-
-### `frontend/src/services/api.ts`
-
-职责：
-
-- 封装基础 HTTP 客户端
-- 统一处理请求基址、超时、错误包装
-
-不负责：
-
-- 不负责具体业务接口语义
-
-### `frontend/src/services/chat.ts`
-
-职责：
-
-- 封装问答接口调用
-- 对接 `/api/chat/ask`、`/api/chat/feedback` 与记录查看接口
-
-不负责：
-
-- 不负责组件展示逻辑
-
-### `frontend/src/services/documents.ts`
-
-职责：
-
-- 封装文档上传、列表、删除接口调用
-- 对接 `/api/documents/upload`、`/api/documents`、`DELETE /api/documents/{document_id}`
-
-不负责：
-
-- 不负责上传组件交互状态管理
-
-### `frontend/src/styles/index.css`
-
-职责：
-
-- 定义首轮全局样式
-- 提供最小响应式布局规则
-
-不负责：
-
-- 不负责业务主题系统
-
-### `frontend/src/types/chat.ts`
-
-职责：
-
-- 定义前端问答相关请求/响应类型
-- 定义前端记录查看接口的最小记录类型
-
-不负责：
-
-- 不负责运行时校验实现
-
-### `frontend/src/components/chat/RecordList.vue`
-
-职责：
-
-- 展示开发态最近 ask / feedback 记录列表
-- 负责最近记录区的最小列表渲染与状态样式展示
-- 以摘要优先方式展示记录，把次要细节下沉到折叠区
-
-不负责：
-
-- 不负责直接调用后端 API
-
-### `frontend/src/types/document.ts`
-
-职责：
-
-- 定义文档上传响应类型
-
-不负责：
-
-- 不负责运行时校验实现
-
-### `frontend/src/vite-env.d.ts`
-
-职责：
-
-- 注入 Vite 默认类型声明
-
-不负责：
-
-- 不负责业务类型定义
-
----
-
-## 4.2 后端文件职责
-
-### `backend/main.py`
-
-职责：
-
-- 创建 FastAPI 应用
-- 注册路由
-- 提供服务启动入口
-
-不负责：
-
-- 不负责具体业务实现
-
-### `backend/app/api/routes/health.py`
-
-职责：
-
-- 提供健康检查接口
-
-不负责：
-
-- 不负责业务状态聚合
-
-### `backend/app/api/routes/chat.py`
-
-职责：
-
-- 接收问答请求
-- 接收最小反馈提交请求
-- 提供 demo/dev 下的最小问答记录与反馈查看入口
-- 调用 `chat_service`
-- 返回统一响应结构
-- 生成与透传 `trace_id`
-
-不负责：
-
-- 不负责直接实现检索、路由、回答生成
-
-### `backend/app/api/routes/documents.py`
-
-职责：
-
-- 接收文档上传请求
-- 调用 `document_service`
-- 返回统一文档上传响应
-
-不负责：
-
-- 不负责直接实现文档解析与切块
-
-### `backend/app/schemas/request.py`
-
-职责：
-
-- 定义请求模型
-- 固定 `raw_query`、反馈等入参结构
-
-不负责：
-
-- 不负责业务执行
-
-### `backend/app/schemas/document.py`
-
-职责：
-
-- 定义文档上传响应模型
-- 固定 `document_id / text_length / chunk_count` 等结构
-
-不负责：
-
-- 不负责文件落盘或元数据保存
-
-### `backend/app/schemas/response.py`
-
-职责：
-
-- 定义响应模型
-- 固定 `response_status / answer / citations / trace_id` 等结构
-- 定义记录查看接口的最小响应模型
-
-不负责：
-
-- 不负责组装业务数据来源
-
-### `backend/app/services/chat_service.py`
-
-职责：
-
-- 串联最小主链路：归一化 -> 路由 -> document-first 检索 -> 回答 -> citation 返回
-- 作为问答业务主服务入口
-- 保留 FAQ fallback 边界
-- 为后续最小问答记录落盘提供统一业务写入点
-
-不负责：
-
-- 不负责 HTTP 协议层处理
-
-### `backend/app/routing/contracts.py`
-
-职责：
-
-- 定义 `IntentDecision` 等最小路由契约
-
-不负责：
-
-- 不负责具体路由判断逻辑
-
-### `backend/app/routing/resolver.py`
-
-职责：
-
-- 作为路由协调层入口
-- 统一调用具体 parser
-- 产出最小路由结果
-
-不负责：
-
-- 不负责复杂规划与工作流编排
-
-### `backend/app/routing/rule_parser.py`
-
-职责：
-
-- 实现当前首轮规则解析器
-- 优先处理规则强命中或最小 FAQ 路由判断
-
-不负责：
-
-- 不负责复杂 LLM 路由决策
-
-### `backend/app/retrieval/retriever.py`
-
-职责：
-
-- 基于 document chunks 与 FAQ fallback 执行最小检索
-- 返回候选内容与分数
-
-不负责：
-
-- 不负责生成最终回答
-
-### `backend/app/retrieval/citation_mapper.py`
-
-职责：
-
-- 将检索命中结果映射为统一 citation 结构
-
-不负责：
-
-- 不负责前端展示逻辑
-
-### `backend/app/guardrails/normalize.py`
-
-职责：
-
-- 对原始输入执行最小归一化
-- 生成 `normalized_query`
-
-不负责：
-
-- 不负责完整安全策略编排
-
-### `backend/app/storage/repositories/faq_repo.py`
-
-职责：
-
-- 读取 FAQ 数据源
-- 提供最小 FAQ 数据访问接口
-
-不负责：
-
-- 不负责检索打分逻辑
-
-### `backend/app/storage/repositories/feedback_repo.py`
-
-职责：
-
-- 记录最小反馈数据
-- 以本地 JSONL 形式持久化反馈记录
-- 为按 `trace_id` 回看反馈提供最小数据访问基础
-- 提供最近反馈记录读取接口
-- 保存后按 `max_count` 自动截断最旧记录
-
-不负责：
-
-- 不负责反馈分析与统计聚合
-
-### `backend/app/storage/repositories/chat_record_repo.py`
-
-职责：
-
-- 保存 `/api/chat/ask` 的最小请求与结果记录
-- 提供最近问答记录的本地读取接口
-- 为反馈与问答记录的 `trace_id` 对齐提供落盘基础
-- 为本地记录维护边界收口提供存储入口
-- 保存后按 `max_count` 自动截断最旧记录
-
-不负责：
-
-- 不负责检索、回答生成或复杂日志分析
-
-### `backend/app/services/document_service.py`
-
-职责：
-
-- 串联文档上传、解析、切块与落盘保存流程
-- 返回文档上传最小结果
-
-不负责：
-
-- 不负责问答检索逻辑
-
-### `backend/app/services/document_parser.py`
-
-职责：
-
-- 将 `.txt / .md / .pdf / .docx` 解析为纯文本
-
-不负责：
-
-- 不负责 chunk 切分与持久化
-
-### `backend/app/services/chunk_service.py`
-
-职责：
-
-- 对解析后的文本执行最小 chunk 切分
-
-不负责：
-
-- 不负责文件读取与存储
-
-### `backend/app/storage/repositories/document_repo.py`
-
-职责：
-
-- 保存原始上传文件
-- 保存最小文档元数据记录
-
-不负责：
-
-- 不负责解析文档内容
-
-### `backend/app/storage/repositories/chunk_repo.py`
-
-职责：
-
-- 保存文档 chunks 与最小回源元数据
-- 提供本地 chunk 列表读取接口
-
-不负责：
-
-- 不负责检索排序与回答生成
-
-### `backend/app/storage/seed/mock_faq.json`
-
-职责：
-
-- 作为 Demo 模式最小数据源
-- 支持本地一秒启动闭环
-
-不负责：
-
-- 不负责正式环境数据来源
-
-### `backend/app/config/settings.py`
-
-职责：
-
-- 定义最小配置读取入口
-- 维护默认配置、阈值与环境变量覆盖规则
-- 为记录查看接口维护 demo/dev 与 prod 的暴露边界开关
-- 维护本地记录保留数量配置项
-- 维护 CORS 来源配置项
-
-不负责：
-
-- 不负责业务逻辑
-- 不负责复杂治理策略编排
-
-### `backend/app/runtime/trace.py`
-
-职责：
-
-- 生成与透传 `trace_id`
-- 支撑最小链路追踪
-- 为后续 ask 记录与 feedback 记录关联提供统一标识基础
-
-不负责：
-
-- 不负责复杂观测平台集成
-
----
-
-## 4.3 脚本文件职责
-
-### `scripts/dev-backend.py`
-
-职责：
-
-- 启动后端开发服务（带 `--reload`）
-
-### `scripts/start-backend.py`
-
-职责：
-
-- 以生产配置启动后端服务（不带 `--reload`，支持多 worker）
-
-### `scripts/dev-frontend.py`
-
-职责：
-
-- 启动前端开发服务
-
-### `scripts/dev-demo.py`
-
-职责：
-
-- 作为本地 Demo 一键启动入口
-- 串联前后端开发启动流程
-
-### `scripts/git-release.py`
-
-职责：
-
-- 提供交互式版本发布脚本入口
-- 同步 `pyproject.toml` 版本、git commit 与 git tag
-- 执行当前分支 push 与 tag push
-
-不负责：
-
-- 不负责替代发布说明编写
-- 不负责复杂多分支发布流程编排
-
-### `scripts/clean-local-records.py`
-
-职责：
-
-- 清理本地问答记录与反馈记录文件
-- 为开发态记录维护提供最小脚本入口
-- 提供最小检查与预演保护
-
-不负责：
-
-- 不负责清理文档上传数据
-- 不负责替代服务端管理接口
-
-### `scripts/README.md`
-
-职责：
-
-- 汇总 `scripts/` 目录下各脚本的用途、参数与示例
-- 汇总生产配置说明与环境变量参考
-
-不负责：
-
-- 不负责替代项目级 README
-
-### `.env.example`
-
-职责：
-
-- 作为环境变量配置参考文件
-- 列出所有可用环境变量及其默认值
-
-不负责：
-
-- 不负责自动加载环境变量
-- 不负责替代运行时配置
-
----
-
-## 5. 当前最小依赖方向
-
-当前阶段建议保持以下依赖方向：
-
-```text
-frontend/page -> frontend/components -> frontend/services -> backend api
-backend api -> backend services -> routing / retrieval / guardrails / storage
-storage -> local jsonl data / seed/mock data
-```
-
-当前阶段不建议出现：
-
-- 前端组件直接拼接后端响应协议细节
-- API 路由文件直接读取 mock 数据
-- 检索层反向依赖回答生成层
-- 路由层依赖前端输入控件结构
-
----
-
-## 6. 当前阶段结论
-
-当前文件职责冻结的核心目标是：
-
-1. 先把最小可运行文件集写清楚
-2. 避免同一逻辑在多个文件之间来回漂移
-3. 保持目录与职责一一对应
-4. 为实现阶段提供可直接开工的边界
-
-一句话总结就是：
-
-**当前文件职责说明只服务于最小可运行闭环，不预埋第二阶段的大型目录和重型职责。**
-</file>
-
-<file path="docs/progress_status_v1.md">
-# OrionStack 当前阶段进度说明 v1
-
-## 1. 文档目标
-
-本文档用于说明 OrionStack 当前阶段的真实进度状态、已冻结内容、当前未完成项与下一步实现顺序。
-
-本文档不是路线图，不描述远期规划，只服务于当前阶段的实现推进。
-
----
-
-## 2. 当前阶段定位
-
-当前阶段聚焦于：
-
-- FAQ / 业务知识问答单一主场景
-- 最小可运行问答闭环
-- 低阻力本地开发体验
-- 可观测、可调试、可回退的轻量链路
-- 从 mock FAQ Demo 向真实文档链路过渡
-
----
-
-## 3. 当前已完成内容
-
-### 3.1 设计基线已冻结
-
-已完成并冻结：
-
-- `system_design_v1`
-- 主链路边界
-- 模块职责边界
-- 路由 / 检索 / 回答生成 / citation / fallback 的最小契约
-- 调试、反馈、配置、开发体验约束
-
-### 3.2 前端方案已冻结
-
-已冻结：
-
-- 前端选型为 `Vue 3 + Vite`
-- 当前阶段只覆盖手机 Web 与 PC Web
-- 当前阶段不进入原生 App 打包链路
-
-### 3.3 目录结构已冻结
-
-已完成：
-
-- 冻结目录结构
-- 生成冻结目录压缩包
-- 生成空文件骨架压缩包
-
-### 3.4 文件职责说明已完成
-
-已完成：
-
-- 最小可运行文件清单
-- 文件职责边界说明
-
-### 3.5 首轮最小可运行闭环已完成首轮验收
-
-已完成：
-
-- 后端服务可启动
-- 前端页面可打开
-- `GET /healthz` 验收通过
-- `POST /api/chat/ask` 验收通过
-- 页面输入问题后可返回最小答案结果
-
-说明：
-
-- 用户反馈 `/api` 返回 `{"detail":"Not Found"}`。
-- 该路径当前不是冻结设计中的验收接口，不构成首轮闭环失败。
-- 当前阶段冻结的最小接口仍为：
-  - `GET /healthz`
-  - `POST /api/chat/ask`
-
-### 3.6 P1-P5 收口已完成
-
-已完成：
-
-- P1：协议与链路收口
-- P2：检索与 citation 收口
-- P3：Demo 与开发体验收口
-- P4：最小回归保护
-- P5：后续增强 backlog 收口
-
-说明：
-
-- 当前系统已具备 `trace_id`、`response_status`、`citations`、最小 debug 信息、Demo / Dev / Prod 模式边界与最小测试保护。
-- 当前阶段的核心问题已从“是否能跑”转为“如何从 mock FAQ 平滑过渡到真实文档链路”。
-
----
-
-## 4. 当前阶段真实进度判断
-
-如果按阶段划分，当前可以判断为：
-
-### 4.1 设计阶段
-
-状态：**完成**
-
-说明：
-
-- 当前阶段设计范围已经足够
-- 不建议继续扩写系统设计文档
-
-### 4.2 骨架阶段
-
-状态：**完成**
-
-说明：
-
-- 目录结构已冻结
-- 空文件骨架已生成
-- 文件职责已冻结
-
-### 4.3 最小可运行实现阶段
-
-状态：**完成并通过首轮本地验收**
-
-说明：
-
-- 当前最小闭环已经可以本地跑通
-- FAQ mock 数据问答链路已经可用
-- 当前不再以“能否启动”为主要风险点
-
-### 4.4 FAQ Demo 收口阶段
-
-状态：**完成**
-
-说明：
-
-- P1-P5 已完成收尾
-- FAQ Demo 路径、最小返回结构、citation、debug、脚本与测试保护已形成当前基线
-
-### 4.5 真实文档链路接入阶段
-
-状态：**完成**
-
-说明：
-
-- P6 已完成当前计划范围内的上传、解析切块、document-first 检索、citation 回源与前端展示收口
-- 当前系统已不再处于“真实文档链路待启动”，而是已具备最小可运行真实文档问答链路
-- 如继续推进，下一片应进入文档库可管理与检索范围收口，而不是继续围绕 P6 做重复扩写
-
-### 4.6 文档库可管理与范围收口阶段
-
-状态：**完成**
-
-说明：
-
-- P7 已完成当前计划范围内的文档列表、文档删除、最小 `document_ids` 范围检索与前端文档管理入口
-- 当前系统已从“可上传文档并问答”推进到“可管理文档并约束问答范围”
-- 如继续推进，下一片应进入最小问答记录与反馈闭环，而不是再回头扩写文档管理片
-
-### 4.7 最小问答记录与反馈闭环阶段
-
-状态：**完成**
-
-说明：
-
-- `/api/chat/ask` 已补齐最小请求与结果记录落盘
-- 反馈记录已通过 `trace_id` 与问答记录形成最小关联
-- demo/dev 下已提供最小问答记录与反馈查看接口
-
-### 4.8 最小记录查看与开发排查体验阶段
-
-状态：**完成**
-
-说明：
-
-- 当前问答页已接入开发态最近记录区
-- 当前开发者已可在单页内回看最近 ask / feedback 记录
-- 当前下一片应进入记录细节压缩与本地数据维护边界收口
-
-### 4.9 本地记录数据维护与查看摘要阶段
-
-状态：**完成**
-
-说明：
-
-- 当前已补本地记录清理脚本与脚本说明
-- 当前最近记录区已收口为更聚焦的摘要视图
-- 当前下一片应进入本地记录维护策略配置化，而不是重新扩写记录查看界面
-
-### 4.10 本地记录维护策略配置化阶段
-
-状态：**完成**
-
-说明：
-
-- 已在 `settings.py` 增加最小记录保留数量配置项
-- 已在两个 repo 的保存方法中增加保留边界截断逻辑
-- 已在 `scripts/README.md` 补充保留策略说明
-- 当前下一片应进入生产配置调优收口
-
-### 4.11 生产配置调优收口阶段
-
-状态：**完成**
-
-说明：
-
-- 已在 `settings.py` 增加 `cors_origins` 配置项，支持环境变量覆盖
-- 已新增 `.env.example` 作为全量配置参考
-- 已新增 `scripts/start-backend.py` 生产启动脚本
-- 已在 `scripts/README.md` 补充生产配置说明
-- 当前系统已具备最小生产配置调优与启动方式区分能力
-
-### 4.12 部署运维最小说明阶段
-
-状态：**完成**
-
-说明：
-
-- 已重写 `README.md`，补齐面向非开发用户的最小部署运行指南
-- 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 配置、项目结构、API 列表与数据存储说明
-- 当前系统已具备可独立部署运行的最小文档基础
-
----
-
-## 5. 当前未完成内容
-
-当前尚未完成的内容，已不再属于 FAQ Demo 收口，也不再属于 P6 / P7 / P8 / P9 / P10 当前片内未完成项，而主要属于新的后续片：
-
-当前已完成 P6、P7、P8、P9、P10、P11、P12、P13：最小文档上传与登记、文档解析与切块、document-first 检索、citation 回源、文档列表 / 删除、范围检索、问答记录闭环、前端记录查看入口、本地记录清理脚本、记录摘要收口、记录保留策略配置化、生产配置调优收口、部署运维最小说明，并完成当前阶段最小测试与文档同步。
-
-当前下一阶段主要剩余问题为：
-
-1. 当前记录保留策略已配置化，但长期运行下的边界校验仍需真实环境验证
-
----
-
-## 16. P11 之后规划：P12 生产配置调优收口片
-
-### 16.1 P12 目标
-
-把当前系统从：
-
-```text
-配置散落在代码默认值与脚本参数中
--> 缺少生产环境最小可调配置边界
--> 缺少配置参考与启动方式区分
-```
-
-推进到：
-
-```text
-配置有最小环境变量承载位
--> CORS 来源可按部署域名调优
--> 生产启动方式有明确区分
--> 配置差异有明确文档
-```
-
-### 16.2 P12 范围
-
-P12 只做以下 4 类工作：
-
-1. CORS 来源可配置化，支持环境变量 `ORIONSTACK_CORS_ORIGINS`
-2. 新增 `.env.example` 作为配置参考文件
-3. 新增生产启动脚本 `scripts/start-backend.py`（不带 `--reload`，支持多 worker）
-4. 更新脚本说明、进度文档与文件职责文档
-
-### 16.3 P12 不做的内容
-
-P12 明确不做：
-
-1. 不做 Docker / 容器化配置
-2. 不做 Nginx / 反向代理配置
-3. 不做 HTTPS / 证书配置
-4. 不做数据库化存储
-5. 不做 CI/CD 流水线
-6. 不做复杂运维监控平台
-
-### 16.4 P12 建议实现顺序
-
-#### 第一步：CORS 来源可配置化
-
-目标：
-
-- 在 `settings.py` 中增加 `cors_origins` 配置项
-- 默认值保持当前开发来源 `http://localhost:5173` 与 `http://127.0.0.1:5173`
-- 生产环境可通过 `ORIONSTACK_CORS_ORIGINS` 环境变量设置实际部署域名
-- `main.py` 中 CORS 中间件从 `settings` 读取 `cors_origins`
-
-当前状态：
-
-- `settings.py` 已增加 `cors_origins` 配置项与 `_resolve_cors_origins` 辅助函数
-- `ORIONSTACK_CORS_ORIGINS` 支持逗号分隔的多来源值
-- `main.py` 已从 `settings.cors_origins` 读取 CORS 来源
-- `backend/tests/test_chat_flow.py` 已补齐 CORS 配置默认值与环境变量覆盖验证
-
-#### 第二步：配置参考文件
-
-目标：
-
-- 新增 `.env.example` 列出所有可用环境变量及其默认值
-- 为生产部署提供最小配置参考
-
-当前状态：
-
-- `.env.example` 已创建，包含所有 `ORIONSTACK_*` 环境变量及其说明
-
-#### 第三步：生产启动脚本
-
-目标：
-
-- 新增 `scripts/start-backend.py`，以生产配置启动后端
-- 与 `dev-backend.py` 的差异：不带 `--reload`，默认 `prod` 模式，支持 `-Workers` 参数
-
-当前状态：
-
-- `scripts/start-backend.py` 已创建
-- 默认 `prod` 模式，不带 `--reload`
-- 支持 `-Workers` 参数启动多 worker 进程
-
-#### 第四步：文档收口
-
-目标：
-
-- 更新 `scripts/README.md` 补充生产配置说明、环境变量参考表与启动脚本说明
-- 更新进度文档与文件职责文档
-
-当前状态：
-
-- `scripts/README.md` 已补充 `start-backend.py` 说明、生产配置说明、环境变量参考表与 CORS 来源说明
-- `progress_status_v1.md` 已同步 P12 当前状态
-- `file_responsibilities_v1.md` 已同步 `settings.py`、`start-backend.py` 与 `.env.example` 职责变化
-
-### 16.5 P12 对应的文件级任务方向
-
-#### 后端配置方向
-
-- `backend/app/config/settings.py`
-- `backend/main.py`
-
-#### 配置与脚本方向
-
-- `.env.example`
-- `scripts/start-backend.py`
-- `scripts/README.md`
-
-#### 测试与文档方向
-
-- `backend/tests/test_chat_flow.py`
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 16.6 P12 可开工配置清单
-
-#### 16.6.1 CORS 来源配置项
-
-配置项：
-
-- `ORIONSTACK_CORS_ORIGINS`
-
-默认值（不设置时）：
-
-- `http://localhost:5173,http://127.0.0.1:5173`
-
-设置方式：
-
-```powershell
-$env:ORIONSTACK_CORS_ORIGINS = "https://app.example.com,https://admin.example.com"
-```
-
-#### 16.6.2 生产启动参数
-
-脚本：
-
-- `scripts/start-backend.py`
-
-关键参数：
-
-- `-AppMode prod`（默认）
-- `-Workers 1`（默认）
-- 不带 `--reload`
-
-#### 16.6.3 环境变量参考
-
-参见 `.env.example` 文件。
-
-### 16.7 P12 可开工测试清单
-
-#### 16.7.1 后端最小验证清单
-
-应完成以下最小验证：
-
-1. CORS 来源默认值包含开发环境来源
-2. CORS 来源通过环境变量可自定义
-3. CORS 来源为空时回退到默认开发来源
-4. 生产启动脚本可正常启动（`-CheckOnly` 模式）
-
-#### 16.7.2 文档要求
-
-应同步以下内容：
-
-1. `scripts/README.md` 补充生产配置与启动脚本说明
-2. `progress_status_v1.md` 更新 P12 实际状态
-3. `file_responsibilities_v1.md` 更新配置与脚本职责变化
-
-### 16.8 P12 阶段结论目标
-
-P12 完成后，应达成以下结论：
-
-1. 生产环境 CORS 来源可通过环境变量配置，不再硬编码
-2. 所有环境变量有明确参考文件与默认值
-3. 生产启动方式与开发启动方式有明确区分
-4. 配置差异（demo/dev/prod）有明确文档
-
-### 16.9 P12 当前结论
-
-当前 P12 的真实结论为：
-
-1. `settings.py` 已增加 `cors_origins` 配置项，支持环境变量 `ORIONSTACK_CORS_ORIGINS` 覆盖
-2. `.env.example` 已列出所有环境变量及其默认值与说明
-3. `scripts/start-backend.py` 已提供生产启动入口，默认 `prod` 模式，不带 `--reload`
-4. `scripts/README.md` 已补充生产配置说明、环境变量参考表与 CORS 来源说明
-
-一句话总结：
-
-**P12 计划范围已完成，当前系统已具备最小生产配置调优与启动方式区分能力。**
-
----
-
-## 6. 已完成片记录：P6 真实文档链路接入片
-
-### 6.1 P6 目标
-
-把当前系统从：
-
-```text
-raw_query
--> mock_faq.json
--> FAQ 命中
--> answer
-```
-
-推进到：
-
-```text
-上传文档
--> 解析文本
--> 切块
--> 建索引 / 可检索
--> 问答命中真实文档
--> 返回可回源 citation
-```
-
-### 6.2 P6 范围
-
-P6 只做以下 4 类工作：
-
-1. 文档上传与登记最小链路
-2. 文档解析与切块最小链路
-3. 检索从 FAQ-only 切到 Document-first
-4. citation 回源与前端展示收口
-
-### 6.3 P6 不做的内容
-
-P6 明确不做：
-
-1. 不做 LangGraph
-2. 不做 LlamaIndex
-3. 不做多 Agent
-4. 不做复杂权限控制
-5. 不做 rerank 平台
-6. 不做 App 打包
-7. 不做多轮记忆
-8. 不做重型异步任务系统
-
-### 6.4 P6 实现顺序
-
-当前建议严格按以下顺序推进：
-
-#### 第一步：文档上传与登记
-
-目标：
-
-- 新增最小文档上传接口
-- 保存原始文件与最小文档元数据
-- 返回 `document_id`
-
-当前状态：
-
-- `POST /api/documents/upload` 已接入
-- 原始文件与最小文档元数据已完成本地保存
-- 前端问答页已提供最小文档上传入口
-- 上传成功后可返回 `document_id`
-- `backend/tests/test_document_flow.py` 已覆盖上传成功与后缀校验的最小用例
-
-#### 第二步：文档解析与切块
-
-目标：
-
-- 将上传文档解析成纯文本
-- 做最小 chunk 切分
-- 保存 chunk 与最小回源元数据
-
-当前状态：
-
-- 上传后会同步完成最小文档解析与 chunk 切分
-- chunk 已落地保存最小回源元数据：`chunk_id / document_id / filename / chunk_index / text / source_label / source_locator / snippet`
-- 上传响应已返回 `text_length` 与 `chunk_count`
-- `backend/tests/test_document_flow.py` 已补齐解析与 chunk 落地断言
-
-#### 第三步：检索切到 Document-first
-
-目标：
-
-- 优先检索 document chunks
-- FAQ mock 数据保留为 fallback
-- 弱命中仍按当前边界进入 fallback
-
-当前状态：
-
-- `Retriever` 已切换为 document-first：优先检索本地 document chunks
-- document 命中达到最小分数时，`/api/chat/ask` 会优先返回文档 chunk 内容
-- document 弱命中时会继续尝试 FAQ mock 数据，保留原有 fallback 边界
-- `backend/tests/test_chat_flow.py` 已补齐 document-first 命中与 FAQ fallback 断言
-
-#### 第四步：citation 回源收口
-
-目标：
-
-- citation 结构与真实文档来源对齐
-- 前端能展示文档名、定位信息与 snippet
-
-当前状态：
-
-- document chunk 已补齐最小回源元数据：`document_id / file_path / chunk`
-- document citation 的 `source_locator` 已收口为可回源文本定位信息
-- 前端引用列表已明确区分 `FAQ 来源` 与 `文档来源`，并突出定位信息与引用片段
-- `backend/tests/test_document_flow.py` 与 `backend/tests/test_chat_flow.py` 已补齐 citation 回源断言
-
-#### 第五步：前端上传入口与测试补一轮
-
-目标：
-
-- 在当前问答页上增加最小上传入口
-- 补文档链路最小测试保护
-- 更新进度文档
-
-当前状态：
-
-- 当前问答页已提供最小上传入口
-- 文档链路最小 `pytest` 保护已覆盖上传 / 解析 / 切块 / document-first / citation 回源
-- `progress_status_v1.md` 已同步到 P6 当前完成状态
-
----
-
-## 7. P6 对应的文件级任务方向
-
-P6 预计会直接新增或修改以下文件附近：
-
-### 7.1 后端新增方向
-
-- `backend/app/api/routes/documents.py`
-- `backend/app/schemas/document.py`
-- `backend/app/services/document_service.py`
-- `backend/app/services/document_parser.py`
-- `backend/app/services/chunk_service.py`
-- `backend/app/storage/repositories/document_repo.py`
-- `backend/app/storage/repositories/chunk_repo.py`
-- `backend/app/storage/uploads/`
-
-### 7.2 后端修改方向
-
-- `backend/app/services/chat_service.py`
-- `backend/app/retrieval/retriever.py`
-- `backend/app/retrieval/citation_mapper.py`
-- `backend/app/config/settings.py`
-- `backend/main.py`
-
-### 7.3 前端新增 / 修改方向
-
-- `frontend/src/services/documents.ts`
-- `frontend/src/types/document.ts`
-- `frontend/src/components/chat/DocumentUpload.vue`
-- `frontend/src/pages/chat/ChatPage.vue`
-- `frontend/src/components/chat/CitationList.vue`
-
-### 7.4 测试与文档方向
-
-- `backend/tests/test_document_flow.py`
-- `backend/tests/test_chat_flow.py`
-- `docs/progress_status_v1.md`
-
-当前状态：
-
-- `test_document_flow.py` 已接入 P6 前四步中的上传 / 解析 / 切块 / citation 回源验证
-- `test_chat_flow.py` 已补齐 P6 第三步与第四步的最小验证（document-first / FAQ fallback / citation 回源）
-- `progress_status_v1.md` 已同步 P6 第四步状态
-
----
-
-## 8. 当前阶段验收标准
-
-当前阶段已经不再只看“最小 FAQ 闭环是否能跑”，而应在 P6 中进一步看真实文档链路是否打通。
-
-### 当前已完成验收标准
-
-1. 后端服务可启动
-2. 前端页面可打开
-3. `GET /healthz` 正常返回
-4. `POST /api/chat/ask` 正常返回
-5. 页面输入问题后能展示答案
-6. 返回结构中至少包含：
-   - `response_status`
-   - `trace_id`
-   - `answer`
-   - `citations`
-
-### P6 当前已完成的主链路验收
-
-1. 能上传 1 份文档
-2. 上传接口可返回 `document_id`
-3. 原始文件与最小文档元数据已完成本地登记
-4. 文档上传后能被解析为纯文本并切成最小 chunks
-5. chunk 已完成本地落盘，并带最小回源元数据
-6. `/api/chat/ask` 已能优先命中文档内容
-7. document 弱命中时，FAQ mock 路径仍可作为 fallback 工作
-8. 前端能看到最小上传反馈以及 `text_length / chunk_count`
-
-### P6 当前已完成的 citation 验收
-
-1. 文档 citation 已返回最小一致结构：`citation_id / source_label / source_locator / snippet`
-2. document citation 已包含 `document_id / file_path / chunk` 级别的最小回源定位信息
-3. FAQ citation 与 document citation 已共用同一最小协议结构
-4. 前端已能区分 FAQ 来源与文档来源，并展示定位信息与引用片段
-
-### P6 完成后的新增验收标准
-
-1. 能上传 1 份文档
-2. 文档能被解析为 chunk
-3. `/api/chat/ask` 能命中文档内容
-4. citation 能返回真实文档定位信息
-5. 前端能看到最小上传反馈
-6. 原 FAQ demo 路径仍能工作
-
-补充说明：
-
-- `/api` 根路径当前不是冻结验收接口。
-- 当前 `/api` 返回 `Not Found` 不视为首轮验收失败。
-
----
-
-## 9. 当前阶段不应做的事
-
-当前阶段不应做以下扩展：
-
-1. 不新增第二套前端目录
-2. 不新增原生 App 工程
-3. 不新增多 Agent 目录
-4. 不新增 LangGraph / LlamaIndex 适配层
-5. 不新增复杂 benchmark 与评测平台
-6. 不新增完整权限系统实现
-7. 不重新打开系统设计大范围修改
-8. 不因为 `/api` 根路径不存在而扩写无必要接口
-9. 不重新扩展 FAQ Demo 范围
-
----
-
-## 10. 当前阶段结论
-
-当前阶段的真实状态可以总结为：
-
-- 设计已冻结
-- 骨架已冻结
-- 文件职责已冻结
-- 最小可运行闭环已通过首轮本地验收
-- P1-P5 已完成收口
-- 已进入 P6，并完成当前计划范围：文档上传登记、文档解析切块、document-first 检索、citation 回源收口，以及最小测试与进度同步
-- 已进入 P7，并完成当前计划范围：文档列表、文档删除、最小范围检索、前端文档管理入口与手工验收补记
-- 已进入 P8，并完成当前计划范围：ask 记录落盘、feedback 按 trace_id 关联、demo/dev 记录查看接口与最小测试收口
-- 已进入 P9，并完成当前计划范围：前端最近记录区、开发态单页回看、前端构建与文档同步
-- 已进入 P10，并完成当前计划范围：本地记录清理脚本、脚本说明、记录摘要收口与文档同步
-- 已进入 P10，并完成当前计划范围：本地记录清理脚本、记录摘要收口与策略配置化
-- 已进入 P11，并完成当前计划范围：本地记录维护策略配置化与自动截断
-- 已进入 P12，并完成当前计划范围：CORS 来源可配置化、配置参考文件、生产启动脚本与配置说明收口
-- 已进入 P13，并完成当前计划范围：部署运维最小说明收口
-
-一句话总结就是：
-
-**当前不再继续扩设计，FAQ Demo 到可独立部署运行的文档闭环已经跑通；当前 P6、P7、P8、P9、P10、P11、P12、P13 计划范围已完成，如继续推进，应进入新的业务目标，而不是继续扩大当前片的实现范围。**
-
----
-
-## 11. 已完成片记录：P7 文档库可管理与检索范围收口片
-
-### 11.1 P7 目标
-
-把当前系统从：
-
-```text
-上传文档
--> 解析文本
--> 切块
--> 全库检索
--> 返回 citation
-```
-
-推进到：
-
-```text
-上传文档
--> 文档列表可见
--> 可按最小 document 范围问答
--> 删除文档时同步清理 chunk
--> 返回稳定 citation
-```
-
-### 11.2 P7 范围
-
-P7 只做以下 4 类工作：
-
-1. 文档列表与删除最小链路
-2. 问答请求增加最小 `document_id` 范围约束
-3. 本地文档与 chunk 清理一致性收口
-4. 前端最小文档管理入口、测试与进度文档同步
-
-### 11.3 P7 不做的内容
-
-P7 明确不做：
-
-1. 不做复杂文档管理后台
-2. 不做异步索引任务系统
-3. 不做 OCR 与扫描件识别链路
-4. 不做 rerank 平台或向量平台治理
-5. 不做复杂权限控制
-6. 不做多租户文档隔离体系
-
-### 11.4 P7 建议实现顺序
-
-#### 第一步：文档列表与删除
-
-目标：
-
-- 提供最小文档列表接口
-- 提供最小文档删除接口
-- 删除时同步清理原始文件、文档元数据与 chunks
-
-当前状态：
-
-- `GET /api/documents` 已接入，可返回最小文档列表
-- `DELETE /api/documents/{document_id}` 已接入，可同步清理原始文件、文档元数据与 chunks
-- `backend/tests/test_document_flow.py` 已补齐列表与删除的最小验证
-
-#### 第二步：问答范围收口
-
-目标：
-
-- 在问答请求中增加最小 `document_id` 范围参数
-- 检索优先在指定文档范围内执行
-- 未指定范围时仍可保留当前全库检索行为
-
-当前状态：
-
-- `POST /api/chat/ask` 已支持最小 `document_ids` 范围参数
-- 传入 `document_ids` 时，检索只在指定文档范围内执行，不再回落到未选文档或 FAQ
-- 未传 `document_ids` 时，仍保留当前 document-first 全库检索与 FAQ fallback 行为
-- `backend/tests/test_chat_flow.py` 已补齐范围命中与范围 fallback 的最小验证
-
-#### 第三步：前端最小文档管理入口
-
-目标：
-
-- 在当前问答页可看到已上传文档列表
-- 支持最小删除操作
-- 支持选择当前问答范围
-
-当前状态：
-
-- 当前问答页已接入文档列表区，可展示文件名、上传时间、chunk 数与 text_length
-- 当前问答页已支持勾选文档范围后发起问答
-- 当前问答页已支持删除文档，并在上传 / 删除后自动刷新文档列表
-- 前端仍保持在当前 `ChatPage` 内收口，未新增第二页面
-
-#### 第四步：测试与文档收口
-
-目标：
-
-- 补齐列表、删除、范围检索的最小测试
-- 更新进度文档与文件职责文档
-
-当前状态：
-
-- P7 前三步对应的后端 `pytest` 已补齐并通过
-- `progress_status_v1.md` 已同步到 P7 当前完成状态
-- `file_responsibilities_v1.md` 已同步前端文档管理职责变化
-- 前端最小手工验收记录已按当前页面交互链路补记一轮
-
-### 11.5 P7 对应的文件级任务方向
-
-P7 预计会直接新增或修改以下文件附近：
-
-#### 后端方向
-
-- `backend/app/api/routes/documents.py`
-- `backend/app/api/routes/chat.py`
-- `backend/app/schemas/request.py`
-- `backend/app/services/chat_service.py`
-- `backend/app/storage/repositories/document_repo.py`
-- `backend/app/storage/repositories/chunk_repo.py`
-- `backend/app/retrieval/retriever.py`
-
-#### 前端方向
-
-- `frontend/src/pages/chat/ChatPage.vue`
-- `frontend/src/components/chat/DocumentUpload.vue`
-- `frontend/src/services/documents.ts`
-- `frontend/src/types/document.ts`
-
-#### 测试与文档方向
-
-- `backend/tests/test_document_flow.py`
-- `backend/tests/test_chat_flow.py`
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 11.6 P7 可开工接口清单
-
-P7 建议直接冻结以下最小接口与契约，避免开发中边做边改。
-
-#### 11.6.1 文档列表接口
-
-接口：
-
-- `GET /api/documents`
-
-目标：
-
-- 返回当前本地已登记文档列表
-- 供前端渲染最小文档管理区
-
-建议返回结构：
-
-```json
-{
-  "items": [
-    {
-      "document_id": "doc-xxx",
-      "filename": "guide.txt",
-      "content_type": "text/plain",
-      "size_bytes": 123,
-      "created_at": "2026-04-16T00:00:00+00:00",
-      "text_length": 1200,
-      "chunk_count": 4
-    }
-  ]
-}
-```
-
-实现约束：
-
-- 当前阶段只返回最小列表，不做分页
-- 当前阶段只读本地 JSONL 元数据
-- 建议按 `created_at` 倒序返回，便于前端展示最新上传文档
-
-涉及文件：
-
-- `backend/app/api/routes/documents.py`
-- `backend/app/schemas/document.py`
-- `backend/app/services/document_service.py`
-- `backend/app/storage/repositories/document_repo.py`
-- `frontend/src/services/documents.ts`
-- `frontend/src/types/document.ts`
-
-#### 11.6.2 文档删除接口
-
-接口：
-
-- `DELETE /api/documents/{document_id}`
-
-目标：
-
-- 删除原始文件
-- 删除文档元数据
-- 删除关联 chunk 记录
-
-建议返回结构：
-
-```json
-{
-  "status": "deleted",
-  "document_id": "doc-xxx"
-}
-```
-
-异常约束：
-
-- `document_id` 不存在时返回 `404`
-- 删除失败时返回最小错误信息，不引入复杂错误模型
-
-涉及文件：
-
-- `backend/app/api/routes/documents.py`
-- `backend/app/services/document_service.py`
-- `backend/app/storage/repositories/document_repo.py`
-- `backend/app/storage/repositories/chunk_repo.py`
-- `frontend/src/services/documents.ts`
-
-#### 11.6.3 问答范围约束接口
-
-接口：
-
-- `POST /api/chat/ask`
-
-P7 建议增量请求结构：
-
-```json
-{
-  "raw_query": "如何查看预算报表模板？",
-  "debug": true,
-  "document_ids": ["doc-budget", "doc-policy"]
-}
-```
-
-目标：
-
-- 为问答请求增加最小文档范围约束
-- 未传 `document_ids` 时保持当前全库检索行为
-- 传入 `document_ids` 时，仅在指定文档范围内做 document 检索
-
-当前建议行为：
-
-- `document_ids` 为空或未传：保持当前 document-first 全库检索 + FAQ fallback
-- `document_ids` 非空：仅检索指定文档 chunks
-- 指定范围内弱命中或无命中：进入当前 `fallback`，不跨到未选文档
-
-响应结构：
-
-- 继续沿用当前 `ChatAskResponse` 最小协议
-- 不新增第二套问答响应结构
-
-涉及文件：
-
-- `backend/app/schemas/request.py`
-- `backend/app/services/chat_service.py`
-- `backend/app/retrieval/retriever.py`
-- `frontend/src/types/chat.ts`
-- `frontend/src/services/chat.ts`
-- `frontend/src/pages/chat/ChatPage.vue`
-
-#### 11.6.4 前端最小文档管理接口面
-
-前端不新增第二页面，仍在当前 `ChatPage` 收口。
-
-建议最小交互：
-
-1. 上传成功后自动刷新文档列表
-2. 文档列表可展示：文件名、上传时间、chunk 数
-3. 每条文档可执行删除
-4. 每条文档可勾选是否纳入本次问答范围
-5. 未勾选任何文档时，提示当前为全库检索
-
-涉及文件：
-
-- `frontend/src/pages/chat/ChatPage.vue`
-- `frontend/src/components/chat/DocumentUpload.vue`
-- `frontend/src/services/documents.ts`
-- `frontend/src/types/document.ts`
-
-### 11.7 P7 可开工测试清单
-
-P7 测试仍以当前仓库最小保护方式为准：后端以 `pytest` 为主，前端先做最小手工验收，不在本片引入新的测试框架。
-
-#### 11.7.1 后端测试清单：`backend/tests/test_document_flow.py`
-
-应新增或补齐以下用例：
-
-1. 上传后 `GET /api/documents` 能返回对应文档
-2. 列表项包含最小字段：`document_id / filename / created_at / text_length / chunk_count`
-3. `DELETE /api/documents/{document_id}` 成功后，原始文件被删除
-4. 删除成功后，文档元数据记录被移除
-5. 删除成功后，关联 chunk 记录被移除
-6. 删除不存在的 `document_id` 时返回 `404`
-
-#### 11.7.2 后端测试清单：`backend/tests/test_chat_flow.py`
-
-应新增或补齐以下用例：
-
-1. 传入 `document_ids` 时，问答能命中指定文档范围内的 chunk
-2. 传入 `document_ids` 时，不会命中未选择文档的 chunk
-3. 未传 `document_ids` 时，仍保持当前全库 document-first 行为
-4. 未传 `document_ids` 时，FAQ fallback 仍可工作
-5. 传入 `document_ids` 且指定范围内弱命中时，返回 `fallback`
-6. 指定范围命中时，citation 仍返回当前最小一致结构
-
-#### 11.7.3 前端最小手工验收清单
-
-应完成以下手工验收：
-
-1. 上传文档后，页面能立即看到新文档出现在列表中
-2. 勾选某份文档后提问，返回结果来自该文档，citation 不越界到未选文档
-3. 不勾选文档时，当前问答仍可按全库行为工作
-4. 删除文档后，页面列表同步消失
-5. 删除文档后，再次提问不应继续命中该文档 chunk
-
-#### 11.7.3.1 本轮前端最小手工验收记录
-
-记录时间：
-
-- 2026-04-16
-
-记录说明：
-
-- 本轮记录用于补齐当前页面交互验收留痕
-- 当前未引入浏览器自动化测试框架
-- 本轮结论基于页面交互实现收口、接口联动实现收口与前端构建通过结果补记，不替代发布前现场点检
-
-本轮记录：
-
-1. 上传文档后，页面可刷新并显示新文档条目，状态：已收口
-2. 勾选单份文档后提问，请求已携带 `document_ids`，状态：已收口
-3. 不勾选文档时，页面仍按全库检索链路发起问答，状态：已收口
-4. 删除文档后，页面会刷新列表并清理已选范围，状态：已收口
-5. 前端生产构建 `npm run build` 已通过，状态：已收口
-
-补充说明：
-
-- 如进入发布前验收，仍建议按同一清单再做一轮实际点击确认
-
-#### 11.7.4 回归保护要求
-
-P7 完成后，以下旧能力不得回退：
-
-1. `GET /healthz` 正常返回
-2. `POST /api/chat/ask` 原无范围参数时仍能工作
-3. `POST /api/documents/upload` 仍能返回 `document_id / text_length / chunk_count`
-4. FAQ mock 路径在无文档范围约束时仍能作为 fallback 工作
-
-### 11.8 P7 当前结论
-
-当前 P7 的真实结论为：
-
-1. 文档已可上传、列出、删除
-2. 问答已可按最小 `document_ids` 范围执行
-3. 前端已能在单页内完成最小文档管理与范围选择
-4. 后端 `pytest`、前端构建与最小手工验收记录已补齐当前片范围
-
-一句话总结：
-
-**P7 计划范围已完成，当前系统已具备最小可管理文档问答链路。**
-
----
-
-## 12. P7 之后规划：P8 最小问答记录与反馈闭环片
-
-### 12.1 P8 目标
-
-把当前系统从：
-
-```text
-提问
--> 路由
--> 检索
--> 回答
--> 用户反馈单独写入
-```
-
-推进到：
-
-```text
-提问
--> 路由 / 检索 / 回答
--> 请求与结果最小落盘
--> 反馈按 trace_id 关联
--> demo/dev 可最小回看记录
-```
-
-### 12.2 P8 范围
-
-P8 只做以下 4 类工作：
-
-1. `/api/chat/ask` 最小请求记录与结果记录落盘
-2. 反馈记录与问答记录通过 `trace_id` 收口
-3. demo/dev 模式下提供最小记录查看接口
-4. 补测试、补文档、补最小人工回看说明
-
-### 12.3 P8 不做的内容
-
-P8 明确不做：
-
-1. 不做多轮会话记忆注入
-2. 不做完整运营后台或评测平台
-3. 不做复杂日志聚合平台接入
-4. 不做生产环境默认落完整调试字段
-5. 不做复杂权限控制与审计系统
-
-### 12.4 P8 建议实现顺序
-
-#### 第一步：问答记录落盘
-
-目标：
-
-- 在 `/api/chat/ask` 完成后记录最小请求与结果字段
-- 记录字段最少应包括：`trace_id / raw_query / response_status / retrieved_chunk_ids / created_at`
-
-当前状态：
-
-- `/api/chat/ask` 已在返回后写入最小问答记录
-- 当前最小记录字段已包含：`trace_id / raw_query / response_status / retrieved_chunk_ids / created_at`
-- `backend/tests/test_chat_flow.py` 已补齐 ask 记录写入验证
-
-#### 第二步：反馈与问答记录关联
-
-目标：
-
-- 保持反馈继续写入本地 JSONL
-- 通过 `trace_id` 让反馈记录可回指对应问答记录
-- 避免 ask 与 feedback 两条链路语义漂移
-
-当前状态：
-
-- 反馈记录仍写入本地 JSONL
-- 提交反馈后会按 `trace_id` 回写对应问答记录的最小反馈摘要
-- `backend/tests/test_chat_flow.py` 已补齐 feedback 与 ask 记录关联验证
-
-#### 第三步：最小记录查看接口
-
-目标：
-
-- 在 demo/dev 模式下提供最小最近记录查看接口
-- 只服务开发排查与质量回看，不扩成后台
-
-当前状态：
-
-- `GET /api/chat/records?limit=50` 已接入
-- `GET /api/chat/feedback?limit=50` 已接入
-- 记录查看接口默认只在 demo/dev 模式开放，prod 下返回 `404`
-
-#### 第四步：测试与文档收口
-
-目标：
-
-- 补齐 ask 记录、feedback 关联、记录查看接口的最小测试
-- 更新进度文档与文件职责文档
-
-当前状态：
-
-- `backend/tests/test_chat_flow.py` 已补齐 ask 记录、feedback 关联、记录查看接口与 prod 暴露边界验证
-- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P8 当前状态
-
-### 12.5 P8 对应的文件级任务方向
-
-P8 预计会直接新增或修改以下文件附近：
-
-#### 后端方向
-
-- `backend/app/api/routes/chat.py`
-- `backend/app/services/chat_service.py`
-- `backend/app/schemas/response.py`
-- `backend/app/storage/repositories/feedback_repo.py`
-- `backend/app/runtime/trace.py`
-- `backend/app/config/settings.py`
-- `backend/app/storage/repositories/chat_record_repo.py`
-
-#### 测试与文档方向
-
-- `backend/tests/test_chat_flow.py`
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 12.6 P8 可开工接口清单
-
-#### 12.6.1 问答记录查看接口
-
-接口：
-
-- `GET /api/chat/records?limit=50`
-
-目标：
-
-- 返回最近的最小问答记录
-- 默认只在 demo/dev 模式开放
-
-建议返回字段：
-
-- `trace_id`
-- `raw_query`
-- `response_status`
-- `retrieved_chunk_ids`
-- `created_at`
-- `feedback_label`（若已有反馈）
-
-#### 12.6.2 反馈查看接口
-
-接口：
-
-- `GET /api/chat/feedback?limit=50`
-
-目标：
-
-- 返回最近最小反馈记录
-- 便于核对 `trace_id` 与反馈写入情况
-
-说明：
-
-- 如实现中发现单独反馈查看价值不高，可在记录查看接口内直接合并反馈摘要，不强制保留双接口
-
-### 12.7 P8 可开工测试清单
-
-#### 12.7.1 后端测试清单：`backend/tests/test_chat_flow.py`
-
-应新增或补齐以下用例：
-
-1. `/api/chat/ask` 成功后会落最小记录
-2. `fallback` / `refused` / `ok` 至少各覆盖一类记录写入
-3. 提交反馈后，可通过 `trace_id` 找到对应记录或反馈摘要
-4. demo/dev 模式下记录查看接口可返回最近记录
-5. prod 模式下记录查看接口默认不可暴露或返回受限结果
-
-#### 12.7.2 文档要求
-
-应同步以下文档：
-
-1. `progress_status_v1.md` 更新 P8 实际状态
-2. `file_responsibilities_v1.md` 增加记录仓储与查看接口职责
-3. 如记录字段有调整，应同步写清最小冻结字段，避免后续漂移
-
-### 12.8 P8 当前结论
-
-当前 P8 的真实结论为：
-
-1. ask 与 feedback 已通过 `trace_id` 形成最小记录闭环
-2. demo/dev 模式下已可通过后端接口回看最近记录与最近反馈
-3. prod 模式下记录查看接口默认不暴露
-4. 后端最小测试已覆盖当前片的主路径与环境边界
-
-一句话总结：
-
-**P8 计划范围已完成，当前系统已具备最小问答记录与反馈闭环。**
-
----
-
-## 13. P8 之后规划：P9 最小记录查看与开发排查体验收口片
-
-### 13.1 P9 目标
-
-把当前系统从：
-
-```text
-后端记录已落盘
--> 只能通过接口或文件查看
-```
-
-推进到：
-
-```text
-后端记录已落盘
--> 前端可最小查看最近记录
--> 开发排查路径更短
-```
-
-### 13.2 P9 范围
-
-P9 只做以下 4 类工作：
-
-1. 在当前前端增加最小记录查看区
-2. 让开发者可按最近记录快速定位 ask / feedback 链路
-3. 维持 demo/dev 可见、prod 隐藏的记录查看边界
-4. 补手工验收与最小回归说明
-
-### 13.3 P9 不做的内容
-
-P9 明确不做：
-
-1. 不新增第二个前端页面或路由系统
-2. 不做完整日志后台或评测看板
-3. 不做复杂筛选、搜索、分页与统计图表
-4. 不做记录编辑、记录回放或请求重放
-5. 不做生产环境默认暴露记录内容
-
-### 13.4 P9 建议实现顺序
-
-#### 第一步：前端记录接口接入
-
-目标：
-
-- 在前端服务层接入 `GET /api/chat/records` 与 `GET /api/chat/feedback`
-- 定义前端最小记录类型
-
-当前状态：
-
-- `frontend/src/services/chat.ts` 已接入 `GET /api/chat/records` 与 `GET /api/chat/feedback`
-- `frontend/src/types/chat.ts` 已补齐最小记录类型
-
-#### 第二步：记录查看区接入当前问答页
-
-目标：
-
-- 在当前 `ChatPage` 中新增最小记录查看区
-- 至少展示最近 ask 记录与反馈摘要
-
-当前状态：
-
-- 当前 `ChatPage` 已接入最近记录区
-- 最近记录区已展示 ask 记录与 feedback 摘要
-- 未新增第二页面
-
-#### 第三步：开发排查交互收口
-
-目标：
-
-- 支持最小刷新操作
-- 支持快速查看 `trace_id / raw_query / response_status / feedback_label`
-- 保持仅在 demo/dev 可见
-
-当前状态：
-
-- 记录区已支持手动刷新
-- 记录区已展示 `trace_id / raw_query / response_status / feedback_label`
-- 当前区域仅在前端开发态显示
-
-#### 第四步：手工验收与文档收口
-
-目标：
-
-- 补一轮前端最小手工验收记录
-- 更新进度文档与文件职责文档
-
-当前状态：
-
-- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P9 当前状态
-- 待补一轮前端最小手工验收记录
-
-### 13.5 P9 对应的文件级任务方向
-
-P9 预计会直接新增或修改以下文件附近：
-
-#### 前端方向
-
-- `frontend/src/pages/chat/ChatPage.vue`
-- `frontend/src/services/chat.ts`
-- `frontend/src/types/chat.ts`
-- `frontend/src/styles/index.css`
-- `frontend/src/components/chat/RecordList.vue`
-
-#### 测试与文档方向
-
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 13.6 P9 可开工接口清单
-
-#### 13.6.1 最近问答记录接口
-
-接口：
-
-- `GET /api/chat/records?limit=20`
-
-前端最小展示字段：
-
-- `trace_id`
-- `raw_query`
-- `response_status`
-- `retrieved_chunk_ids`
-- `created_at`
-- `feedback_label`
-
-前端最小行为：
-
-- 页面初始化后可手动或自动拉取最近记录
-- 默认只展示最近少量记录，不做分页
-
-#### 13.6.2 最近反馈记录接口
-
-接口：
-
-- `GET /api/chat/feedback?limit=20`
-
-前端最小展示字段：
-
-- `trace_id`
-- `raw_query`
-- `feedback_label`
-- `response_status`
-- `created_at`
-
-说明：
-
-- 如实现中发现反馈单独列表价值有限，可只保留最近问答记录列表，并把反馈摘要直接展示在同一面板内
-
-### 13.7 P9 最小前端交互建议
-
-当前建议仍在 `ChatPage` 单页收口，不新增页面。
-
-建议最小交互：
-
-1. 在 demo/dev 显示“最近记录”面板
-2. 支持点击刷新记录
-3. 每条记录展示问题、状态、时间、trace_id 与反馈摘要
-4. 记录条目风格应与当前 Debug / 文档库区域保持一致
-5. prod 模式下不展示该区域
-
-### 13.8 P9 可开工测试清单
-
-#### 13.8.1 前端最小手工验收清单
-
-应完成以下手工验收：
-
-1. demo/dev 模式下页面可看到最近记录区
-2. prod 模式下页面不展示最近记录区
-3. 发起一次 ask 后，最近记录区能看到新记录
-4. 对 ask 提交 feedback 后，最近记录区能看到反馈摘要更新
-5. 点击刷新后，记录区内容与后端接口结果一致
-
-#### 13.8.2 回归保护要求
-
-P9 完成后，以下旧能力不得回退：
-
-1. 当前问答主链路与文档库管理功能保持可用
-2. 当前 Debug 区域保持可用
-3. 后端记录查看接口在 demo/dev 仍可用、prod 仍默认不暴露
-4. 前端不新增第二页面或新的路由体系
-
-### 13.9 P9 当前结论
-
-当前 P9 的真实结论为：
-
-1. 最近 ask / feedback 记录已进入前端单页可视区
-2. 当前开发态排查路径已从“查文件 / 调接口”缩短到“页面直接查看”
-3. 前端仍保持单页结构，未新增路由与后台页面
-
-一句话总结：
-
-**P9 计划范围已完成，当前系统已具备最小前端记录查看与开发排查体验。**
-
----
-
-## 14. P9 之后规划：P10 本地记录数据维护与查看摘要收口片
-
-### 14.1 P10 目标
-
-把当前系统从：
-
-```text
-记录已能写入并查看
--> 但记录会持续累积
--> 查看信息仍偏散
-```
-
-推进到：
-
-```text
-记录已能写入并查看
--> 本地记录有最小维护边界
--> 最近记录展示更聚焦关键摘要
-```
-
-### 14.2 P10 范围
-
-P10 只做以下 3 类工作：
-
-1. 明确本地记录文件的最小保留与清理边界
-2. 补最小维护脚本或说明
-3. 收口最近记录展示字段，减少开发态噪音
-
-### 14.3 P10 不做的内容
-
-P10 明确不做：
-
-1. 不做数据库化日志存储
-2. 不做复杂统计图表与聚合报表
-3. 不做自动归档到外部对象存储
-4. 不做多环境统一日志治理平台
-5. 不做生产环境默认开放记录维护接口
-
-### 14.4 P10 建议实现顺序
-
-#### 第一步：本地记录维护边界收口
-
-目标：
-
-- 明确 `chat_records.jsonl` 与 `feedback_records.jsonl` 的最小保留策略
-- 明确保留条数或清理方式的默认边界
-
-当前状态：
-
-- 本地记录文件边界已明确为 `chat_records.jsonl` 与 `feedback_records.jsonl`
-- 当前维护能力保持在本地文件层，不扩成服务端管理接口
-
-#### 第二步：维护脚本或说明接入
-
-目标：
-
-- 在 `scripts/` 下提供最小本地记录清理脚本，或给出同等明确的操作说明
-- 保持脚本只作用于本地记录文件，不触碰业务数据文件
-
-当前状态：
-
-- `scripts/clean-local-records.py` 已接入
-- `scripts/README.md` 已补齐本地记录清理脚本说明
-
-#### 第三步：最近记录摘要收口
-
-目标：
-
-- 收口 `RecordList` 的默认展示字段
-- 优先突出 `trace_id / raw_query / response_status / feedback_label / created_at`
-- 把次要细节降为次层信息，减少开发态噪音
-
-当前状态：
-
-- `RecordList` 默认展示已收口为摘要字段优先
-- chunk 细节已下沉到折叠区，不再占用默认主视图
-
-#### 第四步：手工验收与文档同步
-
-目标：
-
-- 补一轮本地记录维护与摘要查看的最小手工验收
-- 更新进度文档、文件职责文档与脚本说明
-
-当前状态：
-
-- `progress_status_v1.md`、`file_responsibilities_v1.md` 与 `scripts/README.md` 已同步 P10 当前状态
-- 待补一轮前端最小手工验收记录
-
-### 14.5 P10 对应的文件级任务方向
-
-P10 预计会直接新增或修改以下文件附近：
-
-#### 前端方向
-
-- `frontend/src/components/chat/RecordList.vue`
-- `frontend/src/pages/chat/ChatPage.vue`
-- `frontend/src/styles/index.css`
-
-#### 后端与存储方向
-
-- `backend/app/storage/repositories/chat_record_repo.py`
-- `backend/app/storage/repositories/feedback_repo.py`
-- `backend/app/config/settings.py`
-
-#### 脚本与文档方向
-
-- `scripts/clean-local-records.py`
-- `scripts/README.md`
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 14.6 P10 可开工接口 / 脚本清单
-
-#### 14.6.1 本地记录清理脚本
-
-建议脚本：
-
-- `scripts/clean-local-records.py`
-
-目标：
-
-- 清理本地 `chat_records.jsonl` 与 `feedback_records.jsonl`
-- 提供最小确认或 `-WhatIf` / `-CheckOnly` 风格保护
-
-说明：
-
-- 当前更适合脚本而不是开放后端删除接口
-- 避免把本地维护需求扩成服务端管理能力
-
-#### 14.6.2 最近记录摘要展示
-
-目标：
-
-- `RecordList` 默认收起低价值细节
-- 保持最近记录区更适合“快速扫一眼排查”
-
-建议摘要字段：
-
-- `trace_id`
-- `raw_query`
-- `response_status`
-- `feedback_label`
-- `created_at`
-
-### 14.7 P10 可开工测试清单
-
-#### 14.7.1 前端最小手工验收清单
-
-应完成以下手工验收：
-
-1. 最近记录区在开发态仍可正常展示最近 ask / feedback
-2. 最近记录默认摘要字段更聚焦，页面噪音减少
-3. 清理本地记录后，最近记录区可正确反映空状态
-4. 主问答、文档管理、Debug 区域不受记录清理影响
-
-#### 14.7.2 脚本与文档要求
-
-应同步以下内容：
-
-1. `scripts/README.md` 增加本地记录清理脚本说明
-2. `file_responsibilities_v1.md` 增加新脚本职责
-3. `progress_status_v1.md` 更新 P10 实际状态
-
-### 14.8 P10 阶段结论目标
-
-P10 完成后，应达成以下结论：
-
-1. 本地记录文件有明确维护边界
-2. 最近记录区更适合作为开发排查入口
-3. 本地维护能力不扩张为后端管理接口
-
-### 14.9 P10 当前结论
-
-当前 P10 的真实结论为：
-
-1. 本地记录已具备最小清理脚本入口
-2. 最近记录区已收口为更适合快速排查的摘要视图
-3. 记录维护能力仍保持在本地脚本层，不扩张为服务端管理能力
-
-一句话总结：
-
-**P10 计划范围已完成，当前系统已具备最小本地记录维护与摘要查看能力。**
-
----
-
-## 15. P10 之后规划：P11 本地记录维护策略配置化片
-
-### 15.1 P11 目标
-
-把当前系统从：
-
-```text
-记录可手动清理
--> 但默认保留边界主要靠人工约定
-```
-
-推进到：
-
-```text
-记录可手动清理
--> 默认保留策略有最小配置边界
--> 开发态维护说明更明确
-```
-
-### 15.2 P11 范围
-
-P11 只做以下 3 类工作：
-
-1. 为本地记录保留数量增加最小配置承载位
-2. 明确保留策略的默认值与环境边界
-3. 更新脚本说明与进度文档
-
-### 15.3 P11 不做的内容
-
-P11 明确不做：
-
-1. 不做自动定时清理任务
-2. 不做复杂归档或导出能力
-3. 不做多环境统一保留策略管理
-4. 不做基于时间戳或容量阈值的复杂清理策略
-5. 不做生产环境默认开放记录保留配置接口
-
-### 15.4 P11 建议实现顺序
-
-#### 第一步：配置承载位补齐
-
-目标：
-
-- 在 `settings.py` 中增加最小记录保留数量配置项
-- 明确默认值与环境边界
-
-当前状态：
-
-- 已增加 `ORIONSTACK_CHAT_RECORD_MAX_COUNT` 与 `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`
-- 默认值均为 200
-- demo/dev 环境下默认生效
-
-#### 第二步：保存时边界截断
-
-目标：
-
-- 在 `chat_record_repo` 与 `feedback_repo` 的保存方法中增加保留数量边界逻辑
-- 超出默认保留数量时自动截断最旧记录
-
-当前状态：
-
-- 两个 repo 的 `save` 方法已增加 `_truncate_if_needed`
-- 超出 `max_count` 时自动截断最旧记录
-
-#### 第三步：脚本与文档说明收口
-
-目标：
-
-- 更新 `scripts/README.md` 补充保留策略说明
-- 更新进度文档和文件职责文档
-
-当前状态：
-
-- `scripts/README.md` 已补充保留策略配置项说明
-- `progress_status_v1.md` 与 `file_responsibilities_v1.md` 已同步 P11 当前状态
-
-#### 第四步：最小验证与文档同步
-
-目标：
-
-- 补一轮配置生效后的最小验证
-- 更新进度文档状态
-
-当前状态：
-
-- `backend/tests/test_chat_flow.py` 已补齐截断行为与零值边界验证
-
-### 15.5 P11 对应的文件级任务方向
-
-P11 预计会直接新增或修改以下文件附近：
-
-#### 后端配置与存储方向
-
-- `backend/app/config/settings.py`
-- `backend/app/storage/repositories/chat_record_repo.py`
-- `backend/app/storage/repositories/feedback_repo.py`
-
-#### 脚本与文档方向
-
-- `scripts/README.md`
-- `docs/progress_status_v1.md`
-- `docs/file_responsibilities_v1.md`
-
-### 15.6 P11 可开工配置清单
-
-#### 15.6.1 记录保留数量配置项
-
-建议配置项：
-
-- `ORIONSTACK_CHAT_RECORD_MAX_COUNT`
-- `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`
-
-默认值建议：
-
-- `chat_record_max_count`: 200
-- `feedback_record_max_count`: 200
-
-环境边界：
-
-- demo/dev 环境下默认生效
-- prod 环境下可按需调整或关闭记录落盘
-
-#### 15.6.2 保存时边界截断逻辑
-
-建议行为：
-
-- 每次保存新记录后检查当前记录总数
-- 超出 `max_count` 时删除最旧记录
-- 保持记录总数不超过配置上限
-
-### 15.7 P11 可开工测试清单
-
-#### 15.7.1 后端最小验证清单
-
-应完成以下最小验证：
-
-1. 修改配置后，保存记录能正确截断超量记录
-2. 默认保留数量下记录总数不超过上限
-3. 配置关闭记录落盘时，保存操作不产生本地文件
-
-#### 15.7.2 脚本与文档要求
-
-应同步以下内容：
-
-1. `scripts/README.md` 增加保留策略说明
-2. `file_responsibilities_v1.md` 更新配置职责描述
-3. `progress_status_v1.md` 更新 P11 实际状态
-
-### 15.8 P11 阶段结论目标
-
-P11 完成后，应达成以下结论：
-
-1. 本地记录有明确的保留数量配置边界
-2. 记录总数不再无限累积
-3. 配置化边界不扩张为复杂治理平台
-
-### 15.9 P11 当前结论
-
-当前 P11 的真实结论为：
-
-1. `settings.py` 已增加 `chat_record_max_count` 与 `feedback_record_max_count` 配置项，默认 200
-2. 两个 repo 的 `save` 方法已在写入后自动截断超量记录
-3. 配置为 0 时保留默认上限，不关闭落盘
-
-一句话总结：
-
-**P11 计划范围已完成，当前系统已具备最小记录保留策略配置化与自动截断能力。**
-
----
-
-## 17. P12 之后规划：P13 部署运维最小说明片
-
-### 17.1 P13 目标
-
-把当前系统从：
-
-```text
-配置与脚本仅面向开发者
--> 非开发用户缺少最小部署与运行参考
-```
-
-推进到：
-
-```text
-配置与脚本已区分开发与生产
--> 非开发用户可通过最小文档独立部署与运行
-```
-
-### 17.2 P13 范围
-
-P13 只做以下 1 类工作：
-
-1. 重写 `README.md`，补齐面向非开发用户的最小部署运行指南
-
-### 17.3 P13 不做的内容
-
-P13 明确不做：
-
-1. 不做 Docker / 容器化配置
-2. 不做 Nginx 完整生产配置（只提供最小参考）
-3. 不做 HTTPS / 证书配置
-4. 不做 CI/CD 流水线
-5. 不做完整运维监控平台
-
-### 17.4 P13 建议实现顺序
-
-#### 第一步：重写 README.md
-
-目标：
-
-- 补齐面向非开发用户的最小部署运行指南
-- 包含前置要求、快速开始、生产部署、环境变量参考、项目结构与 API 列表
-
-当前状态：
-
-- `README.md` 已重写，包含前置要求、快速开始、生产部署步骤、环境变量参考表、prod 模式行为说明、Nginx 最小参考配置、项目结构、API 列表与数据存储说明
-
-### 17.5 P13 对应的文件级任务方向
-
-#### 文档方向
-
-- `README.md`
-
-#### 文档同步方向
-
-- `docs/progress_status_v1.md`
-
-### 17.6 P13 阶段结论目标
-
-P13 完成后，应达成以下结论：
-
-1. 非开发用户可通过 `README.md` 独立完成最小部署与运行
-2. 生产部署方式有明确区分与最小参考配置
-3. 所有环境变量有明确文档与参考文件
-
-### 17.7 P13 当前结论
-
-当前 P13 的真实结论为：
-
-1. `README.md` 已重写为面向非开发用户的最小部署运行指南
-2. 已包含前置要求、快速开始、生产部署、环境变量参考、Nginx 参考、项目结构与 API 列表
-
-一句话总结：
-
-**P13 计划范围已完成，当前系统已具备可独立部署运行的最小文档基础。**
 </file>
 
 </files>

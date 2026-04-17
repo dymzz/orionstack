@@ -6,7 +6,9 @@
 
 本文档用于重新定义 OrionStack 当前阶段的真实系统设计边界，作为当前已落地实现的唯一基线。
 
-下一阶段的检索链路升级方案（如 Query Planner、Elastic Hybrid Retrieval、RRF、Rerank 等）不在本文件展开，统一放入 `system_design_phase2_v1.md`。
+下一阶段的检索链路升级方案（如 Query Planner、Elastic Hybrid Retrieval、RRF、Rerank 等）不在本文件展开，统一放入 `2_system_design.md`。
+
+原始文档进入问答主链路前的接入与清洗边界，不在本文件展开，统一放入 `document_ingestion_boundary.md`。
 
 这份文档只回答以下问题：
 
@@ -787,13 +789,19 @@ Low：进入 fallback
 - 简单业务文档
 - 结构相对规整的文本内容
 
+当输入超出上述范围时，原始文档不应直接进入当前离线入库链路，而应先经过文档清洗 / ingestion adapter，转换为可检索文本与最小回源元数据后，再进入下游索引与检索流程。
+
 #### 9.2.2 当前最小入库链路
 
 当前推荐的离线数据链路如下：
 
 ```text
 原始 FAQ / 文档
--> 基础解析
+-> 文档接入判断
+-> direct ingest
+   或
+-> ingestion / cleaning adapter
+-> 基础解析 / 清洗后文本
 -> 简单文本切块（如需要）
 -> 向量化或全文索引构建
 -> 入库到 SQLite FTS / pgvector / 轻量检索存储
@@ -836,6 +844,7 @@ Low：进入 fallback
 4. 多源实时同步
 5. 重型数据治理流程
 6. 复杂离线任务编排系统
+7. 不在当前主系统内部建设通用文档清洗平台；复杂文档通过独立 ingestion / cleaning adapter 处理
 
 结论：
 

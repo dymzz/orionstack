@@ -1,7 +1,10 @@
 # OrionStack 第二阶段系统设计对应的文件级最小改造清单 v1
 
 > 状态：执行清单 v1  
-> 对应设计文档：`docs/designs/system_design_phase2_v1.md`  
+> 对应设计文档：`docs/designs/2_system_design.md`  
+> 配套职责文档：`docs/2_2_file_responsibilities.md`  
+> 配套字段文档：`docs/2_3_field_definitions.md`  
+> 配套测试文档：`docs/2_4_test_strategy.md`  
 > 目标：把第二阶段设计从“系统设计基线”收成“第一轮最小可执行改造范围”  
 > 原则：**最小切入、分步替换、旧链路可回退、先数据统一再切检索**
 
@@ -12,6 +15,13 @@
 本清单只解决一件事：
 
 **把 Phase 2 的目标链路，拆成当前仓库中可落地的最小文件级改造范围。**
+
+本文档不承担以下职责：
+
+- 不重写 `2_system_design.md` 的系统设计正文
+- 不替代 `2_2_file_responsibilities.md` 的文件职责边界说明
+- 不替代 `2_3_field_definitions.md` 的字段语义解释
+- 不替代 `2_4_test_strategy.md` 的测试分层与回归策略说明
 
 当前不追求：
 
@@ -26,6 +36,18 @@
 3. 再接 vector + RRF
 4. 再接 rerank + evidence extraction
 5. 最后接 clarification / 按需 API fallback
+
+当前真实状态补充：
+
+- Phase 2 已不是纯规划：仓库中已出现最小过渡实现
+- 当前已落地的核心文件包括：
+  - `backend/app/storage/repositories/knowledge_unit_repo.py`
+  - `backend/app/retrieval/lexical_retriever.py`
+  - `backend/app/indexing/elastic_indexer.py`
+  - `backend/app/indexing/index_health_checker.py`
+- `backend/app/config/settings.py` 已补入第二阶段最小配置项
+- `backend/app/services/chat_service.py` 已接入第二阶段过渡性的 search backend 切换入口
+- 但默认链路仍未完全切换到第二阶段目标形态；planner / hybrid / rerank / trace 仍未落地
 
 ---
 
@@ -64,9 +86,56 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 ## 3. 第一轮新增文件清单
 
-以下文件建议在第一轮新增。
+以下文件分为两类：
 
-### 3.1 Query 与 LLM Provider
+- 已经在仓库中落地的第一轮过渡文件
+- 尚未落地、但已在第二阶段中明确预留的文件位
+
+### 3.0 当前已落地的第一轮文件
+
+#### `backend/app/storage/repositories/knowledge_unit_repo.py`
+
+当前状态：
+
+- 已落地
+- 已提供 FAQ / chunk -> `KnowledgeUnit` 的统一映射入口
+
+#### `backend/app/retrieval/lexical_retriever.py`
+
+当前状态：
+
+- 已落地
+- 已提供 Elasticsearch lexical-only 检索过渡实现
+
+#### `backend/app/indexing/elastic_indexer.py`
+
+当前状态：
+
+- 已落地
+- 已提供 `knowledge_units_v1` 的最小建索引与写入能力
+
+#### `backend/app/indexing/index_health_checker.py`
+
+当前状态：
+
+- 已落地
+- 已提供最小 Elasticsearch 连通性与索引状态检查
+
+#### `backend/app/services/chat_service.py`
+
+当前状态：
+
+- 已出现第二阶段过渡接线
+- 当前可通过 `settings.search_backend` 在本地链路与 Elasticsearch lexical-only 之间切换
+
+#### `backend/app/config/settings.py`
+
+当前状态：
+
+- 已补入第二阶段最小配置开关
+- 当前已覆盖 search backend / elastic / planner / fast track 的第一轮占位配置
+
+### 3.1 当前尚未落地的 Query 与 LLM Provider
 
 #### `backend/app/query/query_planner.py`
 职责：
@@ -111,7 +180,7 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 ---
 
-### 3.2 Retrieval 层
+### 3.2 第二阶段 Retrieval 层（已落地过渡 + 后续扩展）
 
 #### `backend/app/retrieval/lexical_retriever.py`
 职责：
@@ -169,7 +238,7 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 ---
 
-### 3.3 索引与数据层
+### 3.3 第二阶段索引与数据层（已落地基座 + 后续目标）
 
 #### `backend/app/storage/repositories/knowledge_unit_repo.py`
 职责：
@@ -200,7 +269,7 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 ---
 
-### 3.4 运行与观测层
+### 3.4 当前尚未落地的运行与观测层
 
 #### `backend/app/observability/retrieval_trace.py`
 职责：
@@ -438,6 +507,12 @@ normalize
 - 先把 FAQ / chunk 统一进 `knowledge_units_v1`
 - 不切默认主链路
 
+当前状态：
+
+- 已基本落地
+- `knowledge_unit_repo.py`、`elastic_indexer.py`、`index_health_checker.py` 已进入仓库
+- 但是否作为团队默认运行链路使用，仍取决于部署配置与索引环境
+
 ### Step 2：lexical-only 过渡层
 优先做：
 
@@ -448,6 +523,13 @@ normalize
 
 - 先用 Elastic 承接 lexical
 - 保留旧 retriever 回退路径
+
+当前状态：
+
+- 已部分落地
+- `lexical_retriever.py` 已进入仓库
+- `chat_service.py` 已出现最小 retrieval adapter 切换
+- 旧 `retriever.py` 仍保留作为本地兼容回退路径
 
 ### Step 3：Planner 最小可用
 优先做：
@@ -464,6 +546,11 @@ normalize
   - lexical_terms
 - semantic expansions 可先弱化
 
+当前状态：
+
+- 尚未落地
+- 目前仅 `settings.py` 中预留了 planner 相关配置项
+
 ### Step 4：Hybrid + RRF
 优先做：
 
@@ -478,6 +565,10 @@ normalize
   - 工资条
   - 调休
 
+当前状态：
+
+- 尚未落地
+
 ### Step 5：Rerank + Evidence
 优先做：
 
@@ -485,12 +576,20 @@ normalize
 - `evidence_extractor.py`
 - retrieval trace 落盘
 
+当前状态：
+
+- 尚未落地
+
 ### Step 6：缓存 / hard cases / API fallback
 最后做：
 
 - `query_cache.py`
 - `hard_cases_repo.py`
 - `api_provider.py`
+
+当前状态：
+
+- 尚未落地
 
 ---
 
@@ -504,6 +603,13 @@ normalize
 4. Retrieval Trace 可落盘
 5. 旧链路仍可通过配置回退
 6. phase2 新增文件职责清晰，不把逻辑重新堆回旧 `retriever.py`
+
+按当前真实状态看：
+
+- 第 1 条已具备最小落地基础
+- 第 5 条已具备最小配置回退基础
+- 第 6 条已通过 `docs/2_2_file_responsibilities.md` 做职责收口
+- 第 2 / 3 / 4 条仍不能视为已整体完成
 
 ---
 

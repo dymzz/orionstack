@@ -47,7 +47,14 @@ backend/app/api/routes/documents.py
 backend/app/api/routes/health.py
 backend/app/config/settings.py
 backend/app/guardrails/normalize.py
+backend/app/indexing/__init__.py
+backend/app/indexing/elastic_indexer.py
+backend/app/indexing/index_health_checker.py
+backend/app/llm/__init__.py
+backend/app/llm/providers/__init__.py
+backend/app/query/__init__.py
 backend/app/retrieval/citation_mapper.py
+backend/app/retrieval/lexical_retriever.py
 backend/app/retrieval/retriever.py
 backend/app/routing/contracts.py
 backend/app/routing/resolver.py
@@ -69,6 +76,7 @@ backend/app/storage/repositories/chunk_repo.py
 backend/app/storage/repositories/document_repo.py
 backend/app/storage/repositories/faq_repo.py
 backend/app/storage/repositories/feedback_repo.py
+backend/app/storage/repositories/knowledge_unit_repo.py
 backend/app/storage/uploads/doc-70174f8c32f4_domain_hr_faq_seed_v1.md
 backend/main.py
 </directory_structure>
@@ -76,10 +84,447 @@ backend/main.py
 <files>
 This section contains the contents of the repository's files.
 
+<file path="backend/app/api/routes/health.py">
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+</file>
+
+<file path="backend/app/guardrails/normalize.py">
+import re
+
+
+def normalize_query(raw_query: str) -> str:
+    value = re.sub(r"\s+", " ", raw_query).strip()
+    return value
+</file>
+
+<file path="backend/app/indexing/__init__.py">
+
+</file>
+
+<file path="backend/app/indexing/elastic_indexer.py">
+from __future__ import annotations
+
+from typing import Any
+
+from elasticsearch import Elasticsearch
+
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnit
+
+INDEX_NAME = "knowledge_units_v1"
+
+MAPPING = {
+    "mappings": {
+        "properties": {
+            "unit_id": {"type": "keyword"},
+            "source_kind": {"type": "keyword"},
+            "question": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "answer": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "body_text": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "keywords": {"type": "keyword"},
+            "business_domain": {"type": "keyword"},
+            "document_type": {"type": "keyword"},
+            "source_type": {"type": "keyword"},
+            "source_label": {"type": "keyword"},
+            "source_locator": {"type": "keyword"},
+            "access_scope": {"type": "keyword"},
+            "lifecycle_status": {"type": "keyword"},
+            "valid_from": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "valid_until": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "version": {"type": "keyword"},
+            "created_at": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+        }
+    }
+}
+
+MAPPING_FALLBACK = {
+    "mappings": {
+        "properties": {
+            "unit_id": {"type": "keyword"},
+            "source_kind": {"type": "keyword"},
+            "question": {"type": "text"},
+            "answer": {"type": "text"},
+            "body_text": {"type": "text"},
+            "keywords": {"type": "keyword"},
+            "business_domain": {"type": "keyword"},
+            "document_type": {"type": "keyword"},
+            "source_type": {"type": "keyword"},
+            "source_label": {"type": "keyword"},
+            "source_locator": {"type": "keyword"},
+            "access_scope": {"type": "keyword"},
+            "lifecycle_status": {"type": "keyword"},
+            "valid_from": {"type": "keyword"},
+            "valid_until": {"type": "keyword"},
+            "version": {"type": "keyword"},
+            "created_at": {"type": "keyword"},
+        }
+    }
+}
+
+
+class ElasticIndexer:
+    def __init__(self, es: Elasticsearch, *, index_name: str = INDEX_NAME) -> None:
+        self._es = es
+        self._index_name = index_name
+
+    def ensure_index(self, *, use_ik_analyzer: bool = False) -> None:
+        if self._es.indices.exists(index=self._index_name):
+            return
+        mapping = MAPPING if use_ik_analyzer else MAPPING_FALLBACK
+        self._es.indices.create(index=self._index_name, body=mapping)
+
+    def index_units(self, units: list[KnowledgeUnit]) -> int:
+        indexed = 0
+        for unit in units:
+            doc = unit.to_elasticsearch_doc()
+            self._es.index(index=self._index_name, id=unit.unit_id, body=doc)
+            indexed += 1
+        self._es.indices.refresh(index=self._index_name)
+        return indexed
+
+    def delete_index(self) -> None:
+        if self._es.indices.exists(index=self._index_name):
+            self._es.indices.delete(index=self._index_name)
+</file>
+
+<file path="backend/app/indexing/index_health_checker.py">
+from __future__ import annotations
+
+from elasticsearch import Elasticsearch
+
+
+class IndexHealthChecker:
+    def __init__(
+        self, es: Elasticsearch, *, index_name: str = "knowledge_units_v1"
+    ) -> None:
+        self._es = es
+        self._index_name = index_name
+
+    def is_connected(self) -> bool:
+        try:
+            return self._es.ping()
+        except Exception:
+            return False
+
+    def index_exists(self) -> bool:
+        try:
+            return self._es.indices.exists(index=self._index_name)
+        except Exception:
+            return False
+
+    def check(self) -> dict:
+        result: dict = {
+            "connected": False,
+            "index_exists": False,
+            "doc_count": 0,
+            "errors": [],
+        }
+        try:
+            if not self._es.ping():
+                result["errors"].append("Elasticsearch not reachable")
+                return result
+            result["connected"] = True
+        except Exception as exc:
+            result["errors"].append(f"Connection error: {exc}")
+            return result
+
+        try:
+            if not self._es.indices.exists(index=self._index_name):
+                result["errors"].append(f"Index {self._index_name} does not exist")
+                return result
+            result["index_exists"] = True
+        except Exception as exc:
+            result["errors"].append(f"Index check error: {exc}")
+            return result
+
+        try:
+            count = self._es.count(index=self._index_name)
+            result["doc_count"] = count.get("count", 0)
+        except Exception as exc:
+            result["errors"].append(f"Count error: {exc}")
+
+        return result
+</file>
+
+<file path="backend/app/llm/__init__.py">
+
+</file>
+
+<file path="backend/app/llm/providers/__init__.py">
+
+</file>
+
+<file path="backend/app/query/__init__.py">
+
+</file>
+
+<file path="backend/app/retrieval/citation_mapper.py">
+from app.schemas.response import CitationItem
+
+
+def map_citation(item: dict) -> CitationItem:
+    return CitationItem(
+        citation_id=item["id"],
+        source_label=item.get("source_label", "FAQ"),
+        source_locator=item.get("source_locator", item["id"]),
+        snippet=item.get("snippet", item.get("question", item.get("answer", ""))),
+    )
+</file>
+
+<file path="backend/app/retrieval/lexical_retriever.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from elasticsearch import Elasticsearch
+
+from app.config.settings import settings
+
+
+@dataclass(frozen=True)
+class LexicalHit:
+    unit_id: str
+    source_kind: str
+    question: str
+    answer: str
+    body_text: str
+    source_label: str
+    source_locator: str
+    score: float
+    business_domain: str
+    document_type: str
+    source_type: str
+    access_scope: str
+    lifecycle_status: str
+
+
+class LexicalRetriever:
+    def __init__(
+        self, es: Elasticsearch, *, index_name: str = "knowledge_units_v1"
+    ) -> None:
+        self._es = es
+        self._index_name = index_name
+
+    def search(
+        self,
+        query: str,
+        *,
+        lexical_terms: list[str] | None = None,
+        min_score: float = 0.1,
+        business_domain: str | None = None,
+        access_scope: str | None = None,
+        lifecycle_status: str | None = None,
+        size: int = 10,
+    ) -> list[LexicalHit]:
+        normalized = query.strip().lower()
+        if not normalized:
+            return []
+
+        must_queries: list[dict[str, Any]] = [
+            {
+                "multi_match": {
+                    "query": normalized,
+                    "fields": ["question^3", "answer^2", "body_text", "keywords"],
+                    "type": "best_fields",
+                }
+            }
+        ]
+
+        should_queries: list[dict[str, Any]] = []
+        if lexical_terms:
+            for term in lexical_terms:
+                should_queries.append({"term": {"keywords": term}})
+
+        filter_clauses: list[dict[str, Any]] = []
+        if business_domain:
+            filter_clauses.append({"term": {"business_domain": business_domain}})
+        if access_scope:
+            filter_clauses.append({"term": {"access_scope": access_scope}})
+        if lifecycle_status:
+            filter_clauses.append({"term": {"lifecycle_status": lifecycle_status}})
+        else:
+            filter_clauses.append({"term": {"lifecycle_status": "active"}})
+
+        body: dict[str, Any] = {
+            "size": size,
+            "query": {
+                "bool": {
+                    "must": must_queries,
+                    "should": should_queries if should_queries else [],
+                    "filter": filter_clauses,
+                }
+            },
+            "min_score": min_score,
+        }
+
+        try:
+            result = self._es.search(index=self._index_name, body=body)
+        except Exception:
+            return []
+
+        hits: list[LexicalHit] = []
+        for hit in result.get("hits", {}).get("hits", []):
+            source = hit.get("_source", {})
+            score = float(hit.get("_score", 0.0))
+            hits.append(
+                LexicalHit(
+                    unit_id=source.get("unit_id", ""),
+                    source_kind=source.get("source_kind", ""),
+                    question=source.get("question", ""),
+                    answer=source.get("answer", ""),
+                    body_text=source.get("body_text", ""),
+                    source_label=source.get("source_label", ""),
+                    source_locator=source.get("source_locator", ""),
+                    score=score,
+                    business_domain=source.get("business_domain", ""),
+                    document_type=source.get("document_type", ""),
+                    source_type=source.get("source_type", ""),
+                    access_scope=source.get("access_scope", ""),
+                    lifecycle_status=source.get("lifecycle_status", ""),
+                )
+            )
+        return hits
+</file>
+
+<file path="backend/app/routing/contracts.py">
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class IntentDecision(BaseModel):
+    route: Literal["faq_qa", "fallback"]
+    confidence: float
+    query_for_search: str
+</file>
+
+<file path="backend/app/routing/resolver.py">
+from app.routing.contracts import IntentDecision
+from app.routing.rule_parser import RuleParser
+
+
+class RouteResolver:
+    def __init__(self) -> None:
+        self._rule_parser = RuleParser()
+
+    def resolve(self, raw_query: str) -> IntentDecision:
+        return self._rule_parser.parse(raw_query)
+</file>
+
+<file path="backend/app/runtime/trace.py">
+from uuid import uuid4
+
+
+def new_trace_id() -> str:
+    return uuid4().hex
+</file>
+
+<file path="backend/app/services/chunk_service.py">
+class ChunkService:
+    def __init__(self, *, chunk_size: int = 500, chunk_overlap: int = 80) -> None:
+        self._chunk_size = chunk_size
+        self._chunk_overlap = chunk_overlap
+
+    def split(self, text: str) -> list[str]:
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not normalized:
+            return []
+
+        chunks: list[str] = []
+        start = 0
+        text_length = len(normalized)
+        while start < text_length:
+            end = min(start + self._chunk_size, text_length)
+            chunk = normalized[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            if end >= text_length:
+                break
+            start = max(end - self._chunk_overlap, start + 1)
+        return chunks
+</file>
+
+<file path="backend/app/services/document_parser.py">
+from io import BytesIO
+from pathlib import Path
+
+from docx import Document
+from pypdf import PdfReader
+
+
+class DocumentParser:
+    def parse(self, *, filename: str, data: bytes) -> str:
+        suffix = Path(filename).suffix.lower()
+        if suffix in {".txt", ".md"}:
+            return self._decode_text(data)
+        if suffix == ".pdf":
+            return self._parse_pdf(data)
+        if suffix == ".docx":
+            return self._parse_docx(data)
+        raise ValueError("当前文件类型暂不支持解析")
+
+    def _decode_text(self, data: bytes) -> str:
+        for encoding in ("utf-8", "utf-8-sig", "gb18030"):
+            try:
+                return data.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        raise ValueError("文本文件编码暂不支持解析")
+
+    def _parse_pdf(self, data: bytes) -> str:
+        try:
+            reader = PdfReader(BytesIO(data))
+            texts = [page.extract_text() or "" for page in reader.pages]
+            return "\n\n".join(texts)
+        except Exception as error:
+            raise ValueError("PDF 解析失败") from error
+
+    def _parse_docx(self, data: bytes) -> str:
+        try:
+            document = Document(BytesIO(data))
+            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+            return "\n\n".join(paragraphs)
+        except Exception as error:
+            raise ValueError("DOCX 解析失败") from error
+</file>
+
 <file path="backend/app/storage/chat_records/chat_records.jsonl">
 {"trace_id": "b8d710c2b9c34f86a0244bbe3ab794e4", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-16T06:43:39.601502+00:00"}
 {"trace_id": "5821f833c3384f0c82053104e6f381ac", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:28:20.187841+00:00"}
 {"trace_id": "2485338038de45079fddab77c5d0ed4f", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:29:08.978551+00:00"}
+{"trace_id": "1326d04736c74b34a8b418f52ce75c7e", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:43:58.489077+00:00"}
+{"trace_id": "197d9ee8397f4c7d842c8cf911ab3b73", "raw_query": "请假", "document_ids": ["doc-70174f8c32f4"], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:49:28.808930+00:00"}
 </file>
 
 <file path="backend/app/storage/chunks/chunks.jsonl">
@@ -105,6 +550,175 @@ This section contains the contents of the repository's files.
 
 <file path="backend/app/storage/documents/documents.jsonl">
 {"document_id": "doc-70174f8c32f4", "filename": "domain_hr_faq_seed_v1.md", "content_type": "application/octet-stream", "size_bytes": 11647, "storage_path": "D:\\workspace\\python\\orionstack\\backend\\app\\storage\\uploads\\doc-70174f8c32f4_domain_hr_faq_seed_v1.md", "created_at": "2026-04-16T08:23:34.318379+00:00", "text_length": 7612, "chunk_count": 18}
+</file>
+
+<file path="backend/app/storage/feedback/feedback_records.jsonl">
+{"trace_id": "d2a6250d167e4bcaadd60a3f246d3c59", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "up", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa", "fallback_reason": null, "created_at": "2026-04-15T21:12:30.081179+00:00"}
+</file>
+
+<file path="backend/app/storage/repositories/faq_repo.py">
+import json
+from pathlib import Path
+from typing import Any
+
+
+class FAQRepository:
+    def __init__(self) -> None:
+        self._path = Path(__file__).resolve().parents[1] / "seed" / "mock_faq.json"
+
+    def list_all(self) -> list[dict[str, Any]]:
+        return json.loads(self._path.read_text(encoding="utf-8"))
+</file>
+
+<file path="backend/app/storage/repositories/knowledge_unit_repo.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class KnowledgeUnit:
+    unit_id: str
+    source_kind: str
+    question: str
+    answer: str
+    body_text: str
+    keywords: tuple[str, ...]
+    business_domain: str
+    document_type: str
+    source_type: str
+    source_label: str
+    source_locator: str
+    access_scope: str
+    lifecycle_status: str
+    valid_from: str
+    valid_until: str | None
+    version: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "unit_id": self.unit_id,
+            "source_kind": self.source_kind,
+            "question": self.question,
+            "answer": self.answer,
+            "body_text": self.body_text,
+            "keywords": list(self.keywords),
+            "business_domain": self.business_domain,
+            "document_type": self.document_type,
+            "source_type": self.source_type,
+            "source_label": self.source_label,
+            "source_locator": self.source_locator,
+            "access_scope": self.access_scope,
+            "lifecycle_status": self.lifecycle_status,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
+            "version": self.version,
+            "created_at": self.created_at,
+        }
+
+    def to_elasticsearch_doc(self) -> dict[str, Any]:
+        return {
+            "unit_id": self.unit_id,
+            "source_kind": self.source_kind,
+            "question": self.question,
+            "answer": self.answer,
+            "body_text": self.body_text,
+            "keywords": list(self.keywords),
+            "business_domain": self.business_domain,
+            "document_type": self.document_type,
+            "source_type": self.source_type,
+            "source_label": self.source_label,
+            "source_locator": self.source_locator,
+            "access_scope": self.access_scope,
+            "lifecycle_status": self.lifecycle_status,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until or "",
+            "version": self.version,
+            "created_at": self.created_at,
+        }
+
+
+def map_faq_item_to_knowledge_unit(
+    item: dict[str, Any], *, default_domain: str = "hr"
+) -> KnowledgeUnit:
+    return KnowledgeUnit(
+        unit_id=item.get("id", ""),
+        source_kind="faq",
+        question=item.get("question", ""),
+        answer=item.get("answer", ""),
+        body_text=item.get("answer", ""),
+        keywords=tuple(item.get("keywords", [])),
+        business_domain=item.get("business_domain", default_domain),
+        document_type=item.get("document_type", "faq"),
+        source_type=item.get("source_type", "manual_faq"),
+        source_label=item.get("source_label", "FAQ"),
+        source_locator=item.get("source_locator", item.get("id", "")),
+        access_scope=item.get("access_scope", "internal"),
+        lifecycle_status=item.get("lifecycle_status", "active"),
+        valid_from=item.get("valid_from", ""),
+        valid_until=item.get("valid_until") or None,
+        version=item.get("version", "v1"),
+        created_at=item.get("created_at", ""),
+    )
+
+
+def map_chunk_to_knowledge_unit(chunk: dict[str, Any]) -> KnowledgeUnit:
+    return KnowledgeUnit(
+        unit_id=chunk.get("chunk_id", ""),
+        source_kind="document_chunk",
+        question="",
+        answer=chunk.get("text", ""),
+        body_text=chunk.get("text", ""),
+        keywords=tuple(chunk.get("keywords", [])),
+        business_domain="",
+        document_type="document",
+        source_type="document_chunk",
+        source_label=chunk.get("source_label", chunk.get("filename", "Document")),
+        source_locator=chunk.get("source_locator", chunk.get("chunk_id", "")),
+        access_scope="internal",
+        lifecycle_status="active",
+        valid_from="",
+        valid_until=None,
+        version="v1",
+        created_at=chunk.get("created_at", ""),
+    )
+
+
+class KnowledgeUnitRepository:
+    def __init__(
+        self,
+        *,
+        faq_repo: Any | None = None,
+        chunk_repo: Any | None = None,
+    ) -> None:
+        self._faq_repo = faq_repo
+        self._chunk_repo = chunk_repo
+
+    def list_all(self) -> list[KnowledgeUnit]:
+        units: list[KnowledgeUnit] = []
+        if self._faq_repo is not None:
+            for item in self._faq_repo.list_all():
+                units.append(map_faq_item_to_knowledge_unit(item))
+        if self._chunk_repo is not None:
+            for chunk in self._chunk_repo.list_all():
+                units.append(map_chunk_to_knowledge_unit(chunk))
+        return units
+
+    def list_faq_units(self) -> list[KnowledgeUnit]:
+        if self._faq_repo is None:
+            return []
+        return [
+            map_faq_item_to_knowledge_unit(item) for item in self._faq_repo.list_all()
+        ]
+
+    def list_chunk_units(self) -> list[KnowledgeUnit]:
+        if self._chunk_repo is None:
+            return []
+        return [
+            map_chunk_to_knowledge_unit(chunk) for chunk in self._chunk_repo.list_all()
+        ]
 </file>
 
 <file path="backend/app/storage/uploads/doc-70174f8c32f4_domain_hr_faq_seed_v1.md">
@@ -397,64 +1011,6 @@ This section contains the contents of the repository's files.
 **本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可直接作为企业内部知识问答系统的基础入库数据。**
 </file>
 
-<file path="backend/app/api/routes/health.py">
-from fastapi import APIRouter
-
-router = APIRouter()
-
-
-@router.get("/healthz")
-def healthz() -> dict[str, str]:
-    return {"status": "ok"}
-</file>
-
-<file path="backend/app/guardrails/normalize.py">
-import re
-
-
-def normalize_query(raw_query: str) -> str:
-    value = re.sub(r"\s+", " ", raw_query).strip()
-    return value
-</file>
-
-<file path="backend/app/retrieval/citation_mapper.py">
-from app.schemas.response import CitationItem
-
-
-def map_citation(item: dict) -> CitationItem:
-    return CitationItem(
-        citation_id=item["id"],
-        source_label=item.get("source_label", "FAQ"),
-        source_locator=item.get("source_locator", item["id"]),
-        snippet=item.get("snippet", item.get("question", item.get("answer", ""))),
-    )
-</file>
-
-<file path="backend/app/routing/contracts.py">
-from typing import Literal
-
-from pydantic import BaseModel
-
-
-class IntentDecision(BaseModel):
-    route: Literal["faq_qa", "fallback"]
-    confidence: float
-    query_for_search: str
-</file>
-
-<file path="backend/app/routing/resolver.py">
-from app.routing.contracts import IntentDecision
-from app.routing.rule_parser import RuleParser
-
-
-class RouteResolver:
-    def __init__(self) -> None:
-        self._rule_parser = RuleParser()
-
-    def resolve(self, raw_query: str) -> IntentDecision:
-        return self._rule_parser.parse(raw_query)
-</file>
-
 <file path="backend/app/routing/rule_parser.py">
 import re
 
@@ -462,36 +1018,6 @@ from app.routing.contracts import IntentDecision
 
 
 class RuleParser:
-    _FAQ_HINTS = (
-        "faq",
-        "文档",
-        "知识",
-        "引用",
-        "来源",
-        "定位",
-        "上传",
-        "检索",
-        "索引",
-        "demo",
-        "模式",
-        "mock",
-        "trace",
-        "healthz",
-        "接口",
-    )
-    _QUESTION_HINTS = (
-        "如何",
-        "怎么",
-        "怎样",
-        "查看",
-        "进入",
-        "是否",
-        "什么",
-        "哪里",
-        "可以",
-        "?",
-        "？",
-    )
     _NON_FAQ_INPUTS = {"hi", "hello", "你好", "您好", "测试"}
 
     def parse(self, raw_query: str) -> IntentDecision:
@@ -500,294 +1026,22 @@ class RuleParser:
             return IntentDecision(route="fallback", confidence=0.0, query_for_search="")
 
         if normalized in self._NON_FAQ_INPUTS:
-            return IntentDecision(route="fallback", confidence=0.2, query_for_search=normalized)
+            return IntentDecision(
+                route="fallback", confidence=0.2, query_for_search=normalized
+            )
 
-        confidence = 0.0
-        if any(term in normalized for term in self._FAQ_HINTS):
-            confidence += 0.45
-        if any(term in normalized for term in self._QUESTION_HINTS):
-            confidence += 0.35
-        if len(normalized) >= 6 and any(term in normalized for term in self._QUESTION_HINTS):
-            confidence += 0.15
+        confidence = 0.45
         if len(normalized) >= 2:
+            confidence += 0.15
+        if len(normalized) >= 6:
             confidence += 0.15
         if len(normalized) > 80:
             confidence -= 0.15
 
         confidence = max(0.0, min(confidence, 1.0))
-        route = "faq_qa" if confidence >= 0.45 else "fallback"
-        return IntentDecision(route=route, confidence=confidence, query_for_search=normalized)
-</file>
-
-<file path="backend/app/runtime/trace.py">
-from uuid import uuid4
-
-
-def new_trace_id() -> str:
-    return uuid4().hex
-</file>
-
-<file path="backend/app/services/chunk_service.py">
-class ChunkService:
-    def __init__(self, *, chunk_size: int = 500, chunk_overlap: int = 80) -> None:
-        self._chunk_size = chunk_size
-        self._chunk_overlap = chunk_overlap
-
-    def split(self, text: str) -> list[str]:
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not normalized:
-            return []
-
-        chunks: list[str] = []
-        start = 0
-        text_length = len(normalized)
-        while start < text_length:
-            end = min(start + self._chunk_size, text_length)
-            chunk = normalized[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            if end >= text_length:
-                break
-            start = max(end - self._chunk_overlap, start + 1)
-        return chunks
-</file>
-
-<file path="backend/app/services/document_parser.py">
-from io import BytesIO
-from pathlib import Path
-
-from docx import Document
-from pypdf import PdfReader
-
-
-class DocumentParser:
-    def parse(self, *, filename: str, data: bytes) -> str:
-        suffix = Path(filename).suffix.lower()
-        if suffix in {".txt", ".md"}:
-            return self._decode_text(data)
-        if suffix == ".pdf":
-            return self._parse_pdf(data)
-        if suffix == ".docx":
-            return self._parse_docx(data)
-        raise ValueError("当前文件类型暂不支持解析")
-
-    def _decode_text(self, data: bytes) -> str:
-        for encoding in ("utf-8", "utf-8-sig", "gb18030"):
-            try:
-                return data.decode(encoding)
-            except UnicodeDecodeError:
-                continue
-        raise ValueError("文本文件编码暂不支持解析")
-
-    def _parse_pdf(self, data: bytes) -> str:
-        try:
-            reader = PdfReader(BytesIO(data))
-            texts = [page.extract_text() or "" for page in reader.pages]
-            return "\n\n".join(texts)
-        except Exception as error:
-            raise ValueError("PDF 解析失败") from error
-
-    def _parse_docx(self, data: bytes) -> str:
-        try:
-            document = Document(BytesIO(data))
-            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
-            return "\n\n".join(paragraphs)
-        except Exception as error:
-            raise ValueError("DOCX 解析失败") from error
-</file>
-
-<file path="backend/app/storage/feedback/feedback_records.jsonl">
-{"trace_id": "d2a6250d167e4bcaadd60a3f246d3c59", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "up", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa", "fallback_reason": null, "created_at": "2026-04-15T21:12:30.081179+00:00"}
-</file>
-
-<file path="backend/app/storage/repositories/faq_repo.py">
-import json
-from pathlib import Path
-from typing import Any
-
-
-class FAQRepository:
-    def __init__(self) -> None:
-        self._path = Path(__file__).resolve().parents[1] / "seed" / "mock_faq.json"
-
-    def list_all(self) -> list[dict[str, Any]]:
-        return json.loads(self._path.read_text(encoding="utf-8"))
-</file>
-
-<file path="backend/app/retrieval/retriever.py">
-from dataclasses import dataclass
-from typing import Any
-
-from app.storage.repositories.faq_repo import FAQRepository
-from app.storage.repositories.chunk_repo import ChunkRepository
-
-
-@dataclass(frozen=True)
-class RetrievalHit:
-    item: dict[str, Any]
-    score: int
-    matched_terms: tuple[str, ...]
-
-
-class Retriever:
-    def __init__(self, faq_repo: FAQRepository, chunk_repo: ChunkRepository) -> None:
-        self._faq_repo = faq_repo
-        self._chunk_repo = chunk_repo
-
-    def search(
-        self, query: str, *, min_score: int, document_ids: list[str] | None = None
-    ) -> RetrievalHit | None:
-        tokens = self._tokenize(query)
-        if not tokens:
-            return None
-
-        compact_query = self._compact_query(query)
-        allowed_document_ids = {
-            document_id for document_id in (document_ids or []) if document_id
-        }
-
-        document_hit = self._search_document_chunks(
-            tokens, compact_query, allowed_document_ids or None
-        )
-        if document_hit is not None and document_hit.score >= min_score:
-            return document_hit
-
-        if allowed_document_ids:
-            return document_hit
-
-        faq_hit = self._search_faq(tokens, compact_query)
-        if faq_hit is not None:
-            return faq_hit
-
-        return document_hit
-
-    def _search_document_chunks(
-        self,
-        tokens: list[str],
-        compact_query: str,
-        allowed_document_ids: set[str] | None,
-    ) -> RetrievalHit | None:
-        best_hit: RetrievalHit | None = None
-        best_score = 0
-
-        for item in self._chunk_repo.list_all():
-            document_id = str(item.get("document_id", ""))
-            if (
-                allowed_document_ids is not None
-                and document_id not in allowed_document_ids
-            ):
-                continue
-
-            text = str(item.get("text", "")).lower()
-            filename = str(item.get("filename", "")).lower()
-            snippet = str(item.get("snippet", "")).lower()
-            haystack = " ".join([text, filename, snippet]).lower()
-            matched_terms = tuple(
-                sorted({token for token in tokens if token in haystack})
-            )
-            score = len(matched_terms)
-
-            compact_text = text.replace(" ", "")
-            if (
-                compact_query
-                and len(compact_query) >= 3
-                and compact_query in compact_text
-            ):
-                score += 2
-
-            if compact_query and compact_query in filename.replace(" ", ""):
-                score += 1
-
-            if score > best_score:
-                best_score = score
-                best_hit = RetrievalHit(
-                    item={
-                        "id": item["chunk_id"],
-                        "answer": item["text"],
-                        "source_label": item.get(
-                            "source_label", item.get("filename", "Document")
-                        ),
-                        "source_locator": item.get("source_locator", item["chunk_id"]),
-                        "snippet": item.get("snippet", item["text"][:160]),
-                    },
-                    score=score,
-                    matched_terms=matched_terms,
-                )
-
-        return best_hit if best_hit is not None and best_hit.score > 0 else None
-
-    def _search_faq(self, tokens: list[str], compact_query: str) -> RetrievalHit | None:
-        best_hit: RetrievalHit | None = None
-        best_score = 0
-
-        for item in self._faq_repo.list_all():
-            question = str(item["question"]).lower()
-            keywords = [str(keyword).lower() for keyword in item.get("keywords", [])]
-            haystack = " ".join(
-                [
-                    question,
-                    str(item["answer"]).lower(),
-                    " ".join(keywords),
-                ]
-            ).lower()
-            matched_terms = tuple(
-                sorted({token for token in tokens if token in haystack})
-            )
-            score = len(matched_terms)
-
-            if (
-                compact_query
-                and len(compact_query) >= 3
-                and compact_query in question.replace(" ", "")
-            ):
-                score += 2
-
-            if compact_query and any(
-                compact_query == keyword.replace(" ", "") for keyword in keywords
-            ):
-                score += 1
-
-            if score > best_score:
-                best_score = score
-                best_hit = RetrievalHit(
-                    item=item, score=score, matched_terms=matched_terms
-                )
-
-        return best_hit if best_hit is not None and best_hit.score > 0 else None
-
-    @staticmethod
-    def _tokenize(query: str) -> list[str]:
-        query = (
-            query.lower()
-            .replace("？", " ")
-            .replace("?", " ")
-            .replace("，", " ")
-            .replace(",", " ")
-        )
-        tokens = [token.strip() for token in query.split() if token.strip()]
-        if len(tokens) > 1:
-            return tokens
-
-        compact = tokens[0] if tokens else query.strip()
-        if not compact:
-            return []
-
-        if any(ord(char) > 127 for char in compact) and len(compact) > 2:
-            pieces = [compact[i : i + 2] for i in range(len(compact) - 1)]
-            return list(dict.fromkeys([compact, *pieces]))
-
-        return [compact]
-
-    @staticmethod
-    def _compact_query(query: str) -> str:
-        return (
-            query.lower()
-            .replace("？", "")
-            .replace("?", "")
-            .replace("，", "")
-            .replace(",", "")
-            .replace(" ", "")
-            .strip()
+        route = "faq_qa" if confidence >= 0.15 else "fallback"
+        return IntentDecision(
+            route=route, confidence=confidence, query_for_search=normalized
         )
 </file>
 
@@ -910,174 +1164,6 @@ class FeedbackRecordItem(BaseModel):
 
 class FeedbackRecordListResponse(BaseModel):
     items: list[FeedbackRecordItem]
-</file>
-
-<file path="backend/app/services/chat_service.py">
-from app.config.settings import settings
-from app.guardrails.normalize import normalize_query
-from app.retrieval.citation_mapper import map_citation
-from app.retrieval.retriever import Retriever
-from app.routing.resolver import RouteResolver
-from app.schemas.request import ChatAskRequest
-from app.schemas.response import ChatAskResponse, DebugInfo
-from app.storage.repositories.chunk_repo import ChunkRepository
-from app.storage.repositories.faq_repo import FAQRepository
-
-
-class ChatService:
-    _REFUSAL_TERMS = {
-        "unsafe_request": (
-            "炸弹",
-            "爆炸物",
-            "攻击系统",
-            "木马",
-            "勒索",
-            "窃取密码",
-            "毒品",
-            "伪造证件",
-            "自杀",
-        )
-    }
-
-    def __init__(self) -> None:
-        self._faq_repo = FAQRepository()
-        self._chunk_repo = ChunkRepository()
-        self._retriever = Retriever(self._faq_repo, self._chunk_repo)
-        self._resolver = RouteResolver()
-
-    def ask(
-        self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
-    ) -> ChatAskResponse:
-        normalized_query = normalize_query(payload.raw_query)
-        document_ids = [
-            document_id.strip()
-            for document_id in payload.document_ids
-            if document_id.strip()
-        ]
-        if not normalized_query:
-            return ChatAskResponse(
-                response_status="refused",
-                trace_id=trace_id,
-                answer="请输入更明确的问题后再试。",
-                citations=[],
-                debug_info=self._build_debug_info(
-                    debug_enabled,
-                    normalized_query,
-                    route_result="refused",
-                    chunk_ids=[],
-                    route_confidence=0.0,
-                    fallback_reason="empty_after_normalization",
-                ),
-            )
-
-        refusal_reason = self._match_refusal_reason(normalized_query)
-        if refusal_reason is not None:
-            return ChatAskResponse(
-                response_status="refused",
-                trace_id=trace_id,
-                answer="当前请求超出 FAQ 知识问答的安全边界，暂不提供回答。",
-                citations=[],
-                debug_info=self._build_debug_info(
-                    debug_enabled,
-                    normalized_query,
-                    route_result="refused",
-                    chunk_ids=[],
-                    route_confidence=0.0,
-                    fallback_reason=refusal_reason,
-                ),
-            )
-
-        decision = self._resolver.resolve(normalized_query)
-
-        if (
-            decision.route != "faq_qa"
-            or decision.confidence < settings.route_confidence_threshold
-        ):
-            return ChatAskResponse(
-                response_status="fallback",
-                trace_id=trace_id,
-                answer="当前请求未进入标准 FAQ 路径，请先尝试更直接的提问方式。",
-                citations=[],
-                debug_info=self._build_debug_info(
-                    debug_enabled,
-                    normalized_query,
-                    route_result=decision.route,
-                    chunk_ids=[],
-                    route_confidence=decision.confidence,
-                    fallback_reason="route_not_confident_enough",
-                ),
-            )
-
-        hit = self._retriever.search(
-            decision.query_for_search,
-            min_score=settings.retrieval_min_score,
-            document_ids=document_ids,
-        )
-        if hit is None or hit.score < settings.retrieval_min_score:
-            return ChatAskResponse(
-                response_status="fallback",
-                trace_id=trace_id,
-                answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
-                citations=[],
-                debug_info=self._build_debug_info(
-                    debug_enabled,
-                    normalized_query,
-                    route_result=decision.route,
-                    chunk_ids=[] if hit is None else [hit.item["id"]],
-                    route_confidence=decision.confidence,
-                    retrieval_score=None if hit is None else float(hit.score),
-                    fallback_reason="retrieval_score_below_threshold"
-                    if hit is not None
-                    else "retrieval_no_hit",
-                ),
-            )
-
-        citation = map_citation(hit.item)
-        return ChatAskResponse(
-            response_status="ok",
-            trace_id=trace_id,
-            answer=hit.item["answer"],
-            citations=[citation],
-            debug_info=self._build_debug_info(
-                debug_enabled,
-                normalized_query,
-                route_result=decision.route,
-                chunk_ids=[hit.item["id"]],
-                route_confidence=decision.confidence,
-                retrieval_score=float(hit.score),
-            ),
-        )
-
-    @staticmethod
-    def _match_refusal_reason(normalized_query: str) -> str | None:
-        lowered_query = normalized_query.lower()
-        for reason, terms in ChatService._REFUSAL_TERMS.items():
-            if any(term in lowered_query for term in terms):
-                return reason
-        return None
-
-    @staticmethod
-    def _build_debug_info(
-        enabled: bool,
-        normalized_query: str,
-        route_result: str,
-        chunk_ids: list[str],
-        *,
-        route_confidence: float | None,
-        retrieval_score: float | None = None,
-        fallback_reason: str | None = None,
-    ) -> DebugInfo | None:
-        if not enabled:
-            return None
-        return DebugInfo(
-            normalized_query=normalized_query,
-            route_result=route_result,
-            router_used="rule_parser",
-            retrieved_chunks=chunk_ids,
-            route_confidence=route_confidence,
-            retrieval_score=retrieval_score,
-            fallback_reason=fallback_reason,
-        )
 </file>
 
 <file path="backend/app/services/document_service.py">
@@ -1592,6 +1678,475 @@ def _ensure_record_view_enabled() -> None:
         raise HTTPException(status_code=404, detail="Not Found")
 </file>
 
+<file path="backend/app/retrieval/retriever.py">
+from dataclasses import dataclass
+from typing import Any
+
+from app.storage.repositories.faq_repo import FAQRepository
+from app.storage.repositories.chunk_repo import ChunkRepository
+
+
+@dataclass(frozen=True)
+class RetrievalHit:
+    item: dict[str, Any]
+    score: int
+    matched_terms: tuple[str, ...]
+
+
+class Retriever:
+    def __init__(self, faq_repo: FAQRepository, chunk_repo: ChunkRepository) -> None:
+        self._faq_repo = faq_repo
+        self._chunk_repo = chunk_repo
+
+    def search(
+        self, query: str, *, min_score: int, document_ids: list[str] | None = None
+    ) -> RetrievalHit | None:
+        tokens = self._tokenize(query)
+        if not tokens:
+            return None
+
+        compact_query = self._compact_query(query)
+        allowed_document_ids = {
+            document_id for document_id in (document_ids or []) if document_id
+        }
+
+        document_hit = self._search_document_chunks(
+            tokens, compact_query, allowed_document_ids or None
+        )
+        if document_hit is not None and document_hit.score >= min_score:
+            return document_hit
+
+        if allowed_document_ids:
+            return document_hit
+
+        faq_hit = self._search_faq(tokens, compact_query)
+        if faq_hit is not None:
+            return faq_hit
+
+        return document_hit
+
+    def _search_document_chunks(
+        self,
+        tokens: list[str],
+        compact_query: str,
+        allowed_document_ids: set[str] | None,
+    ) -> RetrievalHit | None:
+        best_hit: RetrievalHit | None = None
+        best_score = 0
+
+        for item in self._chunk_repo.list_all():
+            document_id = str(item.get("document_id", ""))
+            if (
+                allowed_document_ids is not None
+                and document_id not in allowed_document_ids
+            ):
+                continue
+
+            text = str(item.get("text", "")).lower()
+            filename = str(item.get("filename", "")).lower()
+            snippet = str(item.get("snippet", "")).lower()
+            haystack = " ".join([text, filename, snippet]).lower()
+            matched_terms = tuple(
+                sorted({token for token in tokens if token in haystack})
+            )
+            score = len(matched_terms)
+
+            compact_text = text.replace(" ", "")
+            if (
+                compact_query
+                and len(compact_query) >= 3
+                and compact_query in compact_text
+            ):
+                score += 2
+
+            if compact_query and compact_query in filename.replace(" ", ""):
+                score += 1
+
+            if score > best_score:
+                best_score = score
+                best_hit = RetrievalHit(
+                    item={
+                        "id": item["chunk_id"],
+                        "answer": item["text"],
+                        "source_label": item.get(
+                            "source_label", item.get("filename", "Document")
+                        ),
+                        "source_locator": item.get("source_locator", item["chunk_id"]),
+                        "snippet": item.get("snippet", item["text"][:160]),
+                    },
+                    score=score,
+                    matched_terms=matched_terms,
+                )
+
+        return best_hit if best_hit is not None and best_hit.score > 0 else None
+
+    def _search_faq(self, tokens: list[str], compact_query: str) -> RetrievalHit | None:
+        best_hit: RetrievalHit | None = None
+        best_score = 0
+
+        for item in self._faq_repo.list_all():
+            question = str(item["question"]).lower()
+            keywords = [str(keyword).lower() for keyword in item.get("keywords", [])]
+            haystack = " ".join(
+                [
+                    question,
+                    str(item["answer"]).lower(),
+                    " ".join(keywords),
+                ]
+            ).lower()
+            matched_terms = tuple(
+                sorted({token for token in tokens if token in haystack})
+            )
+            score = len(matched_terms)
+
+            if (
+                compact_query
+                and len(compact_query) >= 3
+                and compact_query in question.replace(" ", "")
+            ):
+                score += 2
+
+            if compact_query and any(
+                compact_query == keyword.replace(" ", "") for keyword in keywords
+            ):
+                score += 1
+
+            if score > best_score:
+                best_score = score
+                best_hit = RetrievalHit(
+                    item=item, score=score, matched_terms=matched_terms
+                )
+
+        return best_hit if best_hit is not None and best_hit.score > 0 else None
+
+    @staticmethod
+    def _tokenize(query: str) -> list[str]:
+        query = (
+            query.lower()
+            .replace("？", " ")
+            .replace("?", " ")
+            .replace("，", " ")
+            .replace(",", " ")
+            .replace("、", " ")
+            .replace("。", " ")
+            .replace("！", " ")
+            .replace("!", " ")
+            .replace("：", " ")
+            .replace(":", " ")
+        )
+        raw_tokens = [token.strip() for token in query.split() if token.strip()]
+        if not raw_tokens:
+            return []
+
+        tokens = list(raw_tokens)
+
+        for token in raw_tokens:
+            has_cjk = any(ord(char) > 127 for char in token)
+            if has_cjk and len(token) > 2:
+                bigrams = [token[i : i + 2] for i in range(len(token) - 1)]
+                for bigram in bigrams:
+                    if bigram not in tokens:
+                        tokens.append(bigram)
+                if len(token) > 4:
+                    trigrams = [token[i : i + 3] for i in range(len(token) - 2)]
+                    for trigram in trigrams:
+                        if trigram not in tokens:
+                            tokens.append(trigram)
+
+        return list(dict.fromkeys(tokens))
+
+    @staticmethod
+    def _compact_query(query: str) -> str:
+        return (
+            query.lower()
+            .replace("？", "")
+            .replace("?", "")
+            .replace("，", "")
+            .replace(",", "")
+            .replace(" ", "")
+            .strip()
+        )
+</file>
+
+<file path="backend/app/services/chat_service.py">
+from __future__ import annotations
+
+from app.config.settings import settings
+from app.guardrails.normalize import normalize_query
+from app.retrieval.citation_mapper import map_citation
+from app.retrieval.retriever import Retriever
+from app.routing.resolver import RouteResolver
+from app.schemas.request import ChatAskRequest
+from app.schemas.response import ChatAskResponse, DebugInfo
+from app.storage.repositories.chunk_repo import ChunkRepository
+from app.storage.repositories.faq_repo import FAQRepository
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
+
+
+class ChatService:
+    _REFUSAL_TERMS = {
+        "unsafe_request": (
+            "炸弹",
+            "爆炸物",
+            "攻击系统",
+            "木马",
+            "勒索",
+            "窃取密码",
+            "毒品",
+            "伪造证件",
+            "自杀",
+        )
+    }
+
+    def __init__(self) -> None:
+        self._faq_repo = FAQRepository()
+        self._chunk_repo = ChunkRepository()
+        self._ku_repo = KnowledgeUnitRepository(
+            faq_repo=self._faq_repo, chunk_repo=self._chunk_repo
+        )
+        self._retriever = Retriever(self._faq_repo, self._chunk_repo)
+        self._resolver = RouteResolver()
+        self._lexical_retriever = None
+        if settings.search_backend == "elasticsearch":
+            self._lexical_retriever = self._create_lexical_retriever()
+
+    def _create_lexical_retriever(self):
+        from app.retrieval.lexical_retriever import LexicalRetriever
+        from elasticsearch import Elasticsearch
+
+        es = Elasticsearch(settings.elastic_url)
+        return LexicalRetriever(es, index_name=settings.elastic_index)
+
+    def ask(
+        self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
+    ) -> ChatAskResponse:
+        normalized_query = normalize_query(payload.raw_query)
+        document_ids = [
+            document_id.strip()
+            for document_id in payload.document_ids
+            if document_id.strip()
+        ]
+        if not normalized_query:
+            return ChatAskResponse(
+                response_status="refused",
+                trace_id=trace_id,
+                answer="请输入更明确的问题后再试。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="refused",
+                    chunk_ids=[],
+                    route_confidence=0.0,
+                    fallback_reason="empty_after_normalization",
+                ),
+            )
+
+        refusal_reason = self._match_refusal_reason(normalized_query)
+        if refusal_reason is not None:
+            return ChatAskResponse(
+                response_status="refused",
+                trace_id=trace_id,
+                answer="当前请求超出 FAQ 知识问答的安全边界，暂不提供回答。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="refused",
+                    chunk_ids=[],
+                    route_confidence=0.0,
+                    fallback_reason=refusal_reason,
+                ),
+            )
+
+        decision = self._resolver.resolve(normalized_query)
+
+        if (
+            decision.route != "faq_qa"
+            or decision.confidence < settings.route_confidence_threshold
+        ):
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前请求未进入标准 FAQ 路径，请先尝试更直接的提问方式。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result=decision.route,
+                    chunk_ids=[],
+                    route_confidence=decision.confidence,
+                    fallback_reason="route_not_confident_enough",
+                ),
+            )
+
+        if (
+            settings.search_backend == "elasticsearch"
+            and self._lexical_retriever is not None
+        ):
+            return self._search_elastic(
+                normalized_query, trace_id=trace_id, debug_enabled=debug_enabled
+            )
+
+        return self._search_local(
+            decision,
+            normalized_query,
+            document_ids=document_ids,
+            trace_id=trace_id,
+            debug_enabled=debug_enabled,
+        )
+
+    def _search_elastic(
+        self, normalized_query: str, *, trace_id: str, debug_enabled: bool
+    ) -> ChatAskResponse:
+        hits = self._lexical_retriever.search(
+            normalized_query,
+            lexical_terms=self._extract_lexical_terms(normalized_query),
+            min_score=0.1,
+            lifecycle_status="active",
+            size=5,
+        )
+
+        if not hits:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="faq_qa_elastic",
+                    chunk_ids=[],
+                    route_confidence=None,
+                    retrieval_score=None,
+                    fallback_reason="retrieval_no_hit",
+                ),
+            )
+
+        best = hits[0]
+        answer = best.answer or best.body_text
+        citation = map_citation(
+            {
+                "id": best.unit_id,
+                "answer": answer,
+                "source_label": best.source_label,
+                "source_locator": best.source_locator,
+                "snippet": answer[:160],
+            }
+        )
+
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer=answer,
+            citations=[citation],
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result="faq_qa_elastic",
+                chunk_ids=[best.unit_id],
+                route_confidence=None,
+                retrieval_score=best.score,
+            ),
+        )
+
+    def _search_local(
+        self,
+        decision,
+        normalized_query: str,
+        *,
+        document_ids: list[str],
+        trace_id: str,
+        debug_enabled: bool,
+    ) -> ChatAskResponse:
+        hit = self._retriever.search(
+            decision.query_for_search,
+            min_score=settings.retrieval_min_score,
+            document_ids=document_ids or None,
+        )
+        if hit is None or hit.score < settings.retrieval_min_score:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result=decision.route,
+                    chunk_ids=[] if hit is None else [hit.item["id"]],
+                    route_confidence=decision.confidence,
+                    retrieval_score=None if hit is None else float(hit.score),
+                    fallback_reason="retrieval_score_below_threshold"
+                    if hit is not None
+                    else "retrieval_no_hit",
+                ),
+            )
+
+        citation = map_citation(hit.item)
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer=hit.item["answer"],
+            citations=[citation],
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result=decision.route,
+                chunk_ids=[hit.item["id"]],
+                route_confidence=decision.confidence,
+                retrieval_score=float(hit.score),
+            ),
+        )
+
+    @staticmethod
+    def _extract_lexical_terms(query: str) -> list[str]:
+        terms = [query]
+        if len(query) > 2:
+            for i in range(len(query) - 1):
+                bigram = query[i : i + 2]
+                if bigram not in terms:
+                    terms.append(bigram)
+        if len(query) > 4:
+            for i in range(len(query) - 2):
+                trigram = query[i : i + 3]
+                if trigram not in terms:
+                    terms.append(trigram)
+        return terms
+
+    @staticmethod
+    def _match_refusal_reason(normalized_query: str) -> str | None:
+        lowered_query = normalized_query.lower()
+        for reason, terms in ChatService._REFUSAL_TERMS.items():
+            if any(term in lowered_query for term in terms):
+                return reason
+        return None
+
+    @staticmethod
+    def _build_debug_info(
+        enabled: bool,
+        normalized_query: str,
+        route_result: str,
+        chunk_ids: list[str],
+        *,
+        route_confidence: float | None,
+        retrieval_score: float | None = None,
+        fallback_reason: str | None = None,
+    ) -> DebugInfo | None:
+        if not enabled:
+            return None
+        return DebugInfo(
+            normalized_query=normalized_query,
+            route_result=route_result,
+            router_used="rule_parser",
+            retrieved_chunks=chunk_ids,
+            route_confidence=route_confidence,
+            retrieval_score=retrieval_score,
+            fallback_reason=fallback_reason,
+        )
+</file>
+
 <file path="backend/app/storage/repositories/feedback_repo.py">
 import json
 from datetime import datetime, timezone
@@ -1643,53 +2198,6 @@ class FeedbackRepository:
         return records[:limit]
 </file>
 
-<file path="backend/app/config/settings.py">
-import os
-from dataclasses import dataclass, field
-
-
-def _resolve_app_mode() -> str:
-    value = os.getenv("ORIONSTACK_APP_MODE", "demo").strip().lower()
-    return value if value in {"demo", "dev", "prod"} else "demo"
-
-
-def _resolve_cors_origins() -> tuple[str, ...]:
-    raw = os.getenv("ORIONSTACK_CORS_ORIGINS", "").strip()
-    if raw:
-        return tuple(origin.strip() for origin in raw.split(",") if origin.strip())
-    return ("http://localhost:5173", "http://127.0.0.1:5173")
-
-
-@dataclass(frozen=True)
-class Settings:
-    app_name: str = os.getenv("ORIONSTACK_APP_NAME", "OrionStack Demo")
-    host: str = os.getenv("ORIONSTACK_HOST", "127.0.0.1")
-    port: int = int(os.getenv("ORIONSTACK_PORT", "8000"))
-    app_mode: str = field(default_factory=_resolve_app_mode)
-    cors_origins: tuple[str, ...] = field(default_factory=_resolve_cors_origins)
-    route_confidence_threshold: float = float(
-        os.getenv("ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", "0.6")
-    )
-    retrieval_min_score: int = int(os.getenv("ORIONSTACK_RETRIEVAL_MIN_SCORE", "2"))
-    chat_record_max_count: int = int(
-        os.getenv("ORIONSTACK_CHAT_RECORD_MAX_COUNT", "200")
-    )
-    feedback_record_max_count: int = int(
-        os.getenv("ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT", "200")
-    )
-
-    @property
-    def debug_response_enabled(self) -> bool:
-        return self.app_mode in {"demo", "dev"}
-
-    @property
-    def chat_record_view_enabled(self) -> bool:
-        return self.app_mode in {"demo", "dev"}
-
-
-settings = Settings()
-</file>
-
 <file path="backend/main.py">
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -1712,6 +2220,79 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+</file>
+
+<file path="backend/app/config/settings.py">
+import os
+from dataclasses import dataclass, field
+
+
+def _resolve_app_mode() -> str:
+    value = os.getenv("ORIONSTACK_APP_MODE", "demo").strip().lower()
+    return value if value in {"demo", "dev", "prod"} else "demo"
+
+
+def _resolve_cors_origins() -> tuple[str, ...]:
+    raw = os.getenv("ORIONSTACK_CORS_ORIGINS", "").strip()
+    if raw:
+        return tuple(origin.strip() for origin in raw.split(",") if origin.strip())
+    return ("http://localhost:5173", "http://127.0.0.1:5173")
+
+
+def _resolve_search_backend() -> str:
+    value = os.getenv("ORIONSTACK_SEARCH_BACKEND", "local").strip().lower()
+    return value if value in {"local", "elasticsearch"} else "local"
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_name: str = os.getenv("ORIONSTACK_APP_NAME", "OrionStack Demo")
+    host: str = os.getenv("ORIONSTACK_HOST", "127.0.0.1")
+    port: int = int(os.getenv("ORIONSTACK_PORT", "8000"))
+    app_mode: str = field(default_factory=_resolve_app_mode)
+    cors_origins: tuple[str, ...] = field(default_factory=_resolve_cors_origins)
+    route_confidence_threshold: float = float(
+        os.getenv("ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", "0.15")
+    )
+    retrieval_min_score: int = int(os.getenv("ORIONSTACK_RETRIEVAL_MIN_SCORE", "1"))
+    chat_record_max_count: int = int(
+        os.getenv("ORIONSTACK_CHAT_RECORD_MAX_COUNT", "200")
+    )
+    feedback_record_max_count: int = int(
+        os.getenv("ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT", "200")
+    )
+
+    # Phase 2: search backend
+    search_backend: str = field(default_factory=_resolve_search_backend)
+    elastic_url: str = os.getenv("ORIONSTACK_ELASTIC_URL", "http://localhost:9200")
+    elastic_index: str = os.getenv("ORIONSTACK_ELASTIC_INDEX", "knowledge_units_v1")
+    elastic_use_ik_analyzer: bool = os.getenv(
+        "ORIONSTACK_ELASTIC_USE_IK_ANALYZER", ""
+    ).strip().lower() in {"1", "true", "yes"}
+
+    # Phase 2: query planner
+    enable_query_planner: bool = os.getenv(
+        "ORIONSTACK_ENABLE_QUERY_PLANNER", ""
+    ).strip().lower() in {"1", "true", "yes"}
+    planner_provider: str = os.getenv("ORIONSTACK_PLANNER_PROVIDER", "local")
+    planner_model: str = os.getenv("ORIONSTACK_PLANNER_MODEL", "gemma3:1b")
+    ollama_url: str = os.getenv("ORIONSTACK_OLLAMA_URL", "http://localhost:11434")
+
+    # Phase 2: fast track
+    enable_fast_track: bool = os.getenv(
+        "ORIONSTACK_ENABLE_FAST_TRACK", ""
+    ).strip().lower() in {"1", "true", "yes"}
+
+    @property
+    def debug_response_enabled(self) -> bool:
+        return self.app_mode in {"demo", "dev"}
+
+    @property
+    def chat_record_view_enabled(self) -> bool:
+        return self.app_mode in {"demo", "dev"}
+
+
+settings = Settings()
 </file>
 
 <file path="backend/app/api/routes/documents.py">
