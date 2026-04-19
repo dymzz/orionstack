@@ -15,8 +15,8 @@ def _resolve_cors_origins() -> tuple[str, ...]:
 
 
 def _resolve_search_backend() -> str:
-    value = os.getenv("ORIONSTACK_SEARCH_BACKEND", "local").strip().lower()
-    return value if value in {"local", "elasticsearch"} else "local"
+    value = os.getenv("ORIONSTACK_SEARCH_BACKEND", "elasticsearch").strip().lower()
+    return value if value in {"local", "elasticsearch"} else "elasticsearch"
 
 
 def _resolve_str(env_name: str, default: str) -> str:
@@ -31,8 +31,11 @@ def _resolve_float(env_name: str, default: float) -> float:
     return float(os.getenv(env_name, str(default)))
 
 
-def _resolve_bool(env_name: str) -> bool:
-    return os.getenv(env_name, "").strip().lower() in {"1", "true", "yes"}
+def _resolve_bool(env_name: str, default: bool = False) -> bool:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes"}
 
 
 @dataclass(frozen=True)
@@ -81,7 +84,9 @@ class Settings:
 
     # Phase 2: query planner
     enable_query_planner: bool = field(
-        default_factory=lambda: _resolve_bool("ORIONSTACK_ENABLE_QUERY_PLANNER")
+        default_factory=lambda: _resolve_bool(
+            "ORIONSTACK_ENABLE_QUERY_PLANNER", default=True
+        )
     )
     planner_provider: str = field(
         default_factory=lambda: _resolve_str("ORIONSTACK_PLANNER_PROVIDER", "local")
@@ -97,7 +102,9 @@ class Settings:
 
     # Phase 2: fast track
     enable_fast_track: bool = field(
-        default_factory=lambda: _resolve_bool("ORIONSTACK_ENABLE_FAST_TRACK")
+        default_factory=lambda: _resolve_bool(
+            "ORIONSTACK_ENABLE_FAST_TRACK", default=True
+        )
     )
 
     @property

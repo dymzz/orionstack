@@ -57,3 +57,5 @@
 {"trace_id": "e1734a294ff849cf9a802abe2d37fb72", "raw_query": "试用期考核", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-012"], "created_at": "2026-04-19T06:11:54.299969+00:00"}
 {"trace_id": "1297d3721a4c42a6a00a2f249420fbd9", "raw_query": "公司福利", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-010"], "created_at": "2026-04-19T06:12:29.479825+00:00"}
 {"trace_id": "f4d4ecfbe48e4eefa2b80fd2da21b8fd", "raw_query": "工资条", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-009"], "created_at": "2026-04-19T06:13:00.575903+00:00"}
+{"trace_id": "26cc2e288ccc4799b3168351d9f2ddb0", "raw_query": "请假进度怎么看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003"], "created_at": "2026-04-19T07:30:57.184329+00:00"}
+{"trace_id": "158846674fa245d9824288b36aa67413", "raw_query": "病假材料", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-19T07:31:15.836316+00:00"}

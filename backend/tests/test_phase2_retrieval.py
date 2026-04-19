@@ -153,6 +153,84 @@ def _build_hybrid_leave_hit(*, score: float = 0.03) -> HybridHit:
     )
 
 
+def _build_hybrid_sick_leave_materials_hit(*, score: float = 0.030478) -> HybridHit:
+    return HybridHit(
+        unit_id="hr-faq-002",
+        source_kind="faq",
+        question="病假需要提交什么材料？",
+        answer="病假通常需要提交医院证明或诊断材料。具体提交方式以公司请假流程要求为准，建议在提交请假申请时一并上传。",
+        body_text="病假通常需要提交医院证明或诊断材料。具体提交方式以公司请假流程要求为准，建议在提交请假申请时一并上传。",
+        source_label="HR FAQ",
+        source_locator="hr_faq_seed_v1#hr-faq-002",
+        score=score,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        bm25_score=2.0,
+        vector_score=0.5,
+        lexical_rank=5,
+        vector_rank=4,
+        rrf_rank=5,
+    )
+
+
+def _build_hybrid_leave_progress_hit(*, score: float = 0.031778) -> HybridHit:
+    return HybridHit(
+        unit_id="hr-faq-003",
+        source_kind="faq",
+        question="请假审批进度在哪里查看？",
+        answer="请假提交后，可在请假申请记录或审批记录页面查看当前审批状态。",
+        body_text="请假提交后，可在请假申请记录或审批记录页面查看当前审批状态。",
+        source_label="HR FAQ",
+        source_locator="hr_faq_seed_v1#hr-faq-003",
+        score=score,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        bm25_score=2.3,
+        vector_score=0.85,
+        lexical_rank=2,
+        vector_rank=2,
+        rrf_rank=2,
+    )
+
+
+def _build_hybrid_generic_hr_hit(
+    *,
+    unit_id: str,
+    question: str,
+    answer: str,
+    score: float,
+    lexical_rank: int,
+    vector_rank: int,
+    rrf_rank: int,
+) -> HybridHit:
+    return HybridHit(
+        unit_id=unit_id,
+        source_kind="faq",
+        question=question,
+        answer=answer,
+        body_text=answer,
+        source_label="HR FAQ",
+        source_locator=f"hr_faq_seed_v1#{unit_id}",
+        score=score,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        bm25_score=2.0,
+        vector_score=0.5,
+        lexical_rank=lexical_rank,
+        vector_rank=vector_rank,
+        rrf_rank=rrf_rank,
+    )
+
+
 def _build_hybrid_document_conflict_hit(*, score: float = 0.031) -> HybridHit:
     return HybridHit(
         unit_id="doc-hr-chunk-009",
@@ -632,6 +710,172 @@ def test_chat_service_returns_fallback_when_hybrid_hits_have_no_evidence(
     assert response.debug_info.retrieved_chunks == []
     assert response.debug_info.retrieval_score is None
     assert response.debug_info.fallback_reason == "no_evidence"
+
+
+def test_chat_service_accepts_relevant_faq_from_hybrid_top5_for_sick_leave_query(
+    monkeypatch,
+) -> None:
+    fake_retriever = _FakeLexicalRetriever([_build_hr_sick_leave_materials_hit()])
+    fake_hybrid_retriever = _FakeHybridRetriever(
+        [
+            _build_hybrid_generic_hr_hit(
+                unit_id="hr-faq-003",
+                question="请假审批进度在哪里查看？",
+                answer="请假提交后，可在请假申请记录或审批记录页面查看当前审批状态。",
+                score=0.032018,
+                lexical_rank=1,
+                vector_rank=1,
+                rrf_rank=1,
+            ),
+            _build_hybrid_generic_hr_hit(
+                unit_id="hr-faq-007",
+                question="在职证明怎么申请？",
+                answer="如需开具在职证明，可通过 HR 服务入口提交申请，填写用途和收件方式。",
+                score=0.032002,
+                lexical_rank=2,
+                vector_rank=2,
+                rrf_rank=2,
+            ),
+            _build_hybrid_generic_hr_hit(
+                unit_id="hr-faq-006",
+                question="离职流程怎么走？",
+                answer="提出离职后，应按公司流程提交离职申请，完成审批、工作交接、资产归还与离职手续办理。",
+                score=0.031281,
+                lexical_rank=3,
+                vector_rank=3,
+                rrf_rank=3,
+            ),
+            _build_hybrid_generic_hr_hit(
+                unit_id="hr-faq-011",
+                question="调休余额在哪里看？",
+                answer="调休余额可在员工自助服务入口查看，系统会同步展示当前剩余可用天数。",
+                score=0.03055,
+                lexical_rank=4,
+                vector_rank=4,
+                rrf_rank=4,
+            ),
+            _build_hybrid_sick_leave_materials_hit(),
+        ]
+    )
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="病假材料",
+            domain_hint="hr",
+            lexical_terms=["病假材料", "病假", "材料", "证明"],
+            planner_confidence=0.88,
+        )
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(
+            search_backend="elasticsearch",
+            elastic_url="http://localhost:9200",
+            enable_query_planner=True,
+            enable_fast_track=True,
+        ),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: fake_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_hybrid_retriever",
+        lambda self: fake_hybrid_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_query_planner",
+        lambda self: fake_planner,
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="病假材料", debug=True),
+        trace_id="trace-phase2-hybrid-sick-materials",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.citations[0].citation_id == "hr-faq-002"
+    assert response.citations[0].source_locator == "hr_faq_seed_v1#hr-faq-002"
+    assert "医院证明" in response.citations[0].snippet
+    assert response.debug_info is not None
+    assert response.debug_info.route_result == "faq_qa_elastic"
+    assert response.debug_info.retrieved_chunks == ["hr-faq-002"]
+    assert response.debug_info.fallback_reason is None
+
+
+def test_chat_service_uses_search_query_for_progress_evidence_in_hybrid_path(
+    monkeypatch,
+) -> None:
+    fake_retriever = _FakeLexicalRetriever([_build_hr_leave_progress_hit()])
+    fake_hybrid_retriever = _FakeHybridRetriever(
+        [
+            _build_hybrid_leave_hit(score=0.032258),
+            _build_hybrid_leave_progress_hit(),
+            _build_hybrid_generic_hr_hit(
+                unit_id="hr-faq-010",
+                question="公司福利信息在哪里查看？",
+                answer="公司福利信息可在内部员工服务页查看。",
+                score=0.030679,
+                lexical_rank=3,
+                vector_rank=3,
+                rrf_rank=3,
+            ),
+        ]
+    )
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="请假进度怎么看",
+            domain_hint="hr",
+            lexical_terms=["请假进度怎么看", "请假", "进度", "审批", "记录"],
+            planner_confidence=0.88,
+        )
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(
+            search_backend="elasticsearch",
+            elastic_url="http://localhost:9200",
+            enable_query_planner=True,
+            enable_fast_track=True,
+        ),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: fake_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_hybrid_retriever",
+        lambda self: fake_hybrid_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_query_planner",
+        lambda self: fake_planner,
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="请假进度怎么看", debug=True),
+        trace_id="trace-phase2-hybrid-progress",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.citations[0].citation_id == "hr-faq-003"
+    assert response.citations[0].source_locator == "hr_faq_seed_v1#hr-faq-003"
+    assert "审批状态" in response.citations[0].snippet
+    assert response.debug_info is not None
+    assert response.debug_info.route_result == "faq_qa_elastic"
+    assert response.debug_info.retrieved_chunks == ["hr-faq-003"]
+    assert response.debug_info.fallback_reason is None
 
 
 def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(

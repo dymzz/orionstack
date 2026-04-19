@@ -428,21 +428,21 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 
 ### 8.1 当前建议的发布开关矩阵
 
-当前建议冻结为三档：
+当前建议长期按三档理解：
 
-1. 默认稳定档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-2. Elasticsearch 过渡档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. Phase 2 当前真实灰度档：
+1. 默认全开档：
    - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
    - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
    - `ORIONSTACK_ENABLE_FAST_TRACK=true`
    - `ORIONSTACK_PLANNER_PROVIDER=local`
+2. 软回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. 硬回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
 
 ### 8.2 当前建议的发布前最小 smoke
 
@@ -452,7 +452,7 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
 ```
 
-若本次发布启用了 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`，还应额外做一轮环境可用下的手动 smoke：
+若当前准备长期使用默认全开档，还应额外做一轮环境可用下的手动 smoke：
 
 1. 确认 Elasticsearch 连通，索引存在且可查询
 2. 手动请求 `请假`
@@ -463,6 +463,23 @@ python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flo
    - `retrieved_chunks` 为 FAQ 风格 ID，而不是 `doc-...-chunk-*`
    - `citation.source_locator` 为 `hr_faq_seed_v1#...`
    - 不返回 FAQ seed JSON 残片
+
+### 8.2.1 2026-04-19 当前验证结论
+
+按当前仓库的真实状态：
+
+1. 上述 pytest smoke 已通过
+2. 默认全开档下，`请假`、`病假材料`、`请假进度怎么看` 均可返回 FAQ 风格结果
+3. Hard Cases 闭环验证通过：
+   - `ask -> feedback(down) -> hard case -> trace replay` 已跑通
+   - `no_evidence` fallback 也会自动写入 hard case
+4. 软回退档验证通过
+5. 硬回退档验证通过
+
+因此，当前测试口径应冻结为：
+
+- 默认全开档可作为长期运行方式
+- soft / hard fallback 仅保留为排障与环境降级手段
 
 ### 8.3 当前建议的最小回滚条件
 
@@ -484,6 +501,11 @@ python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flo
    - `ORIONSTACK_SEARCH_BACKEND=local`
    - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
    - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+
+按当前仓库真实状态，回退条件不再是“是否允许打开全开档”，而是：
+
+1. 当前机器上的 ES / planner / hybrid 服务链是否暂时不可用
+2. 是否需要快速缩小排查范围
 
 ---
 

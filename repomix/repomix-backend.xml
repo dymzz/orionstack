@@ -52,10 +52,16 @@ backend/app/indexing/elastic_indexer.py
 backend/app/indexing/index_health_checker.py
 backend/app/llm/__init__.py
 backend/app/llm/providers/__init__.py
+backend/app/observability/retrieval_trace.py
 backend/app/query/__init__.py
+backend/app/query/query_planner.py
 backend/app/retrieval/citation_mapper.py
+backend/app/retrieval/evidence_extractor.py
+backend/app/retrieval/hybrid_retriever.py
 backend/app/retrieval/lexical_retriever.py
+backend/app/retrieval/reranker.py
 backend/app/retrieval/retriever.py
+backend/app/retrieval/vector_retriever.py
 backend/app/routing/contracts.py
 backend/app/routing/resolver.py
 backend/app/routing/rule_parser.py
@@ -71,20 +77,997 @@ backend/app/storage/chat_records/chat_records.jsonl
 backend/app/storage/chunks/chunks.jsonl
 backend/app/storage/documents/documents.jsonl
 backend/app/storage/feedback/feedback_records.jsonl
+backend/app/storage/hard_cases/hard_cases.jsonl
 backend/app/storage/repositories/chat_record_repo.py
 backend/app/storage/repositories/chunk_repo.py
 backend/app/storage/repositories/document_repo.py
 backend/app/storage/repositories/faq_repo.py
 backend/app/storage/repositories/feedback_repo.py
 backend/app/storage/repositories/knowledge_unit_repo.py
-backend/app/storage/uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md
+backend/app/storage/retrieval_traces/retrieval_traces.jsonl
+backend/app/storage/uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md
+backend/app/testing/hard_cases_repo.py
 backend/main.py
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="backend/app/storage/uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md">
+<file path="backend/app/api/routes/health.py">
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+</file>
+
+<file path="backend/app/guardrails/normalize.py">
+import re
+
+
+def normalize_query(raw_query: str) -> str:
+    value = re.sub(r"\s+", " ", raw_query).strip()
+    return value
+</file>
+
+<file path="backend/app/indexing/__init__.py">
+
+</file>
+
+<file path="backend/app/indexing/elastic_indexer.py">
+from __future__ import annotations
+
+from typing import Any
+
+from elasticsearch import Elasticsearch
+
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnit
+
+INDEX_NAME = "knowledge_units_v1"
+
+MAPPING = {
+    "mappings": {
+        "properties": {
+            "unit_id": {"type": "keyword"},
+            "source_kind": {"type": "keyword"},
+            "question": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "answer": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "body_text": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "keywords": {"type": "keyword"},
+            "business_domain": {"type": "keyword"},
+            "document_type": {"type": "keyword"},
+            "source_type": {"type": "keyword"},
+            "source_label": {"type": "keyword"},
+            "source_locator": {"type": "keyword"},
+            "access_scope": {"type": "keyword"},
+            "lifecycle_status": {"type": "keyword"},
+            "valid_from": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "valid_until": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "version": {"type": "keyword"},
+            "created_at": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+        }
+    }
+}
+
+MAPPING_FALLBACK = {
+    "mappings": {
+        "properties": {
+            "unit_id": {"type": "keyword"},
+            "source_kind": {"type": "keyword"},
+            "question": {"type": "text"},
+            "answer": {"type": "text"},
+            "body_text": {"type": "text"},
+            "keywords": {"type": "keyword"},
+            "business_domain": {"type": "keyword"},
+            "document_type": {"type": "keyword"},
+            "source_type": {"type": "keyword"},
+            "source_label": {"type": "keyword"},
+            "source_locator": {"type": "keyword"},
+            "access_scope": {"type": "keyword"},
+            "lifecycle_status": {"type": "keyword"},
+            "valid_from": {"type": "keyword"},
+            "valid_until": {"type": "keyword"},
+            "version": {"type": "keyword"},
+            "created_at": {"type": "keyword"},
+        }
+    }
+}
+
+
+class ElasticIndexer:
+    def __init__(self, es: Elasticsearch, *, index_name: str = INDEX_NAME) -> None:
+        self._es = es
+        self._index_name = index_name
+
+    def ensure_index(self, *, use_ik_analyzer: bool = False) -> None:
+        if self._es.indices.exists(index=self._index_name):
+            return
+        mapping = MAPPING if use_ik_analyzer else MAPPING_FALLBACK
+        self._es.indices.create(index=self._index_name, body=mapping)
+
+    def index_units(self, units: list[KnowledgeUnit]) -> int:
+        indexed = 0
+        for unit in units:
+            doc = unit.to_elasticsearch_doc()
+            self._es.index(index=self._index_name, id=unit.unit_id, body=doc)
+            indexed += 1
+        self._es.indices.refresh(index=self._index_name)
+        return indexed
+
+    def delete_index(self) -> None:
+        if self._es.indices.exists(index=self._index_name):
+            self._es.indices.delete(index=self._index_name)
+</file>
+
+<file path="backend/app/indexing/index_health_checker.py">
+from __future__ import annotations
+
+from elasticsearch import Elasticsearch
+
+
+class IndexHealthChecker:
+    def __init__(
+        self, es: Elasticsearch, *, index_name: str = "knowledge_units_v1"
+    ) -> None:
+        self._es = es
+        self._index_name = index_name
+
+    def is_connected(self) -> bool:
+        try:
+            return self._es.ping()
+        except Exception:
+            return False
+
+    def index_exists(self) -> bool:
+        try:
+            return self._es.indices.exists(index=self._index_name)
+        except Exception:
+            return False
+
+    def check(self) -> dict:
+        result: dict = {
+            "connected": False,
+            "index_exists": False,
+            "doc_count": 0,
+            "errors": [],
+        }
+        try:
+            if not self._es.ping():
+                result["errors"].append("Elasticsearch not reachable")
+                return result
+            result["connected"] = True
+        except Exception as exc:
+            result["errors"].append(f"Connection error: {exc}")
+            return result
+
+        try:
+            if not self._es.indices.exists(index=self._index_name):
+                result["errors"].append(f"Index {self._index_name} does not exist")
+                return result
+            result["index_exists"] = True
+        except Exception as exc:
+            result["errors"].append(f"Index check error: {exc}")
+            return result
+
+        try:
+            count = self._es.count(index=self._index_name)
+            result["doc_count"] = count.get("count", 0)
+        except Exception as exc:
+            result["errors"].append(f"Count error: {exc}")
+
+        return result
+</file>
+
+<file path="backend/app/llm/__init__.py">
+
+</file>
+
+<file path="backend/app/llm/providers/__init__.py">
+
+</file>
+
+<file path="backend/app/observability/retrieval_trace.py">
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class RetrievalTraceRepository:
+    def __init__(self, *, max_count: int = 0) -> None:
+        self._path = (
+            Path(__file__).resolve().parents[1]
+            / "storage"
+            / "retrieval_traces"
+            / "retrieval_traces.jsonl"
+        )
+        self._max_count = max_count
+
+    def save(self, trace: dict[str, Any]) -> dict[str, Any]:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        enriched_trace = {
+            **trace,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(enriched_trace, ensure_ascii=False) + "\n")
+        self._truncate_if_needed()
+        return enriched_trace
+
+    def get_by_trace_id(self, trace_id: str) -> dict[str, Any] | None:
+        if not self._path.exists():
+            return None
+
+        for line in reversed(self._path.read_text(encoding="utf-8").splitlines()):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if str(record.get("trace_id", "")) == trace_id:
+                return record
+        return None
+
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        if not self._path.exists():
+            return []
+
+        records = [
+            json.loads(line)
+            for line in self._path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        records.reverse()
+        return records[:limit]
+
+    def _truncate_if_needed(self) -> None:
+        if self._max_count <= 0 or not self._path.exists():
+            return
+
+        lines = self._path.read_text(encoding="utf-8").splitlines()
+        non_empty = [line for line in lines if line.strip()]
+        if len(non_empty) <= self._max_count:
+            return
+
+        retained = non_empty[-self._max_count :]
+        self._path.write_text("\n".join(retained) + "\n", encoding="utf-8")
+</file>
+
+<file path="backend/app/query/__init__.py">
+
+</file>
+
+<file path="backend/app/query/query_planner.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class PlannerOutput:
+    normalized_query: str
+    domain_hint: str | None
+    lexical_terms: list[str]
+    planner_confidence: float
+
+
+class QueryPlanner:
+    _HR_DOMAIN_KEYWORDS = (
+        "hr",
+        "人事",
+        "请假",
+        "休假",
+        "病假",
+        "年假",
+        "调休",
+        "考勤",
+        "入职",
+        "离职",
+        "福利",
+        "证明",
+    )
+    _LEAVE_KEYWORDS = ("请假", "休假", "病假", "年假", "调休")
+    _MATERIAL_KEYWORDS = ("材料", "证明", "医院", "单据")
+    _PROGRESS_KEYWORDS = ("进度", "状态", "审批", "记录", "查询")
+
+    def __init__(self, *, provider: str = "local", model: str = "") -> None:
+        self._provider = provider
+        self._model = model
+
+    @property
+    def router_name(self) -> str:
+        return "query_planner_local"
+
+    def plan(self, normalized_query: str) -> PlannerOutput:
+        query = normalized_query.strip()
+        if not query:
+            return PlannerOutput(
+                normalized_query="",
+                domain_hint=None,
+                lexical_terms=[],
+                planner_confidence=0.0,
+            )
+
+        domain_hint = self._infer_domain_hint(query)
+        lexical_terms = self._build_lexical_terms(query, domain_hint)
+        planner_confidence = 0.88 if domain_hint is not None else 0.05
+
+        return PlannerOutput(
+            normalized_query=query,
+            domain_hint=domain_hint,
+            lexical_terms=lexical_terms,
+            planner_confidence=planner_confidence,
+        )
+
+    @classmethod
+    def _infer_domain_hint(cls, query: str) -> str | None:
+        lowered_query = query.lower()
+        if any(term in lowered_query for term in cls._HR_DOMAIN_KEYWORDS):
+            return "hr"
+        return None
+
+    @classmethod
+    def _build_lexical_terms(cls, query: str, domain_hint: str | None) -> list[str]:
+        terms = _extract_lexical_terms(query)
+        if domain_hint != "hr":
+            return terms
+
+        extra_terms: list[str] = []
+        if any(term in query for term in cls._LEAVE_KEYWORDS):
+            extra_terms.extend(["请假", "审批"])
+        if any(term in query for term in cls._MATERIAL_KEYWORDS):
+            extra_terms.extend(["材料", "证明"])
+        if any(term in query for term in cls._PROGRESS_KEYWORDS):
+            extra_terms.extend(["进度", "记录"])
+        return _merge_terms(terms, extra_terms)
+
+
+def _extract_lexical_terms(query: str) -> list[str]:
+    terms = [query]
+    if len(query) > 2:
+        for index in range(len(query) - 1):
+            bigram = query[index : index + 2]
+            if bigram not in terms:
+                terms.append(bigram)
+    if len(query) > 4:
+        for index in range(len(query) - 2):
+            trigram = query[index : index + 3]
+            if trigram not in terms:
+                terms.append(trigram)
+    return terms
+
+
+def _merge_terms(base_terms: list[str], extra_terms: list[str]) -> list[str]:
+    merged = list(base_terms)
+    for term in extra_terms:
+        if term and term not in merged:
+            merged.append(term)
+    return merged
+</file>
+
+<file path="backend/app/retrieval/citation_mapper.py">
+from app.schemas.response import CitationItem
+
+
+def map_citation(item: dict) -> CitationItem:
+    return CitationItem(
+        citation_id=item["id"],
+        source_label=item.get("source_label", "FAQ"),
+        source_locator=item.get("source_locator", item["id"]),
+        snippet=item.get("snippet", item.get("question", item.get("answer", ""))),
+    )
+</file>
+
+<file path="backend/app/retrieval/evidence_extractor.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+import re
+
+
+@dataclass(frozen=True)
+class EvidenceSpan:
+    text: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class EvidenceResult:
+    evidence_spans: list[EvidenceSpan]
+    evidence_confidence: float
+
+
+class EvidenceExtractor:
+    def extract(self, query: str, text: str) -> EvidenceResult:
+        if not query.strip() or not text.strip():
+            return EvidenceResult(evidence_spans=[], evidence_confidence=0.0)
+
+        query_terms = _extract_query_terms(query)
+        if not query_terms:
+            return EvidenceResult(evidence_spans=[], evidence_confidence=0.0)
+
+        sentence_hits: list[tuple[float, EvidenceSpan]] = []
+        for sentence, start, end in _split_sentences(text):
+            overlap = [term for term in query_terms if term in sentence]
+            if not overlap:
+                continue
+            confidence = len(overlap) / len(query_terms)
+            sentence_hits.append(
+                (
+                    confidence,
+                    EvidenceSpan(text=sentence, start=start, end=end),
+                )
+            )
+
+        sentence_hits.sort(key=lambda item: item[0], reverse=True)
+        spans = [span for _, span in sentence_hits[:2]]
+        confidence = 0.0 if not sentence_hits else sentence_hits[0][0]
+        return EvidenceResult(evidence_spans=spans, evidence_confidence=confidence)
+
+
+def _split_sentences(text: str) -> list[tuple[str, int, int]]:
+    matches = list(re.finditer(r"[^。！？；\n]+", text))
+    if not matches:
+        compact = text.strip()
+        return [] if not compact else [(compact, 0, len(compact))]
+
+    sentences: list[tuple[str, int, int]] = []
+    for match in matches:
+        sentence = match.group(0).strip()
+        if sentence:
+            sentences.append((sentence, match.start(), match.end()))
+    return sentences
+
+
+def _extract_query_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    normalized = " ".join(query.split())
+    for part in normalized.split(" "):
+        if part and part not in terms:
+            terms.append(part)
+
+    compact = normalized.replace(" ", "")
+    if compact and compact not in terms:
+        terms.append(compact)
+    if len(compact) > 1:
+        for index in range(len(compact) - 1):
+            token = compact[index : index + 2]
+            if token not in terms:
+                terms.append(token)
+    return terms
+</file>
+
+<file path="backend/app/retrieval/hybrid_retriever.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.retrieval.lexical_retriever import LexicalHit, LexicalRetriever
+from app.retrieval.vector_retriever import VectorRetriever
+
+RRF_RANK_CONSTANT = 60
+RRF_RANK_WINDOW_SIZE = 50
+
+
+@dataclass(frozen=True)
+class HybridHit:
+    unit_id: str
+    source_kind: str
+    question: str
+    answer: str
+    body_text: str
+    source_label: str
+    source_locator: str
+    score: float
+    business_domain: str
+    document_type: str
+    source_type: str
+    access_scope: str
+    lifecycle_status: str
+    bm25_score: float | None
+    vector_score: float | None
+    lexical_rank: int | None
+    vector_rank: int | None
+    rrf_rank: int
+
+
+class HybridRetriever:
+    def __init__(
+        self,
+        lexical_retriever: LexicalRetriever,
+        vector_retriever: VectorRetriever,
+        *,
+        rank_constant: int = RRF_RANK_CONSTANT,
+        rank_window_size: int = RRF_RANK_WINDOW_SIZE,
+    ) -> None:
+        self._lexical_retriever = lexical_retriever
+        self._vector_retriever = vector_retriever
+        self._rank_constant = rank_constant
+        self._rank_window_size = rank_window_size
+
+    def search(
+        self,
+        *,
+        lexical_query: str,
+        vector_query: str,
+        lexical_terms: list[str] | None = None,
+        business_domain: str | None = None,
+        access_scope: str | None = None,
+        lifecycle_status: str | None = None,
+        size: int = 10,
+    ) -> list[HybridHit]:
+        lexical_hits = self._lexical_retriever.search(
+            lexical_query,
+            lexical_terms=lexical_terms,
+            min_score=0.1,
+            business_domain=business_domain,
+            access_scope=access_scope,
+            lifecycle_status=lifecycle_status,
+            size=max(size, self._rank_window_size),
+        )
+        vector_hits = self._vector_retriever.search(
+            vector_query,
+            min_score=0.0,
+            business_domain=business_domain,
+            access_scope=access_scope,
+            lifecycle_status=lifecycle_status,
+            size=max(size, self._rank_window_size),
+        )
+
+        return self._fuse_hits(lexical_hits, vector_hits, size=size)
+
+    def _fuse_hits(
+        self, lexical_hits: list[LexicalHit], vector_hits: list[LexicalHit], *, size: int
+    ) -> list[HybridHit]:
+        lexical_rank_map = {
+            hit.unit_id: rank
+            for rank, hit in enumerate(lexical_hits[: self._rank_window_size], start=1)
+        }
+        vector_rank_map = {
+            hit.unit_id: rank
+            for rank, hit in enumerate(vector_hits[: self._rank_window_size], start=1)
+        }
+        lexical_hit_map = {hit.unit_id: hit for hit in lexical_hits}
+        vector_hit_map = {hit.unit_id: hit for hit in vector_hits}
+
+        hybrid_hits: list[HybridHit] = []
+        for unit_id in set(lexical_hit_map) | set(vector_hit_map):
+            lexical_hit = lexical_hit_map.get(unit_id)
+            vector_hit = vector_hit_map.get(unit_id)
+            base_hit = lexical_hit or vector_hit
+            if base_hit is None:
+                continue
+
+            lexical_rank = lexical_rank_map.get(unit_id)
+            vector_rank = vector_rank_map.get(unit_id)
+            rrf_score = 0.0
+            if lexical_rank is not None:
+                rrf_score += 1.0 / (self._rank_constant + lexical_rank)
+            if vector_rank is not None:
+                rrf_score += 1.0 / (self._rank_constant + vector_rank)
+
+            hybrid_hits.append(
+                HybridHit(
+                    unit_id=base_hit.unit_id,
+                    source_kind=base_hit.source_kind,
+                    question=base_hit.question,
+                    answer=base_hit.answer,
+                    body_text=base_hit.body_text,
+                    source_label=base_hit.source_label,
+                    source_locator=base_hit.source_locator,
+                    score=rrf_score,
+                    business_domain=base_hit.business_domain,
+                    document_type=base_hit.document_type,
+                    source_type=base_hit.source_type,
+                    access_scope=base_hit.access_scope,
+                    lifecycle_status=base_hit.lifecycle_status,
+                    bm25_score=None if lexical_hit is None else lexical_hit.score,
+                    vector_score=None if vector_hit is None else vector_hit.score,
+                    lexical_rank=lexical_rank,
+                    vector_rank=vector_rank,
+                    rrf_rank=0,
+                )
+            )
+
+        hybrid_hits.sort(
+            key=lambda item: (
+                item.score,
+                item.bm25_score or 0.0,
+                item.vector_score or 0.0,
+            ),
+            reverse=True,
+        )
+
+        ranked_hits: list[HybridHit] = []
+        for rank, hit in enumerate(hybrid_hits[:size], start=1):
+            ranked_hits.append(
+                HybridHit(
+                    unit_id=hit.unit_id,
+                    source_kind=hit.source_kind,
+                    question=hit.question,
+                    answer=hit.answer,
+                    body_text=hit.body_text,
+                    source_label=hit.source_label,
+                    source_locator=hit.source_locator,
+                    score=hit.score,
+                    business_domain=hit.business_domain,
+                    document_type=hit.document_type,
+                    source_type=hit.source_type,
+                    access_scope=hit.access_scope,
+                    lifecycle_status=hit.lifecycle_status,
+                    bm25_score=hit.bm25_score,
+                    vector_score=hit.vector_score,
+                    lexical_rank=hit.lexical_rank,
+                    vector_rank=hit.vector_rank,
+                    rrf_rank=rank,
+                )
+            )
+        return ranked_hits
+</file>
+
+<file path="backend/app/retrieval/reranker.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.retrieval.evidence_extractor import EvidenceExtractor, EvidenceSpan
+from app.retrieval.hybrid_retriever import HybridHit
+
+
+@dataclass(frozen=True)
+class RerankHit:
+    hit: HybridHit
+    rerank_score: float
+    evidence_spans: list[EvidenceSpan]
+    evidence_confidence: float
+    accept: bool
+
+
+class Reranker:
+    _FAQ_EVIDENCE_BONUS = 0.03
+    _FAQ_SOURCE_BONUS = 0.01
+    _DOCUMENT_PENALTY = 0.01
+    _ACCEPT_EVIDENCE_THRESHOLD = 0.15
+
+    def __init__(self, evidence_extractor: EvidenceExtractor | None = None) -> None:
+        self._evidence_extractor = (
+            EvidenceExtractor() if evidence_extractor is None else evidence_extractor
+        )
+
+    def rerank(self, query: str, hits: list[HybridHit], *, top_n: int = 3) -> list[RerankHit]:
+        reranked_hits: list[RerankHit] = []
+        for hit in hits[:top_n]:
+            evidence_result = self._evidence_extractor.extract(
+                query, hit.answer or hit.body_text
+            )
+            score = hit.score + evidence_result.evidence_confidence
+            if hit.source_kind == "faq":
+                score += self._FAQ_SOURCE_BONUS
+            else:
+                score -= self._DOCUMENT_PENALTY
+
+            if hit.source_kind == "faq" and evidence_result.evidence_spans:
+                score += self._FAQ_EVIDENCE_BONUS
+
+            reranked_hits.append(
+                RerankHit(
+                    hit=hit,
+                    rerank_score=score,
+                    evidence_spans=evidence_result.evidence_spans,
+                    evidence_confidence=evidence_result.evidence_confidence,
+                    accept=evidence_result.evidence_confidence
+                    >= self._ACCEPT_EVIDENCE_THRESHOLD,
+                )
+            )
+
+        reranked_hits.sort(
+            key=lambda item: (
+                item.rerank_score,
+                item.evidence_confidence,
+                item.hit.bm25_score or 0.0,
+                item.hit.vector_score or 0.0,
+            ),
+            reverse=True,
+        )
+        return reranked_hits
+</file>
+
+<file path="backend/app/retrieval/vector_retriever.py">
+from __future__ import annotations
+
+from hashlib import sha1
+from math import sqrt
+from typing import Any
+
+from elasticsearch import Elasticsearch
+
+from app.retrieval.lexical_retriever import LexicalHit
+
+_VECTOR_DIMENSION = 64
+
+
+class VectorRetriever:
+    def __init__(
+        self,
+        es: Elasticsearch,
+        *,
+        index_name: str = "knowledge_units_v1",
+        candidate_window_size: int = 50,
+    ) -> None:
+        self._es = es
+        self._index_name = index_name
+        self._candidate_window_size = candidate_window_size
+
+    def search(
+        self,
+        query: str,
+        *,
+        min_score: float = 0.0,
+        business_domain: str | None = None,
+        access_scope: str | None = None,
+        lifecycle_status: str | None = None,
+        size: int = 10,
+    ) -> list[LexicalHit]:
+        normalized = query.strip().lower()
+        if not normalized:
+            return []
+
+        filter_clauses: list[dict[str, Any]] = []
+        if business_domain:
+            filter_clauses.append({"term": {"business_domain": business_domain}})
+        if access_scope:
+            filter_clauses.append({"term": {"access_scope": access_scope}})
+        if lifecycle_status:
+            filter_clauses.append({"term": {"lifecycle_status": lifecycle_status}})
+        else:
+            filter_clauses.append({"term": {"lifecycle_status": "active"}})
+
+        body: dict[str, Any] = {
+            "size": max(size, self._candidate_window_size),
+            "query": {"bool": {"filter": filter_clauses}},
+        }
+
+        try:
+            result = self._es.search(index=self._index_name, body=body)
+        except Exception:
+            return []
+
+        query_vector = _text_to_unit_vector(normalized)
+        scored_hits: list[LexicalHit] = []
+        for hit in result.get("hits", {}).get("hits", []):
+            source = hit.get("_source", {})
+            candidate_text = " ".join(
+                part
+                for part in (
+                    source.get("question", ""),
+                    source.get("answer", ""),
+                    source.get("body_text", ""),
+                )
+                if part
+            )
+            score = _cosine_similarity(query_vector, _text_to_unit_vector(candidate_text))
+            if score < min_score:
+                continue
+            scored_hits.append(
+                LexicalHit(
+                    unit_id=source.get("unit_id", ""),
+                    source_kind=source.get("source_kind", ""),
+                    question=source.get("question", ""),
+                    answer=source.get("answer", ""),
+                    body_text=source.get("body_text", ""),
+                    source_label=source.get("source_label", ""),
+                    source_locator=source.get("source_locator", ""),
+                    score=score,
+                    business_domain=source.get("business_domain", ""),
+                    document_type=source.get("document_type", ""),
+                    source_type=source.get("source_type", ""),
+                    access_scope=source.get("access_scope", ""),
+                    lifecycle_status=source.get("lifecycle_status", ""),
+                )
+            )
+
+        scored_hits.sort(key=lambda item: item.score, reverse=True)
+        return scored_hits[:size]
+
+
+def _text_to_unit_vector(text: str) -> list[float]:
+    vector = [0.0] * _VECTOR_DIMENSION
+    for token in _tokenize(text):
+        index = int(sha1(token.encode("utf-8")).hexdigest(), 16) % _VECTOR_DIMENSION
+        vector[index] += 1.0
+
+    magnitude = sqrt(sum(value * value for value in vector))
+    if magnitude == 0.0:
+        return vector
+    return [value / magnitude for value in vector]
+
+
+def _tokenize(text: str) -> list[str]:
+    compact = "".join(text.lower().split())
+    if not compact:
+        return []
+
+    tokens = [compact]
+    if len(compact) > 1:
+        for index in range(len(compact) - 1):
+            tokens.append(compact[index : index + 2])
+    if len(compact) > 2:
+        for index in range(len(compact) - 2):
+            tokens.append(compact[index : index + 3])
+    return tokens
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    return sum(left_value * right_value for left_value, right_value in zip(left, right))
+</file>
+
+<file path="backend/app/routing/contracts.py">
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class IntentDecision(BaseModel):
+    route: Literal["faq_qa", "fallback"]
+    confidence: float
+    query_for_search: str
+</file>
+
+<file path="backend/app/routing/resolver.py">
+from app.routing.contracts import IntentDecision
+from app.routing.rule_parser import RuleParser
+
+
+class RouteResolver:
+    def __init__(self) -> None:
+        self._rule_parser = RuleParser()
+
+    def resolve(self, raw_query: str) -> IntentDecision:
+        return self._rule_parser.parse(raw_query)
+</file>
+
+<file path="backend/app/runtime/trace.py">
+from uuid import uuid4
+
+
+def new_trace_id() -> str:
+    return uuid4().hex
+</file>
+
+<file path="backend/app/services/chunk_service.py">
+class ChunkService:
+    def __init__(self, *, chunk_size: int = 500, chunk_overlap: int = 80) -> None:
+        self._chunk_size = chunk_size
+        self._chunk_overlap = chunk_overlap
+
+    def split(self, text: str) -> list[str]:
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not normalized:
+            return []
+
+        chunks: list[str] = []
+        start = 0
+        text_length = len(normalized)
+        while start < text_length:
+            end = min(start + self._chunk_size, text_length)
+            chunk = normalized[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            if end >= text_length:
+                break
+            start = max(end - self._chunk_overlap, start + 1)
+        return chunks
+</file>
+
+<file path="backend/app/services/document_parser.py">
+from io import BytesIO
+from pathlib import Path
+
+from docx import Document
+from pypdf import PdfReader
+
+
+class DocumentParser:
+    def parse(self, *, filename: str, data: bytes) -> str:
+        suffix = Path(filename).suffix.lower()
+        if suffix in {".txt", ".md"}:
+            return self._decode_text(data)
+        if suffix == ".pdf":
+            return self._parse_pdf(data)
+        if suffix == ".docx":
+            return self._parse_docx(data)
+        raise ValueError("当前文件类型暂不支持解析")
+
+    def _decode_text(self, data: bytes) -> str:
+        for encoding in ("utf-8", "utf-8-sig", "gb18030"):
+            try:
+                return data.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        raise ValueError("文本文件编码暂不支持解析")
+
+    def _parse_pdf(self, data: bytes) -> str:
+        try:
+            reader = PdfReader(BytesIO(data))
+            texts = [page.extract_text() or "" for page in reader.pages]
+            return "\n\n".join(texts)
+        except Exception as error:
+            raise ValueError("PDF 解析失败") from error
+
+    def _parse_docx(self, data: bytes) -> str:
+        try:
+            document = Document(BytesIO(data))
+            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+            return "\n\n".join(paragraphs)
+        except Exception as error:
+            raise ValueError("DOCX 解析失败") from error
+</file>
+
+<file path="backend/app/storage/hard_cases/hard_cases.jsonl">
+{"trace_id": "d69a549a3fd6410d937fc3a4b9dbd2ed", "raw_query": "请假", "normalized_query": "请假", "domain_hint": null, "fallback_reason": null, "top_candidates": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "evidence_spans": [{"text": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "user_feedback": "down", "created_at": "2026-04-19T05:03:25.110269+00:00"}
+{"trace_id": "59a46111b25d4d3fbae9b22ff43c69d1", "raw_query": "请假", "normalized_query": "请假", "domain_hint": null, "fallback_reason": null, "top_candidates": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "evidence_spans": [{"text": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "user_feedback": "down", "created_at": "2026-04-19T05:04:00.451084+00:00"}
+{"trace_id": "75b110599ddb434593c38e7b291596e4", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "domain_hint": null, "fallback_reason": null, "top_candidates": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "evidence_spans": [{"text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "user_feedback": "down", "created_at": "2026-04-19T06:01:39.739836+00:00"}
+{"trace_id": "4e96519dd4a34166aed7f137ffa0ea05", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "domain_hint": null, "fallback_reason": null, "top_candidates": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "evidence_spans": [{"text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "user_feedback": "down", "created_at": "2026-04-19T06:03:02.124024+00:00"}
+{"trace_id": "b516199929184b1c8111182164115f11", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "domain_hint": null, "fallback_reason": null, "top_candidates": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "evidence_spans": [{"text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "user_feedback": "down", "created_at": "2026-04-19T06:03:19.993758+00:00"}
+</file>
+
+<file path="backend/app/storage/repositories/faq_repo.py">
+import json
+from pathlib import Path
+from typing import Any
+
+
+class FAQRepository:
+    def __init__(self) -> None:
+        self._path = Path(__file__).resolve().parents[1] / "seed" / "mock_faq.json"
+
+    def list_all(self) -> list[dict[str, Any]]:
+        return json.loads(self._path.read_text(encoding="utf-8"))
+</file>
+
+<file path="backend/app/storage/retrieval_traces/retrieval_traces.jsonl">
+{"trace_id": "c5d9da02bdae48a38bfc7d10e77e0b09", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:01:57.480215+00:00"}
+{"trace_id": "d69a549a3fd6410d937fc3a4b9dbd2ed", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:03:08.224140+00:00"}
+{"trace_id": "30d35531ac5c4d149f34666d3a59647d", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:03:29.979962+00:00"}
+{"trace_id": "59a46111b25d4d3fbae9b22ff43c69d1", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:03:52.279902+00:00"}
+{"trace_id": "e4c717517719406d8e97e79f6474a4fb", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:04:10.555387+00:00"}
+{"trace_id": "652d7ab75e454cf3b6a8362ef44e732f", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["faq-001"], "citations": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:05:22.884164+00:00"}
+{"trace_id": "c0ceaef6607c472684fd7e2166625aa1", "raw_query": "请假", "normalized_query": "请假", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-001"], "citations": [{"citation_id": "hr-faq-001", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-001", "snippet": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T05:05:38.024358+00:00"}
+{"trace_id": "75b110599ddb434593c38e7b291596e4", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["faq-001"], "citations": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:01:39.647775+00:00"}
+{"trace_id": "4e96519dd4a34166aed7f137ffa0ea05", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["faq-001"], "citations": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:03:02.082438+00:00"}
+{"trace_id": "b516199929184b1c8111182164115f11", "raw_query": "如何上传文档？", "normalized_query": "如何上传文档？", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["faq-001"], "citations": [{"citation_id": "faq-001", "source_label": "Mock FAQ", "source_locator": "mock_faq.json#faq-001", "snippet": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:03:19.908970+00:00"}
+{"trace_id": "e1734a294ff849cf9a802abe2d37fb72", "raw_query": "试用期考核", "normalized_query": "试用期考核", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-012"], "citations": [{"citation_id": "hr-faq-012", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-012", "snippet": "试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。具体时间和确认方式以公司试用期流程为准。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:11:54.305674+00:00"}
+{"trace_id": "1297d3721a4c42a6a00a2f249420fbd9", "raw_query": "公司福利", "normalized_query": "公司福利", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-010"], "citations": [{"citation_id": "hr-faq-010", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-010", "snippet": "公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。若福利政策有调整，以最新正式通知为准。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:12:29.481852+00:00"}
+{"trace_id": "f4d4ecfbe48e4eefa2b80fd2da21b8fd", "raw_query": "工资条", "normalized_query": "工资条", "intent": "faq_qa_elastic", "domain_hint": null, "semantic_expansions": null, "lexical_terms": null, "filters": {"document_ids": []}, "retrieved_chunks": ["hr-faq-009"], "citations": [{"citation_id": "hr-faq-009", "source_label": "HR FAQ", "source_locator": "hr_faq_seed_v1#hr-faq-009", "snippet": "工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系 HR。"}], "fallback_reason": null, "final_status": "ok", "created_at": "2026-04-19T06:13:00.578005+00:00"}
+</file>
+
+<file path="backend/app/storage/uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md">
 # 第一阶段可直接入库 FAQ 内容：HR 业务域 v1
 
 ## 1. 文档目标
@@ -372,531 +1355,80 @@ This section contains the contents of the repository's files.
 **本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可作为 A 类输入直接进入企业内部知识问答系统的 FAQ 入库链路。**
 </file>
 
-<file path="backend/app/api/routes/health.py">
-from fastapi import APIRouter
-
-router = APIRouter()
-
-
-@router.get("/healthz")
-def healthz() -> dict[str, str]:
-    return {"status": "ok"}
-</file>
-
-<file path="backend/app/guardrails/normalize.py">
-import re
-
-
-def normalize_query(raw_query: str) -> str:
-    value = re.sub(r"\s+", " ", raw_query).strip()
-    return value
-</file>
-
-<file path="backend/app/indexing/__init__.py">
-
-</file>
-
-<file path="backend/app/indexing/elastic_indexer.py">
-from __future__ import annotations
-
-from typing import Any
-
-from elasticsearch import Elasticsearch
-
-from app.storage.repositories.knowledge_unit_repo import KnowledgeUnit
-
-INDEX_NAME = "knowledge_units_v1"
-
-MAPPING = {
-    "mappings": {
-        "properties": {
-            "unit_id": {"type": "keyword"},
-            "source_kind": {"type": "keyword"},
-            "question": {
-                "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
-            },
-            "answer": {
-                "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
-            },
-            "body_text": {
-                "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
-            },
-            "keywords": {"type": "keyword"},
-            "business_domain": {"type": "keyword"},
-            "document_type": {"type": "keyword"},
-            "source_type": {"type": "keyword"},
-            "source_label": {"type": "keyword"},
-            "source_locator": {"type": "keyword"},
-            "access_scope": {"type": "keyword"},
-            "lifecycle_status": {"type": "keyword"},
-            "valid_from": {
-                "type": "date",
-                "format": "strict_date_optional_time||epoch_millis",
-                "ignore_malformed": True,
-            },
-            "valid_until": {
-                "type": "date",
-                "format": "strict_date_optional_time||epoch_millis",
-                "ignore_malformed": True,
-            },
-            "version": {"type": "keyword"},
-            "created_at": {
-                "type": "date",
-                "format": "strict_date_optional_time||epoch_millis",
-                "ignore_malformed": True,
-            },
-        }
-    }
-}
-
-MAPPING_FALLBACK = {
-    "mappings": {
-        "properties": {
-            "unit_id": {"type": "keyword"},
-            "source_kind": {"type": "keyword"},
-            "question": {"type": "text"},
-            "answer": {"type": "text"},
-            "body_text": {"type": "text"},
-            "keywords": {"type": "keyword"},
-            "business_domain": {"type": "keyword"},
-            "document_type": {"type": "keyword"},
-            "source_type": {"type": "keyword"},
-            "source_label": {"type": "keyword"},
-            "source_locator": {"type": "keyword"},
-            "access_scope": {"type": "keyword"},
-            "lifecycle_status": {"type": "keyword"},
-            "valid_from": {"type": "keyword"},
-            "valid_until": {"type": "keyword"},
-            "version": {"type": "keyword"},
-            "created_at": {"type": "keyword"},
-        }
-    }
-}
-
-
-class ElasticIndexer:
-    def __init__(self, es: Elasticsearch, *, index_name: str = INDEX_NAME) -> None:
-        self._es = es
-        self._index_name = index_name
-
-    def ensure_index(self, *, use_ik_analyzer: bool = False) -> None:
-        if self._es.indices.exists(index=self._index_name):
-            return
-        mapping = MAPPING if use_ik_analyzer else MAPPING_FALLBACK
-        self._es.indices.create(index=self._index_name, body=mapping)
-
-    def index_units(self, units: list[KnowledgeUnit]) -> int:
-        indexed = 0
-        for unit in units:
-            doc = unit.to_elasticsearch_doc()
-            self._es.index(index=self._index_name, id=unit.unit_id, body=doc)
-            indexed += 1
-        self._es.indices.refresh(index=self._index_name)
-        return indexed
-
-    def delete_index(self) -> None:
-        if self._es.indices.exists(index=self._index_name):
-            self._es.indices.delete(index=self._index_name)
-</file>
-
-<file path="backend/app/indexing/index_health_checker.py">
-from __future__ import annotations
-
-from elasticsearch import Elasticsearch
-
-
-class IndexHealthChecker:
-    def __init__(
-        self, es: Elasticsearch, *, index_name: str = "knowledge_units_v1"
-    ) -> None:
-        self._es = es
-        self._index_name = index_name
-
-    def is_connected(self) -> bool:
-        try:
-            return self._es.ping()
-        except Exception:
-            return False
-
-    def index_exists(self) -> bool:
-        try:
-            return self._es.indices.exists(index=self._index_name)
-        except Exception:
-            return False
-
-    def check(self) -> dict:
-        result: dict = {
-            "connected": False,
-            "index_exists": False,
-            "doc_count": 0,
-            "errors": [],
-        }
-        try:
-            if not self._es.ping():
-                result["errors"].append("Elasticsearch not reachable")
-                return result
-            result["connected"] = True
-        except Exception as exc:
-            result["errors"].append(f"Connection error: {exc}")
-            return result
-
-        try:
-            if not self._es.indices.exists(index=self._index_name):
-                result["errors"].append(f"Index {self._index_name} does not exist")
-                return result
-            result["index_exists"] = True
-        except Exception as exc:
-            result["errors"].append(f"Index check error: {exc}")
-            return result
-
-        try:
-            count = self._es.count(index=self._index_name)
-            result["doc_count"] = count.get("count", 0)
-        except Exception as exc:
-            result["errors"].append(f"Count error: {exc}")
-
-        return result
-</file>
-
-<file path="backend/app/llm/__init__.py">
-
-</file>
-
-<file path="backend/app/llm/providers/__init__.py">
-
-</file>
-
-<file path="backend/app/query/__init__.py">
-
-</file>
-
-<file path="backend/app/retrieval/citation_mapper.py">
-from app.schemas.response import CitationItem
-
-
-def map_citation(item: dict) -> CitationItem:
-    return CitationItem(
-        citation_id=item["id"],
-        source_label=item.get("source_label", "FAQ"),
-        source_locator=item.get("source_locator", item["id"]),
-        snippet=item.get("snippet", item.get("question", item.get("answer", ""))),
-    )
-</file>
-
-<file path="backend/app/routing/contracts.py">
-from typing import Literal
-
-from pydantic import BaseModel
-
-
-class IntentDecision(BaseModel):
-    route: Literal["faq_qa", "fallback"]
-    confidence: float
-    query_for_search: str
-</file>
-
-<file path="backend/app/routing/resolver.py">
-from app.routing.contracts import IntentDecision
-from app.routing.rule_parser import RuleParser
-
-
-class RouteResolver:
-    def __init__(self) -> None:
-        self._rule_parser = RuleParser()
-
-    def resolve(self, raw_query: str) -> IntentDecision:
-        return self._rule_parser.parse(raw_query)
-</file>
-
-<file path="backend/app/runtime/trace.py">
-from uuid import uuid4
-
-
-def new_trace_id() -> str:
-    return uuid4().hex
-</file>
-
-<file path="backend/app/services/chunk_service.py">
-class ChunkService:
-    def __init__(self, *, chunk_size: int = 500, chunk_overlap: int = 80) -> None:
-        self._chunk_size = chunk_size
-        self._chunk_overlap = chunk_overlap
-
-    def split(self, text: str) -> list[str]:
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not normalized:
-            return []
-
-        chunks: list[str] = []
-        start = 0
-        text_length = len(normalized)
-        while start < text_length:
-            end = min(start + self._chunk_size, text_length)
-            chunk = normalized[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            if end >= text_length:
-                break
-            start = max(end - self._chunk_overlap, start + 1)
-        return chunks
-</file>
-
-<file path="backend/app/services/document_parser.py">
-from io import BytesIO
-from pathlib import Path
-
-from docx import Document
-from pypdf import PdfReader
-
-
-class DocumentParser:
-    def parse(self, *, filename: str, data: bytes) -> str:
-        suffix = Path(filename).suffix.lower()
-        if suffix in {".txt", ".md"}:
-            return self._decode_text(data)
-        if suffix == ".pdf":
-            return self._parse_pdf(data)
-        if suffix == ".docx":
-            return self._parse_docx(data)
-        raise ValueError("当前文件类型暂不支持解析")
-
-    def _decode_text(self, data: bytes) -> str:
-        for encoding in ("utf-8", "utf-8-sig", "gb18030"):
-            try:
-                return data.decode(encoding)
-            except UnicodeDecodeError:
-                continue
-        raise ValueError("文本文件编码暂不支持解析")
-
-    def _parse_pdf(self, data: bytes) -> str:
-        try:
-            reader = PdfReader(BytesIO(data))
-            texts = [page.extract_text() or "" for page in reader.pages]
-            return "\n\n".join(texts)
-        except Exception as error:
-            raise ValueError("PDF 解析失败") from error
-
-    def _parse_docx(self, data: bytes) -> str:
-        try:
-            document = Document(BytesIO(data))
-            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
-            return "\n\n".join(paragraphs)
-        except Exception as error:
-            raise ValueError("DOCX 解析失败") from error
-</file>
-
-<file path="backend/app/storage/chat_records/chat_records.jsonl">
-{"trace_id": "b8d710c2b9c34f86a0244bbe3ab794e4", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-16T06:43:39.601502+00:00"}
-{"trace_id": "5821f833c3384f0c82053104e6f381ac", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:28:20.187841+00:00"}
-{"trace_id": "2485338038de45079fddab77c5d0ed4f", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:29:08.978551+00:00"}
-{"trace_id": "1326d04736c74b34a8b418f52ce75c7e", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:43:58.489077+00:00"}
-{"trace_id": "197d9ee8397f4c7d842c8cf911ab3b73", "raw_query": "请假", "document_ids": ["doc-70174f8c32f4"], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:49:28.808930+00:00"}
-{"trace_id": "ccd610257edf4499ac7315ac416a121d", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-1"], "created_at": "2026-04-18T09:52:38.105457+00:00"}
-{"trace_id": "caeab5f5277d4339bc2b038694d912e6", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-6"], "created_at": "2026-04-18T09:53:22.550007+00:00"}
-{"trace_id": "434d5c068b114d19826ed5f1745490b1", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-628b2b0b434f-chunk-1"], "created_at": "2026-04-18T10:00:00.769672+00:00"}
-{"trace_id": "47e9b87604354846bad06fb23db3c1ad", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-628b2b0b434f-chunk-3"], "created_at": "2026-04-18T10:00:51.828454+00:00"}
-{"trace_id": "53b82e94c775425ca080245dca6c6d22", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-89fd4b4c8ec0-chunk-1"], "created_at": "2026-04-18T10:14:11.690001+00:00"}
-{"trace_id": "1ab3d01dbbb74c6382d6e99158b9e9cb", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-89fd4b4c8ec0-chunk-6"], "created_at": "2026-04-18T10:14:46.456564+00:00"}
-</file>
-
-<file path="backend/app/storage/chunks/chunks.jsonl">
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-1", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 0, "text": "# 第一阶段可直接入库 FAQ 内容：HR 业务域 v1\n\n## 1. 文档目标\n\n本文档提供一份已按第一阶段边界清洗的 HR 业务域 FAQ 种子内容，供知识库直接入库使用。\n\n本内容遵循当前第一阶段边界：\n\n- 以 FAQ / 业务知识问答主链路为核心\n- 适用于企业内部高频 HR 问答\n- 当前阶段只做轻量元数据与访问范围标记\n- 作为 FAQ 种子内容导入，而不是完整 HR 制度文档全集\n\n---\n\n## 2. 使用范围\n\n本 FAQ 内容适用于以下场景：\n\n- 企业内部知识助手的 HR 问答\n- 作为 A 类输入直接按 `manual_faq` 导入\n- 提供可检索、可引用、可回源的基础问答内容\n- 支撑请假、考勤、入离职、福利、证明等高频 HR 问题\n\n本 FAQ 内容不用于：\n\n- 替代正式员工手册\n- 替代完整制度原文\n- 输出高敏感个体人事数据\n- 承担复杂权限控制逻辑或跨系统编排\n\n---\n\n## 3. 清洗与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 1", "snippet": "# 第一阶段可直接入库 FAQ 内容：HR 业务域 v1\n\n## 1. 文档目标\n\n本文档提供一份已按第一阶段边界清洗的 HR 业务域 FAQ 种子内容，供知识库直接入库使用。\n\n本内容遵循当前第一阶段边界：\n\n- 以 FAQ / 业务知识问答主链路为核心\n- 适用于企业内部高频 HR 问答\n- 当前阶段只做轻量元数据", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-2", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 1, "text": "与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余口语、重复表述和不必要背景说明\n4. 每条 FAQ 均保留可回源的最小问答元数据\n5. 默认按 `active` 状态导入\n6. 当前阶段只做 `access_scope` 标记，不做实际权限判断\n\n建议默认元数据：\n\n- `business_domain = hr`\n- `document_type = faq`\n- `source_type = manual_faq`\n- `lifecycle_status = active`\n- `access_scope = internal`\n- `source_label = HR FAQ`\n- `source_locator = hr_faq_seed_v1#<faq-id>`\n\n如进入文档登记层，可按第一阶段文档库最小字段表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cle", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 2", "snippet": "与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余口语、重复表述和不必要背景说明\n4. 每条 FAQ 均保留可回源的最小问答元数据\n5. 默认按 `active` 状态导入\n6. 当前阶段只做 `access_", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-3", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 2, "text": "表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cleaning adapter，直接进入 FAQ 入库链路。\n\n---\n\n## 4. 可入库 FAQ 内容（结构化）\n\n下面内容可作为 FAQ 种子数据直接整理入库。\n\n```json\n[\n  {\n    \"id\": \"hr-faq-001\",\n    \"title\": \"如何申请年假？\",\n    \"question\": \"如何申请年假？\",\n    \"answer\": \"进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。\",\n    \"keywords\": [\"年假\", \"请假\", \"申请\", \"审批\", \"考勤\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"acces", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 3", "snippet": "表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cleaning adapter，直接进入 FAQ 入库链路。\n\n---\n\n## 4. 可入库 FAQ 内容（结构化）\n\n下面内容可作为 FAQ 种子数据直接整理入库", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-4", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 3, "text": "\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-001\",\n    \"snippet\": \"进入公司请假入口后选择年假，填写请假时间与原因并提交审批。\"\n  },\n  {\n    \"id\": \"hr-faq-002\",\n    \"title\": \"病假需要提交什么材料？\",\n    \"question\": \"病假需要提交什么材料？\",\n    \"answer\": \"病假通常需要提交医院证明或诊断材料。具体提交方式以公司请假流程要求为准，建议在提交请假申请时一并上传。\",\n    \"keywords\": [\"病假\", \"材料\", \"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 4", "snippet": "\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_fa", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-5", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 4, "text": "\"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-002\",\n    \"snippet\": \"病假通常需要提交医院证明或诊断材料。\"\n  },\n  {\n    \"id\": \"hr-faq-003\",\n    \"title\": \"请假审批进度在哪里查看？\",\n    \"question\": \"请假审批进度在哪里查看？\",\n    \"answer\": \"请假提交后，可在请假申请记录或审批记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 5", "snippet": "\"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_sco", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-6", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 5, "text": "记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\", \"查看\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-003\",\n    \"snippet\": \"可在请假申请记录或审批记录页面查看当前审批状态。\"\n  },\n  {\n    \"id\": \"hr-faq-004\",\n    \"title\": \"考勤异常怎么申诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 6", "snippet": "记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\", \"查看\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-7", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 6, "text": "诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要求补充说明或附件。申诉通过后，考勤记录会被更新。\",\n    \"keywords\": [\"考勤\", \"异常\", \"申诉\", \"缺卡\", \"工时\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-004\",\n    \"snippet\": \"应在考勤系统中发起异常申诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 7", "snippet": "诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要求补充说明或附件。申诉通过后，考勤记录会被更新。\",\n    \"keywords\": [\"考勤\", \"异常\", \"申诉\", \"缺卡\", \"工时\"],\n    \"", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-8", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 7, "text": "诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",\n    \"question\": \"入职第一天需要办理什么手续？\",\n    \"answer\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认、劳动资料签署及入职说明阅读。具体以公司入职通知为准。\",\n    \"keywords\": [\"入职\", \"报到\", \"资料提交\", \"账号开通\", \"手续\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 8", "snippet": "诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",\n    \"question\": \"入职第一天需要办理什么手续？\",\n    \"answer\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认、劳动资", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-9", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 8, "text": "Q\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认等手续。\"\n  },\n  {\n    \"id\": \"hr-faq-006\",\n    \"title\": \"离职流程怎么走？\",\n    \"question\": \"离职流程怎么走？\",\n    \"answer\": \"提出离职后，应按公司流程提交离职申请，完成审批、工作交接、资产归还与离职手续办理。离职生效时间以审批和流程结果为准。\",\n    \"keywords\": [\"离职\", \"流程\", \"交接\", \"资产归还\", \"审批\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\"", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 9", "snippet": "Q\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认等手续。\"\n  },\n  {\n    \"id\": \"hr-faq-006\",\n    \"title\": \"离职流程怎么走？\"", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-10", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 9, "text": "_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-006\",\n    \"snippet\": \"应按公司流程提交离职申请，完成审批、工作交接、资产归还与离职手续办理。\"\n  },\n  {\n    \"id\": \"hr-faq-007\",\n    \"title\": \"在职证明怎么申请？\",\n    \"question\": \"在职证明怎么申请？\",\n    \"answer\": \"如需开具在职证明，可通过 HR 服务入口提交申请，填写用途和收件方式。证明开具时间与领取方式以公司规则为准。\",\n    \"keywords\": [\"在职证明\", \"申请\", \"HR 服务\", \"证明\", \"开具\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecy", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 10", "snippet": "_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-006\",\n    \"snippet\": \"应按公司流程提交离职申", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-11", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 10, "text": ": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-007\",\n    \"snippet\": \"可通过 HR 服务入口提交申请，填写用途和收件方式。\"\n  },\n  {\n    \"id\": \"hr-faq-008\",\n    \"title\": \"社保和公积金从什么时候开始缴纳？\",\n    \"question\": \"社保和公积金从什么时候开始缴纳？\",\n    \"answer\": \"社保和公积金的缴纳起始时间通常按公司制度和当地政策执行。具体起缴月份与生效时间请以 HR 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"busin", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 11", "snippet": ": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR F", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-12", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 11, "text": "R 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-008\",\n    \"snippet\": \"社保和公积金的缴纳起始时间通常按公司制度和当地政策执行。\"\n  },\n  {\n    \"id\": \"hr-faq-009\",\n    \"title\": \"工资条在哪里查看？\",\n    \"question\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 12", "snippet": "R 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-13", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 12, "text": "stion\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系 HR。\",\n    \"keywords\": [\"工资条\", \"查看\", \"员工自助\", \"薪酬系统\", \"HR\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-009\",\n    \"snippet\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"questi", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 13", "snippet": "stion\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系 HR。\",\n    \"keywords\": [\"工资条\", \"查看\", \"员工自助\", \"薪酬系统\", \"HR\"],\n    \"business_doma", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-14", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 13, "text": "入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"question\": \"公司福利信息在哪里查看？\",\n    \"answer\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。若福利政策有调整，以最新正式通知为准。\",\n    \"keywords\": [\"福利\", \"员工手册\", \"HR 服务\", \"说明页面\", \"通知\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 14", "snippet": "入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"question\": \"公司福利信息在哪里查看？\",\n    \"answer\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。若福利政策有调整，以最新", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-15", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 14, "text": "ce_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-011\",\n    \"title\": \"调休余额在哪里看？\",\n    \"question\": \"调休余额在哪里看？\",\n    \"answer\": \"调休余额通常可在考勤或请假系统中查看。如系统数据与实际不符，应按流程发起异常申诉或联系 HR。\",\n    \"keywords\": [\"调休\", \"余额\", \"考勤\", \"请假系统\", \"申诉\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 15", "snippet": "ce_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-011\",\n    \"title\": \"调休余额在哪里看？\",\n    \"ques", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-16", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 15, "text": "\"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-011\",\n    \"snippet\": \"调休余额通常可在考勤或请假系统中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-012\",\n    \"title\": \"试用期考核结果在哪里确认？\",\n    \"question\": \"试用期考核结果在哪里确认？\",\n    \"answer\": \"试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。具体时间和确认方式以公司试用期流程为准。\",\n    \"keywords\": [\"试用期\", \"考核\", \"结果\", \"员工系统\", \"HR 通知\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"ac", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 16", "snippet": "\"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-011\",\n    \"snippet\": \"调休余额通常可在考勤或请假系统中查看。\"\n  },\n  {\n    \"", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-17", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 16, "text": "faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-012\",\n    \"snippet\": \"试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。\"\n  }\n]\n```\n\n---\n\n## 5. 入库说明\n\n建议将上述 FAQ 内容按以下方式导入：\n\n1. 每条 FAQ 作为一条独立知识条目或知识单元\n2. 至少保留 `id / question / answer / keywords / source_locator / snippet`\n3. 统一标记：\n   - `business_domain = hr`\n   - `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_statu", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 17", "snippet": "faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-{"chunk_id": "doc-89fd4b4c8ec0-chunk-18", "document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "chunk_index": 17, "text": "- `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_status = active`\n   - `access_scope = internal`\n4. 如进入文档库登记层，再补齐 `document_id / title / created_at / updated_at`\n\n---\n\n## 6. 当前阶段说明\n\n这份 FAQ 内容的目标是：\n\n- 支撑第一阶段企业内部 HR 高频问答\n- 让系统先具备稳定、可控、可检索的 HR FAQ 基础内容\n- 为后续接入 `policy / process / guide / notice` 保留一致的元数据习惯\n\n当前阶段不追求：\n\n- 覆盖所有 HR 制度细节\n- 覆盖所有地方政策差异\n- 处理高敏感个体人事信息\n- 代替正式制度原文、审批系统或权限系统\n\n一句话总结：\n\n**本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可作为 A 类输入直接进入企业内部知识问答系统的 FAQ 入库链路。**", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-89fd4b4c8ec0 · file_path: uploads/doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md · chunk: 18", "snippet": "- `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_status = active`\n   - `access_scope = internal`\n4. 如进入文档库登记层，再补齐 `document_id / title / ", "created_at": "2026-04-18T10:14:04.638583+00:00"}
-</file>
-
-<file path="backend/app/storage/documents/documents.jsonl">
-{"document_id": "doc-89fd4b4c8ec0", "filename": "domain_hr_faq_seed_v1.md", "content_type": "application/octet-stream", "size_bytes": 11915, "storage_path": "D:\\workspace\\python\\orionstack\\backend\\app\\storage\\uploads\\doc-89fd4b4c8ec0_domain_hr_faq_seed_v1.md", "created_at": "2026-04-18T10:14:04.632208+00:00", "text_length": 7836, "chunk_count": 18}
-</file>
-
-<file path="backend/app/storage/feedback/feedback_records.jsonl">
-{"trace_id": "d2a6250d167e4bcaadd60a3f246d3c59", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "up", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa", "fallback_reason": null, "created_at": "2026-04-15T21:12:30.081179+00:00"}
-</file>
-
-<file path="backend/app/storage/repositories/faq_repo.py">
+<file path="backend/app/testing/hard_cases_repo.py">
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
-class FAQRepository:
-    def __init__(self) -> None:
-        self._path = Path(__file__).resolve().parents[1] / "seed" / "mock_faq.json"
+class HardCasesRepository:
+    def __init__(self, *, max_count: int = 0) -> None:
+        self._path = (
+            Path(__file__).resolve().parents[1]
+            / "storage"
+            / "hard_cases"
+            / "hard_cases.jsonl"
+        )
+        self._max_count = max_count
 
-    def list_all(self) -> list[dict[str, Any]]:
-        return json.loads(self._path.read_text(encoding="utf-8"))
-</file>
+    def upsert(self, item: dict[str, Any]) -> dict[str, Any]:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        records = self._load_all()
 
-<file path="backend/app/storage/repositories/knowledge_unit_repo.py">
-from __future__ import annotations
+        trace_id = str(item.get("trace_id", ""))
+        existing = next(
+            (record for record in records if str(record.get("trace_id", "")) == trace_id),
+            None,
+        )
+        if existing is None:
+            enriched_item = {
+                **item,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            records.append(enriched_item)
+        else:
+            existing.update(
+                {
+                    key: value
+                    for key, value in item.items()
+                    if value is not None and value != []
+                }
+            )
+            enriched_item = existing
 
-from dataclasses import dataclass
-from typing import Any
+        self._write_all(records)
+        self._truncate_if_needed()
+        return enriched_item
 
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        records = self._load_all()
+        records.reverse()
+        return records[:limit]
 
-@dataclass(frozen=True)
-class KnowledgeUnit:
-    unit_id: str
-    source_kind: str
-    question: str
-    answer: str
-    body_text: str
-    keywords: tuple[str, ...]
-    business_domain: str
-    document_type: str
-    source_type: str
-    source_label: str
-    source_locator: str
-    access_scope: str
-    lifecycle_status: str
-    valid_from: str
-    valid_until: str | None
-    version: str
-    created_at: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "unit_id": self.unit_id,
-            "source_kind": self.source_kind,
-            "question": self.question,
-            "answer": self.answer,
-            "body_text": self.body_text,
-            "keywords": list(self.keywords),
-            "business_domain": self.business_domain,
-            "document_type": self.document_type,
-            "source_type": self.source_type,
-            "source_label": self.source_label,
-            "source_locator": self.source_locator,
-            "access_scope": self.access_scope,
-            "lifecycle_status": self.lifecycle_status,
-            "valid_from": self.valid_from,
-            "valid_until": self.valid_until,
-            "version": self.version,
-            "created_at": self.created_at,
-        }
-
-    def to_elasticsearch_doc(self) -> dict[str, Any]:
-        return {
-            "unit_id": self.unit_id,
-            "source_kind": self.source_kind,
-            "question": self.question,
-            "answer": self.answer,
-            "body_text": self.body_text,
-            "keywords": list(self.keywords),
-            "business_domain": self.business_domain,
-            "document_type": self.document_type,
-            "source_type": self.source_type,
-            "source_label": self.source_label,
-            "source_locator": self.source_locator,
-            "access_scope": self.access_scope,
-            "lifecycle_status": self.lifecycle_status,
-            "valid_from": self.valid_from,
-            "valid_until": self.valid_until or "",
-            "version": self.version,
-            "created_at": self.created_at,
-        }
-
-
-def map_faq_item_to_knowledge_unit(
-    item: dict[str, Any], *, default_domain: str = "hr"
-) -> KnowledgeUnit:
-    return KnowledgeUnit(
-        unit_id=item.get("id", ""),
-        source_kind="faq",
-        question=item.get("question", ""),
-        answer=item.get("answer", ""),
-        body_text=item.get("answer", ""),
-        keywords=tuple(item.get("keywords", [])),
-        business_domain=item.get("business_domain", default_domain),
-        document_type=item.get("document_type", "faq"),
-        source_type=item.get("source_type", "manual_faq"),
-        source_label=item.get("source_label", "FAQ"),
-        source_locator=item.get("source_locator", item.get("id", "")),
-        access_scope=item.get("access_scope", "internal"),
-        lifecycle_status=item.get("lifecycle_status", "active"),
-        valid_from=item.get("valid_from", ""),
-        valid_until=item.get("valid_until") or None,
-        version=item.get("version", "v1"),
-        created_at=item.get("created_at", ""),
-    )
-
-
-def map_chunk_to_knowledge_unit(chunk: dict[str, Any]) -> KnowledgeUnit:
-    return KnowledgeUnit(
-        unit_id=chunk.get("chunk_id", ""),
-        source_kind="document_chunk",
-        question="",
-        answer=chunk.get("text", ""),
-        body_text=chunk.get("text", ""),
-        keywords=tuple(chunk.get("keywords", [])),
-        business_domain="",
-        document_type="document",
-        source_type="document_chunk",
-        source_label=chunk.get("source_label", chunk.get("filename", "Document")),
-        source_locator=chunk.get("source_locator", chunk.get("chunk_id", "")),
-        access_scope="internal",
-        lifecycle_status="active",
-        valid_from="",
-        valid_until=None,
-        version="v1",
-        created_at=chunk.get("created_at", ""),
-    )
-
-
-class KnowledgeUnitRepository:
-    def __init__(
-        self,
-        *,
-        faq_repo: Any | None = None,
-        chunk_repo: Any | None = None,
-    ) -> None:
-        self._faq_repo = faq_repo
-        self._chunk_repo = chunk_repo
-
-    def list_all(self) -> list[KnowledgeUnit]:
-        units: list[KnowledgeUnit] = []
-        if self._faq_repo is not None:
-            for item in self._faq_repo.list_all():
-                units.append(map_faq_item_to_knowledge_unit(item))
-        if self._chunk_repo is not None:
-            for chunk in self._chunk_repo.list_all():
-                units.append(map_chunk_to_knowledge_unit(chunk))
-        return units
-
-    def list_faq_units(self) -> list[KnowledgeUnit]:
-        if self._faq_repo is None:
+    def _load_all(self) -> list[dict[str, Any]]:
+        if not self._path.exists():
             return []
         return [
-            map_faq_item_to_knowledge_unit(item) for item in self._faq_repo.list_all()
+            json.loads(line)
+            for line in self._path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
         ]
 
-    def list_chunk_units(self) -> list[KnowledgeUnit]:
-        if self._chunk_repo is None:
-            return []
-        return [
-            map_chunk_to_knowledge_unit(chunk) for chunk in self._chunk_repo.list_all()
-        ]
+    def _write_all(self, records: list[dict[str, Any]]) -> None:
+        if not records:
+            self._path.write_text("", encoding="utf-8")
+            return
+        serialized = "\n".join(json.dumps(record, ensure_ascii=False) for record in records)
+        self._path.write_text(serialized + "\n", encoding="utf-8")
+
+    def _truncate_if_needed(self) -> None:
+        if self._max_count <= 0:
+            return
+        records = self._load_all()
+        if len(records) <= self._max_count:
+            return
+        self._write_all(records[-self._max_count :])
 </file>
 
 <file path="backend/app/retrieval/lexical_retriever.py">
@@ -1297,6 +1829,102 @@ class DocumentService:
         return DocumentDeleteResponse(status="deleted", document_id=document_id)
 </file>
 
+<file path="backend/app/storage/chat_records/chat_records.jsonl">
+{"trace_id": "b8d710c2b9c34f86a0244bbe3ab794e4", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-16T06:43:39.601502+00:00"}
+{"trace_id": "5821f833c3384f0c82053104e6f381ac", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:28:20.187841+00:00"}
+{"trace_id": "2485338038de45079fddab77c5d0ed4f", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:29:08.978551+00:00"}
+{"trace_id": "1326d04736c74b34a8b418f52ce75c7e", "raw_query": "请假", "document_ids": [], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:43:58.489077+00:00"}
+{"trace_id": "197d9ee8397f4c7d842c8cf911ab3b73", "raw_query": "请假", "document_ids": ["doc-70174f8c32f4"], "response_status": "fallback", "retrieved_chunk_ids": [], "created_at": "2026-04-16T08:49:28.808930+00:00"}
+{"trace_id": "ccd610257edf4499ac7315ac416a121d", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-1"], "created_at": "2026-04-18T09:52:38.105457+00:00"}
+{"trace_id": "caeab5f5277d4339bc2b038694d912e6", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-6"], "created_at": "2026-04-18T09:53:22.550007+00:00"}
+{"trace_id": "434d5c068b114d19826ed5f1745490b1", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-628b2b0b434f-chunk-1"], "created_at": "2026-04-18T10:00:00.769672+00:00"}
+{"trace_id": "47e9b87604354846bad06fb23db3c1ad", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-628b2b0b434f-chunk-3"], "created_at": "2026-04-18T10:00:51.828454+00:00"}
+{"trace_id": "53b82e94c775425ca080245dca6c6d22", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-89fd4b4c8ec0-chunk-1"], "created_at": "2026-04-18T10:14:11.690001+00:00"}
+{"trace_id": "1ab3d01dbbb74c6382d6e99158b9e9cb", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-89fd4b4c8ec0-chunk-6"], "created_at": "2026-04-18T10:14:46.456564+00:00"}
+{"trace_id": "b1e1e4ce530940cfa817ab37b9bc1f0e", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-18T14:39:48.878100+00:00"}
+{"trace_id": "0a5a38f4b332453f8c41bb93b94bc7b0", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-18T14:40:05.717050+00:00"}
+{"trace_id": "4d4f780d0c11430b8d708cd1a779be3a", "raw_query": "病假呢", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-18T14:40:29.643348+00:00"}
+{"trace_id": "60b41eb2b1a44643826ac23211bfea61", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-18T15:05:50.468529+00:00"}
+{"trace_id": "bdb6ea771041423dbed1ed59eceaa1e2", "raw_query": "请假进度怎么看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003"], "created_at": "2026-04-18T15:06:22.771015+00:00"}
+{"trace_id": "14f12c72548c48a7bc61ecaa4cb0f6ef", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T15:55:05.880012+00:00"}
+{"trace_id": "6e77847081bc4392ab535d6166ae4b36", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-6"], "created_at": "2026-04-18T16:15:37.157363+00:00"}
+{"trace_id": "c6a67f0e779149ab81d9cfbe70368206", "raw_query": "病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:15:46.760641+00:00"}
+{"trace_id": "1a318f0b1f8a415bb12c83abc8442384", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:16:46.576031+00:00"}
+{"trace_id": "70e8576ffc5a4bda995b84df101146ee", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:22:35.353540+00:00"}
+{"trace_id": "959ef7bb7c1449468a7dab6aa1ca3d7b", "raw_query": "病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:23:20.254741+00:00"}
+{"trace_id": "f427ec9fb94d452090847b2be5de15fa", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:31:13.351694+00:00"}
+{"trace_id": "cad8f8d1df23436e83a7bdd1cc38c97f", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-3"], "created_at": "2026-04-18T16:31:22.361088+00:00"}
+{"trace_id": "a145f83c41db48c9a18619efaff774c4", "raw_query": "病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:32:30.632572+00:00"}
+{"trace_id": "39834a36742843cbb044b7c1951e2b04", "raw_query": "咋请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-18T16:38:59.573172+00:00"}
+{"trace_id": "3bc9ad6caa6747068878bc966c1e2160", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-3"], "created_at": "2026-04-19T00:51:43.788303+00:00"}
+{"trace_id": "668b6685825640eeb383fbad81e43af0", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-19T01:25:20.850329+00:00"}
+{"trace_id": "2ee081dd11774af5a252d39a680b5ac1", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-6"], "created_at": "2026-04-19T01:26:13.579710+00:00"}
+{"trace_id": "b4c9d22710a24ca8b13406c6782b927d", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-19T01:26:22.292331+00:00"}
+{"trace_id": "7869b5b03687449cbab8084dc92db599", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:34:20.503917+00:00"}
+{"trace_id": "77a44cda3a2345ed810c6d763ad78f86", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:34:29.117881+00:00"}
+{"trace_id": "888844a9653c491da8c7a2d815e4f91b", "raw_query": "病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-19T01:34:33.815665+00:00"}
+{"trace_id": "54d6110241d14982bdecd998cd336d97", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:34:48.247242+00:00"}
+{"trace_id": "cdbca74878c54fcfa010066c12ec0c37", "raw_query": "请假进度怎么看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003"], "created_at": "2026-04-19T01:35:10.168755+00:00"}
+{"trace_id": "b3662423d3f14701ab5ec0bde3c892ac", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:35:45.443033+00:00"}
+{"trace_id": "e4bdb9fe32414a46a76281971a43a4d8", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:39:27.476099+00:00"}
+{"trace_id": "ed1de8975b51421899871a268d1896cc", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["doc-70174f8c32f4-chunk-4"], "created_at": "2026-04-19T01:40:57.943821+00:00"}
+{"trace_id": "cc214ed1d24b4723bb89de7113a7fbda", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:55:21.681688+00:00"}
+{"trace_id": "c317bc774f044427bf5da64a845d0d44", "raw_query": "调休", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-011"], "created_at": "2026-04-19T01:55:31.256566+00:00"}
+{"trace_id": "650de4bbd5454c15bcdeab9319a41116", "raw_query": "怎么请病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-19T01:55:52.774985+00:00"}
+{"trace_id": "7fccd7cafc3e46abbac9e2406ebf262f", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:59:01.315990+00:00"}
+{"trace_id": "0f78cce0b0e640a2a7eec1bcc062f71b", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T01:59:23.974427+00:00"}
+{"trace_id": "35ec4da6c66344c3b29467edef449dee", "raw_query": "如何请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T02:15:29.171438+00:00"}
+{"trace_id": "3ac3e1f644c44e58b4b2064abcbe7273", "raw_query": "病假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-19T02:15:52.625066+00:00"}
+{"trace_id": "2dfc58e010e64497b70936193a0e6039", "raw_query": "调休", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-011"], "created_at": "2026-04-19T02:16:08.163846+00:00"}
+{"trace_id": "c5d9da02bdae48a38bfc7d10e77e0b09", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:01:57.476421+00:00"}
+{"trace_id": "d69a549a3fd6410d937fc3a4b9dbd2ed", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:03:08.219066+00:00", "feedback_label": "down", "feedback_created_at": "2026-04-19T05:03:25.093653+00:00"}
+{"trace_id": "30d35531ac5c4d149f34666d3a59647d", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:03:29.979146+00:00"}
+{"trace_id": "59a46111b25d4d3fbae9b22ff43c69d1", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:03:52.278987+00:00", "feedback_label": "down", "feedback_created_at": "2026-04-19T05:04:00.444421+00:00"}
+{"trace_id": "e4c717517719406d8e97e79f6474a4fb", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:04:10.554471+00:00"}
+{"trace_id": "652d7ab75e454cf3b6a8362ef44e732f", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-19T05:05:22.876818+00:00"}
+{"trace_id": "c0ceaef6607c472684fd7e2166625aa1", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001"], "created_at": "2026-04-19T05:05:38.022589+00:00"}
+{"trace_id": "75b110599ddb434593c38e7b291596e4", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-19T06:01:39.643223+00:00", "feedback_label": "down", "feedback_created_at": "2026-04-19T06:01:39.729470+00:00"}
+{"trace_id": "4e96519dd4a34166aed7f137ffa0ea05", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-19T06:03:02.077163+00:00", "feedback_label": "down", "feedback_created_at": "2026-04-19T06:03:02.115824+00:00"}
+{"trace_id": "b516199929184b1c8111182164115f11", "raw_query": "如何上传文档？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["faq-001"], "created_at": "2026-04-19T06:03:19.906353+00:00", "feedback_label": "down", "feedback_created_at": "2026-04-19T06:03:19.989174+00:00"}
+{"trace_id": "e1734a294ff849cf9a802abe2d37fb72", "raw_query": "试用期考核", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-012"], "created_at": "2026-04-19T06:11:54.299969+00:00"}
+{"trace_id": "1297d3721a4c42a6a00a2f249420fbd9", "raw_query": "公司福利", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-010"], "created_at": "2026-04-19T06:12:29.479825+00:00"}
+{"trace_id": "f4d4ecfbe48e4eefa2b80fd2da21b8fd", "raw_query": "工资条", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-009"], "created_at": "2026-04-19T06:13:00.575903+00:00"}
+</file>
+
+<file path="backend/app/storage/chunks/chunks.jsonl">
+{"chunk_id": "doc-742dc336b621-chunk-1", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 0, "text": "# 第一阶段可直接入库 FAQ 内容：HR 业务域 v1\n\n## 1. 文档目标\n\n本文档提供一份已按第一阶段边界清洗的 HR 业务域 FAQ 种子内容，供知识库直接入库使用。\n\n本内容遵循当前第一阶段边界：\n\n- 以 FAQ / 业务知识问答主链路为核心\n- 适用于企业内部高频 HR 问答\n- 当前阶段只做轻量元数据与访问范围标记\n- 作为 FAQ 种子内容导入，而不是完整 HR 制度文档全集\n\n---\n\n## 2. 使用范围\n\n本 FAQ 内容适用于以下场景：\n\n- 企业内部知识助手的 HR 问答\n- 作为 A 类输入直接按 `manual_faq` 导入\n- 提供可检索、可引用、可回源的基础问答内容\n- 支撑请假、考勤、入离职、福利、证明等高频 HR 问题\n\n本 FAQ 内容不用于：\n\n- 替代正式员工手册\n- 替代完整制度原文\n- 输出高敏感个体人事数据\n- 承担复杂权限控制逻辑或跨系统编排\n\n---\n\n## 3. 清洗与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 1", "snippet": "# 第一阶段可直接入库 FAQ 内容：HR 业务域 v1\n\n## 1. 文档目标\n\n本文档提供一份已按第一阶段边界清洗的 HR 业务域 FAQ 种子内容，供知识库直接入库使用。\n\n本内容遵循当前第一阶段边界：\n\n- 以 FAQ / 业务知识问答主链路为核心\n- 适用于企业内部高频 HR 问答\n- 当前阶段只做轻量元数据", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-2", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 1, "text": "与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余口语、重复表述和不必要背景说明\n4. 每条 FAQ 均保留可回源的最小问答元数据\n5. 默认按 `active` 状态导入\n6. 当前阶段只做 `access_scope` 标记，不做实际权限判断\n\n建议默认元数据：\n\n- `business_domain = hr`\n- `document_type = faq`\n- `source_type = manual_faq`\n- `lifecycle_status = active`\n- `access_scope = internal`\n- `source_label = HR FAQ`\n- `source_locator = hr_faq_seed_v1#<faq-id>`\n\n如进入文档登记层，可按第一阶段文档库最小字段表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cle", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 2", "snippet": "与入库假设\n\n本 FAQ 内容已经按第一阶段最小可入库要求做了以下处理：\n\n1. 问句统一为员工自然问法\n2. 回答统一为稳定、简洁、可引用表达\n3. 去除冗余口语、重复表述和不必要背景说明\n4. 每条 FAQ 均保留可回源的最小问答元数据\n5. 默认按 `active` 状态导入\n6. 当前阶段只做 `access_", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-3", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 2, "text": "表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cleaning adapter，直接进入 FAQ 入库链路。\n\n---\n\n## 4. 可入库 FAQ 内容（结构化）\n\n下面内容可作为 FAQ 种子数据直接整理入库。\n\n```json\n[\n  {\n    \"id\": \"hr-faq-001\",\n    \"title\": \"如何申请年假？\",\n    \"question\": \"如何申请年假？\",\n    \"answer\": \"进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。\",\n    \"keywords\": [\"年假\", \"请假\", \"申请\", \"审批\", \"考勤\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"acces", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 3", "snippet": "表补齐 `document_id / created_at / updated_at` 等字段。\n\n本文件属于文档接入边界中的 A 类输入，可不经过独立 cleaning adapter，直接进入 FAQ 入库链路。\n\n---\n\n## 4. 可入库 FAQ 内容（结构化）\n\n下面内容可作为 FAQ 种子数据直接整理入库", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-4", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 3, "text": "\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-001\",\n    \"snippet\": \"进入公司请假入口后选择年假，填写请假时间与原因并提交审批。\"\n  },\n  {\n    \"id\": \"hr-faq-002\",\n    \"title\": \"病假需要提交什么材料？\",\n    \"question\": \"病假需要提交什么材料？\",\n    \"answer\": \"病假通常需要提交医院证明或诊断材料。具体提交方式以公司请假流程要求为准，建议在提交请假申请时一并上传。\",\n    \"keywords\": [\"病假\", \"材料\", \"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 4", "snippet": "\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_fa", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-5", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 4, "text": "\"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-002\",\n    \"snippet\": \"病假通常需要提交医院证明或诊断材料。\"\n  },\n  {\n    \"id\": \"hr-faq-003\",\n    \"title\": \"请假审批进度在哪里查看？\",\n    \"question\": \"请假审批进度在哪里查看？\",\n    \"answer\": \"请假提交后，可在请假申请记录或审批记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 5", "snippet": "\"医院证明\", \"诊断\", \"请假\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_sco", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-6", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 5, "text": "记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\", \"查看\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-003\",\n    \"snippet\": \"可在请假申请记录或审批记录页面查看当前审批状态。\"\n  },\n  {\n    \"id\": \"hr-faq-004\",\n    \"title\": \"考勤异常怎么申诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 6", "snippet": "记录页面查看当前审批状态。若长时间未处理，可按流程联系直属上级或 HR。\",\n    \"keywords\": [\"请假\", \"审批\", \"进度\", \"状态\", \"查看\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-7", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 6, "text": "诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要求补充说明或附件。申诉通过后，考勤记录会被更新。\",\n    \"keywords\": [\"考勤\", \"异常\", \"申诉\", \"缺卡\", \"工时\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-004\",\n    \"snippet\": \"应在考勤系统中发起异常申诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 7", "snippet": "诉？\",\n    \"question\": \"考勤异常怎么申诉？\",\n    \"answer\": \"发现迟到、缺卡或工时异常后，应在考勤系统中发起异常申诉，并按要求补充说明或附件。申诉通过后，考勤记录会被更新。\",\n    \"keywords\": [\"考勤\", \"异常\", \"申诉\", \"缺卡\", \"工时\"],\n    \"", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-8", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 7, "text": "诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",\n    \"question\": \"入职第一天需要办理什么手续？\",\n    \"answer\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认、劳动资料签署及入职说明阅读。具体以公司入职通知为准。\",\n    \"keywords\": [\"入职\", \"报到\", \"资料提交\", \"账号开通\", \"手续\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 8", "snippet": "诉，并按要求补充说明或附件。\"\n  },\n  {\n    \"id\": \"hr-faq-005\",\n    \"title\": \"入职第一天需要办理什么手续？\",\n    \"question\": \"入职第一天需要办理什么手续？\",\n    \"answer\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认、劳动资", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-9", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 8, "text": "Q\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认等手续。\"\n  },\n  {\n    \"id\": \"hr-faq-006\",\n    \"title\": \"离职流程怎么走？\",\n    \"question\": \"离职流程怎么走？\",\n    \"answer\": \"提出离职后，应按公司流程提交离职申请，完成审批、工作交接、资产归还与离职手续办理。离职生效时间以审批和流程结果为准。\",\n    \"keywords\": [\"离职\", \"流程\", \"交接\", \"资产归还\", \"审批\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\"", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 9", "snippet": "Q\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-005\",\n    \"snippet\": \"入职第一天通常需要完成报到登记、资料提交、账号开通确认等手续。\"\n  },\n  {\n    \"id\": \"hr-faq-006\",\n    \"title\": \"离职流程怎么走？\"", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-10", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 9, "text": "_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-006\",\n    \"snippet\": \"应按公司流程提交离职申请，完成审批、工作交接、资产归还与离职手续办理。\"\n  },\n  {\n    \"id\": \"hr-faq-007\",\n    \"title\": \"在职证明怎么申请？\",\n    \"question\": \"在职证明怎么申请？\",\n    \"answer\": \"如需开具在职证明，可通过 HR 服务入口提交申请，填写用途和收件方式。证明开具时间与领取方式以公司规则为准。\",\n    \"keywords\": [\"在职证明\", \"申请\", \"HR 服务\", \"证明\", \"开具\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecy", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 10", "snippet": "_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-006\",\n    \"snippet\": \"应按公司流程提交离职申", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-11", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 10, "text": ": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-007\",\n    \"snippet\": \"可通过 HR 服务入口提交申请，填写用途和收件方式。\"\n  },\n  {\n    \"id\": \"hr-faq-008\",\n    \"title\": \"社保和公积金从什么时候开始缴纳？\",\n    \"question\": \"社保和公积金从什么时候开始缴纳？\",\n    \"answer\": \"社保和公积金的缴纳起始时间通常按公司制度和当地政策执行。具体起缴月份与生效时间请以 HR 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"busin", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 11", "snippet": ": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR F", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-12", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 11, "text": "R 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-008\",\n    \"snippet\": \"社保和公积金的缴纳起始时间通常按公司制度和当地政策执行。\"\n  },\n  {\n    \"id\": \"hr-faq-009\",\n    \"title\": \"工资条在哪里查看？\",\n    \"question\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 12", "snippet": "R 通知或员工服务入口信息为准。\",\n    \"keywords\": [\"社保\", \"公积金\", \"缴纳\", \"起缴\", \"员工服务\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-13", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 12, "text": "stion\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系 HR。\",\n    \"keywords\": [\"工资条\", \"查看\", \"员工自助\", \"薪酬系统\", \"HR\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-009\",\n    \"snippet\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"questi", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 13", "snippet": "stion\": \"工资条在哪里查看？\",\n    \"answer\": \"工资条通常可在员工自助服务平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系 HR。\",\n    \"keywords\": [\"工资条\", \"查看\", \"员工自助\", \"薪酬系统\", \"HR\"],\n    \"business_doma", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-14", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 13, "text": "入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"question\": \"公司福利信息在哪里查看？\",\n    \"answer\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。若福利政策有调整，以最新正式通知为准。\",\n    \"keywords\": [\"福利\", \"员工手册\", \"HR 服务\", \"说明页面\", \"通知\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 14", "snippet": "入口查看。\"\n  },\n  {\n    \"id\": \"hr-faq-010\",\n    \"title\": \"公司福利信息在哪里查看？\",\n    \"question\": \"公司福利信息在哪里查看？\",\n    \"answer\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。若福利政策有调整，以最新", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-15", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 14, "text": "ce_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-011\",\n    \"title\": \"调休余额在哪里看？\",\n    \"question\": \"调休余额在哪里看？\",\n    \"answer\": \"调休余额通常可在考勤或请假系统中查看。如系统数据与实际不符，应按流程发起异常申诉或联系 HR。\",\n    \"keywords\": [\"调休\", \"余额\", \"考勤\", \"请假系统\", \"申诉\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 15", "snippet": "ce_locator\": \"hr_faq_seed_v1#hr-faq-010\",\n    \"snippet\": \"公司福利信息通常在员工手册、HR 服务入口或福利说明页面中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-011\",\n    \"title\": \"调休余额在哪里看？\",\n    \"ques", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-16", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 15, "text": "\"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-011\",\n    \"snippet\": \"调休余额通常可在考勤或请假系统中查看。\"\n  },\n  {\n    \"id\": \"hr-faq-012\",\n    \"title\": \"试用期考核结果在哪里确认？\",\n    \"question\": \"试用期考核结果在哪里确认？\",\n    \"answer\": \"试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。具体时间和确认方式以公司试用期流程为准。\",\n    \"keywords\": [\"试用期\", \"考核\", \"结果\", \"员工系统\", \"HR 通知\"],\n    \"business_domain\": \"hr\",\n    \"document_type\": \"faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"ac", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 16", "snippet": "\"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-011\",\n    \"snippet\": \"调休余额通常可在考勤或请假系统中查看。\"\n  },\n  {\n    \"", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-17", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 16, "text": "faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr_faq_seed_v1#hr-faq-012\",\n    \"snippet\": \"试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。\"\n  }\n]\n```\n\n---\n\n## 5. 入库说明\n\n建议将上述 FAQ 内容按以下方式导入：\n\n1. 每条 FAQ 作为一条独立知识条目或知识单元\n2. 至少保留 `id / question / answer / keywords / source_locator / snippet`\n3. 统一标记：\n   - `business_domain = hr`\n   - `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_statu", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 17", "snippet": "faq\",\n    \"source_type\": \"manual_faq\",\n    \"lifecycle_status\": \"active\",\n    \"access_scope\": \"internal\",\n    \"source_label\": \"HR FAQ\",\n    \"source_locator\": \"hr", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+{"chunk_id": "doc-742dc336b621-chunk-18", "document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "file_path": "uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md", "chunk_index": 17, "text": "- `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_status = active`\n   - `access_scope = internal`\n4. 如进入文档库登记层，再补齐 `document_id / title / created_at / updated_at`\n\n---\n\n## 6. 当前阶段说明\n\n这份 FAQ 内容的目标是：\n\n- 支撑第一阶段企业内部 HR 高频问答\n- 让系统先具备稳定、可控、可检索的 HR FAQ 基础内容\n- 为后续接入 `policy / process / guide / notice` 保留一致的元数据习惯\n\n当前阶段不追求：\n\n- 覆盖所有 HR 制度细节\n- 覆盖所有地方政策差异\n- 处理高敏感个体人事信息\n- 代替正式制度原文、审批系统或权限系统\n\n一句话总结：\n\n**本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可作为 A 类输入直接进入企业内部知识问答系统的 FAQ 入库链路。**", "source_label": "domain_hr_faq_seed_v1.md", "source_locator": "document_id: doc-742dc336b621 · file_path: uploads/doc-742dc336b621_domain_hr_faq_seed_v1.md · chunk: 18", "snippet": "- `document_type = faq`\n   - `source_type = manual_faq`\n   - `lifecycle_status = active`\n   - `access_scope = internal`\n4. 如进入文档库登记层，再补齐 `document_id / title / ", "created_at": "2026-04-18T16:31:49.141526+00:00"}
+</file>
+
+<file path="backend/app/storage/documents/documents.jsonl">
+{"document_id": "doc-742dc336b621", "filename": "domain_hr_faq_seed_v1.md", "content_type": "application/octet-stream", "size_bytes": 11915, "storage_path": "D:\\workspace\\python\\orionstack\\backend\\app\\storage\\uploads\\doc-742dc336b621_domain_hr_faq_seed_v1.md", "created_at": "2026-04-18T16:31:49.135072+00:00", "text_length": 7836, "chunk_count": 18}
+</file>
+
+<file path="backend/app/storage/feedback/feedback_records.jsonl">
+{"trace_id": "d2a6250d167e4bcaadd60a3f246d3c59", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "up", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa", "fallback_reason": null, "created_at": "2026-04-15T21:12:30.081179+00:00"}
+{"trace_id": "d69a549a3fd6410d937fc3a4b9dbd2ed", "raw_query": "请假", "retrieved_chunk_ids": ["hr-faq-001"], "answer_text": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。", "feedback_label": "down", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "请假", "router_used": "rule_parser", "route_result": "faq_qa_elastic", "fallback_reason": null, "created_at": "2026-04-19T05:03:25.093653+00:00"}
+{"trace_id": "59a46111b25d4d3fbae9b22ff43c69d1", "raw_query": "请假", "retrieved_chunk_ids": ["hr-faq-001"], "answer_text": "进入公司请假入口后选择年假，填写请假时间与原因并提交审批。审批通过后，请假记录会同步到考勤系统。", "feedback_label": "down", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "请假", "router_used": "rule_parser", "route_result": "faq_qa_elastic", "fallback_reason": null, "created_at": "2026-04-19T05:04:00.444421+00:00"}
+{"trace_id": "75b110599ddb434593c38e7b291596e4", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "down", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa_elastic", "fallback_reason": null, "created_at": "2026-04-19T06:01:39.729470+00:00"}
+{"trace_id": "4e96519dd4a34166aed7f137ffa0ea05", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "down", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa_elastic", "fallback_reason": "no_evidence", "created_at": "2026-04-19T06:03:02.115824+00:00"}
+{"trace_id": "b516199929184b1c8111182164115f11", "raw_query": "如何上传文档？", "retrieved_chunk_ids": ["faq-001"], "answer_text": "进入文档页后点击上传按钮，选择文件并提交，系统会自动解析并建立索引。", "feedback_label": "down", "token_input": 0, "token_output": 0, "total_latency_ms": 0, "response_status": "ok", "normalized_query": "如何上传文档？", "router_used": "rule_parser", "route_result": "faq_qa_elastic", "fallback_reason": "no_evidence", "created_at": "2026-04-19T06:03:19.989174+00:00"}
+</file>
+
 <file path="backend/app/storage/repositories/chat_record_repo.py">
 import json
 from datetime import datetime, timezone
@@ -1544,9 +2172,257 @@ class DocumentRepository:
         return deleted_record
 </file>
 
+<file path="backend/app/storage/repositories/knowledge_unit_repo.py">
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class KnowledgeUnit:
+    unit_id: str
+    source_kind: str
+    question: str
+    answer: str
+    body_text: str
+    keywords: tuple[str, ...]
+    business_domain: str
+    document_type: str
+    source_type: str
+    source_label: str
+    source_locator: str
+    access_scope: str
+    lifecycle_status: str
+    valid_from: str
+    valid_until: str | None
+    version: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "unit_id": self.unit_id,
+            "source_kind": self.source_kind,
+            "question": self.question,
+            "answer": self.answer,
+            "body_text": self.body_text,
+            "keywords": list(self.keywords),
+            "business_domain": self.business_domain,
+            "document_type": self.document_type,
+            "source_type": self.source_type,
+            "source_label": self.source_label,
+            "source_locator": self.source_locator,
+            "access_scope": self.access_scope,
+            "lifecycle_status": self.lifecycle_status,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
+            "version": self.version,
+            "created_at": self.created_at,
+        }
+
+    def to_elasticsearch_doc(self) -> dict[str, Any]:
+        return {
+            "unit_id": self.unit_id,
+            "source_kind": self.source_kind,
+            "question": self.question,
+            "answer": self.answer,
+            "body_text": self.body_text,
+            "keywords": list(self.keywords),
+            "business_domain": self.business_domain,
+            "document_type": self.document_type,
+            "source_type": self.source_type,
+            "source_label": self.source_label,
+            "source_locator": self.source_locator,
+            "access_scope": self.access_scope,
+            "lifecycle_status": self.lifecycle_status,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until or "",
+            "version": self.version,
+            "created_at": self.created_at,
+        }
+
+
+def map_faq_item_to_knowledge_unit(
+    item: dict[str, Any], *, default_domain: str = "hr"
+) -> KnowledgeUnit:
+    return KnowledgeUnit(
+        unit_id=item.get("id", ""),
+        source_kind="faq",
+        question=item.get("question", ""),
+        answer=item.get("answer", ""),
+        body_text=item.get("answer", ""),
+        keywords=tuple(item.get("keywords", [])),
+        business_domain=item.get("business_domain", default_domain),
+        document_type=item.get("document_type", "faq"),
+        source_type=item.get("source_type", "manual_faq"),
+        source_label=item.get("source_label", "FAQ"),
+        source_locator=item.get("source_locator", item.get("id", "")),
+        access_scope=item.get("access_scope", "internal"),
+        lifecycle_status=item.get("lifecycle_status", "active"),
+        valid_from=item.get("valid_from", ""),
+        valid_until=item.get("valid_until") or None,
+        version=item.get("version", "v1"),
+        created_at=item.get("created_at", ""),
+    )
+
+
+def map_chunk_to_knowledge_unit(chunk: dict[str, Any]) -> KnowledgeUnit:
+    return KnowledgeUnit(
+        unit_id=chunk.get("chunk_id", ""),
+        source_kind="document_chunk",
+        question="",
+        answer=chunk.get("text", ""),
+        body_text=chunk.get("text", ""),
+        keywords=tuple(chunk.get("keywords", [])),
+        business_domain="",
+        document_type="document",
+        source_type="document_chunk",
+        source_label=chunk.get("source_label", chunk.get("filename", "Document")),
+        source_locator=chunk.get("source_locator", chunk.get("chunk_id", "")),
+        access_scope="internal",
+        lifecycle_status="active",
+        valid_from="",
+        valid_until=None,
+        version="v1",
+        created_at=chunk.get("created_at", ""),
+    )
+
+
+class KnowledgeUnitRepository:
+    def __init__(
+        self,
+        *,
+        faq_repo: Any | None = None,
+        chunk_repo: Any | None = None,
+    ) -> None:
+        self._faq_repo = faq_repo
+        self._chunk_repo = chunk_repo
+        self._seed_dir = Path(__file__).resolve().parents[1] / "seed"
+
+    def list_all(self) -> list[KnowledgeUnit]:
+        units: list[KnowledgeUnit] = []
+        known_faq_ids: set[str] = set()
+        if self._faq_repo is not None:
+            for item in self._faq_repo.list_all():
+                unit = map_faq_item_to_knowledge_unit(item)
+                units.append(unit)
+                if unit.unit_id:
+                    known_faq_ids.add(unit.unit_id)
+        for item in self._list_seed_faq_items():
+            unit = map_faq_item_to_knowledge_unit(item)
+            if unit.unit_id and unit.unit_id not in known_faq_ids:
+                units.append(unit)
+                known_faq_ids.add(unit.unit_id)
+        if self._chunk_repo is not None:
+            for chunk in self._chunk_repo.list_all():
+                units.append(map_chunk_to_knowledge_unit(chunk))
+        return units
+
+    def list_faq_units(self) -> list[KnowledgeUnit]:
+        units: list[KnowledgeUnit] = []
+        known_faq_ids: set[str] = set()
+        if self._faq_repo is not None:
+            for item in self._faq_repo.list_all():
+                unit = map_faq_item_to_knowledge_unit(item)
+                units.append(unit)
+                if unit.unit_id:
+                    known_faq_ids.add(unit.unit_id)
+        for item in self._list_seed_faq_items():
+            unit = map_faq_item_to_knowledge_unit(item)
+            if unit.unit_id and unit.unit_id not in known_faq_ids:
+                units.append(unit)
+                known_faq_ids.add(unit.unit_id)
+        return units
+
+    def list_chunk_units(self) -> list[KnowledgeUnit]:
+        if self._chunk_repo is None:
+            return []
+        return [
+            map_chunk_to_knowledge_unit(chunk) for chunk in self._chunk_repo.list_all()
+        ]
+
+    def _list_seed_faq_items(self) -> list[dict[str, Any]]:
+        if not self._seed_dir.exists():
+            return []
+
+        seed_items: list[dict[str, Any]] = []
+        for path in sorted(self._seed_dir.glob("*_faq_seed_*.md")):
+            seed_items.extend(_parse_seed_markdown_faq_items(path))
+        return seed_items
+
+
+def _parse_seed_markdown_faq_items(path: Path) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r"```json\s*(\[[\s\S]*?\])\s*```", text)
+    if match is None:
+        return []
+
+    payload = json.loads(match.group(1))
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+</file>
+
+<file path="backend/app/storage/repositories/feedback_repo.py">
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class FeedbackRepository:
+    def __init__(self, *, max_count: int = 0) -> None:
+        self._path = (
+            Path(__file__).resolve().parents[1] / "feedback" / "feedback_records.jsonl"
+        )
+        self._max_count = max_count
+
+    def save(self, record: dict[str, Any]) -> dict[str, Any]:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        enriched_record = {
+            **record,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(enriched_record, ensure_ascii=False) + "\n")
+        self._truncate_if_needed()
+        return enriched_record
+
+    def _truncate_if_needed(self) -> None:
+        if self._max_count <= 0 or not self._path.exists():
+            return
+
+        lines = self._path.read_text(encoding="utf-8").splitlines()
+        non_empty = [line for line in lines if line.strip()]
+        if len(non_empty) <= self._max_count:
+            return
+
+        retained = non_empty[-self._max_count :]
+        serialized = "\n".join(retained) + "\n"
+        self._path.write_text(serialized, encoding="utf-8")
+
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        if not self._path.exists():
+            return []
+
+        records = [
+            json.loads(line)
+            for line in self._path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        records.reverse()
+        return records[:limit]
+</file>
+
 <file path="backend/app/api/routes/chat.py">
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
 
+from app.observability.retrieval_trace import RetrievalTraceRepository
 from app.config.settings import settings
 from app.runtime.trace import new_trace_id
 from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
@@ -1560,6 +2436,7 @@ from app.schemas.response import (
     FeedbackRecordListResponse,
 )
 from app.services.chat_service import ChatService
+from app.testing.hard_cases_repo import HardCasesRepository
 from app.storage.repositories.chat_record_repo import ChatRecordRepository
 from app.storage.repositories.feedback_repo import FeedbackRepository
 
@@ -1567,6 +2444,8 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 service = ChatService()
 feedback_repository = FeedbackRepository(max_count=settings.feedback_record_max_count)
 chat_record_repository = ChatRecordRepository(max_count=settings.chat_record_max_count)
+retrieval_trace_repository = RetrievalTraceRepository()
+hard_cases_repository = HardCasesRepository()
 
 
 @router.post("/ask", response_model=ChatAskResponse)
@@ -1604,6 +2483,10 @@ def ask_chat(payload: ChatAskRequest) -> ChatAskResponse:
             "retrieved_chunk_ids": _resolve_retrieved_chunk_ids(response),
         }
     )
+    retrieval_trace = retrieval_trace_repository.save(
+        _build_retrieval_trace_record(payload, response)
+    )
+    _record_hard_case_from_response(retrieval_trace)
     return response
 
 
@@ -1631,6 +2514,7 @@ def submit_feedback(payload: ChatFeedbackRequest) -> ChatFeedbackResponse:
         feedback_label=payload.feedback_label,
         feedback_created_at=str(feedback_record["created_at"]),
     )
+    _record_hard_case_from_feedback(payload)
     return ChatFeedbackResponse(status="recorded")
 
 
@@ -1671,10 +2555,107 @@ def list_feedback_records(
     return FeedbackRecordListResponse(items=items)
 
 
+@router.get("/traces/{trace_id}")
+def get_retrieval_trace(trace_id: str) -> dict[str, Any]:
+    _ensure_record_view_enabled()
+    trace = retrieval_trace_repository.get_by_trace_id(trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return trace
+
+
+@router.get("/hard-cases")
+def list_hard_cases(
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, list[dict[str, Any]]]:
+    _ensure_record_view_enabled()
+    return {"items": hard_cases_repository.list_recent(limit)}
+
+
 def _resolve_retrieved_chunk_ids(response: ChatAskResponse) -> list[str]:
     if response.debug_info is not None and response.debug_info.retrieved_chunks:
         return response.debug_info.retrieved_chunks
     return [citation.citation_id for citation in response.citations]
+
+
+def _build_retrieval_trace_record(
+    payload: ChatAskRequest,
+    response: ChatAskResponse,
+) -> dict[str, Any]:
+    debug_info = response.debug_info
+    return {
+        "trace_id": response.trace_id,
+        "raw_query": payload.raw_query,
+        "normalized_query": payload.raw_query.strip()
+        if debug_info is None
+        else debug_info.normalized_query,
+        "intent": None if debug_info is None else debug_info.route_result,
+        "domain_hint": None if debug_info is None else getattr(debug_info, "domain_hint", None),
+        "semantic_expansions": None
+        if debug_info is None
+        else getattr(debug_info, "semantic_expansions", None),
+        "lexical_terms": None
+        if debug_info is None
+        else getattr(debug_info, "lexical_terms", None),
+        "filters": {
+            "document_ids": payload.document_ids,
+        },
+        "retrieved_chunks": _resolve_retrieved_chunk_ids(response),
+        "citations": [
+            {
+                "citation_id": citation.citation_id,
+                "source_label": citation.source_label,
+                "source_locator": citation.source_locator,
+                "snippet": citation.snippet,
+            }
+            for citation in response.citations
+        ],
+        "fallback_reason": None if debug_info is None else debug_info.fallback_reason,
+        "final_status": response.response_status,
+    }
+
+
+def _record_hard_case_from_response(retrieval_trace: dict[str, Any]) -> None:
+    if retrieval_trace.get("fallback_reason") != "no_evidence":
+        return
+    hard_cases_repository.upsert(_build_hard_case_item(retrieval_trace))
+
+
+def _record_hard_case_from_feedback(payload: ChatFeedbackRequest) -> None:
+    if payload.feedback_label != "down":
+        return
+
+    retrieval_trace = retrieval_trace_repository.get_by_trace_id(payload.trace_id)
+    if retrieval_trace is None:
+        return
+
+    hard_cases_repository.upsert(
+        _build_hard_case_item(
+            retrieval_trace,
+            user_feedback=payload.feedback_label,
+        )
+    )
+
+
+def _build_hard_case_item(
+    retrieval_trace: dict[str, Any],
+    *,
+    user_feedback: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "trace_id": retrieval_trace.get("trace_id", ""),
+        "raw_query": retrieval_trace.get("raw_query", ""),
+        "normalized_query": retrieval_trace.get("normalized_query", ""),
+        "domain_hint": retrieval_trace.get("domain_hint"),
+        "fallback_reason": retrieval_trace.get("fallback_reason"),
+        "top_candidates": retrieval_trace.get("citations", []),
+        "evidence_spans": [
+            {"text": citation.get("snippet", "")}
+            for citation in retrieval_trace.get("citations", [])
+            if citation.get("snippet")
+        ],
+        "user_feedback": user_feedback,
+    }
 
 
 def _ensure_record_view_enabled() -> None:
@@ -1683,6 +2664,8 @@ def _ensure_record_view_enabled() -> None:
 </file>
 
 <file path="backend/app/retrieval/retriever.py">
+import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -1695,6 +2678,14 @@ class RetrievalHit:
     item: dict[str, Any]
     score: int
     matched_terms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _DocumentCandidate:
+    item: dict[str, Any]
+    search_text: str
+    compact_text: str
+    score_bonus: int
 
 
 class Retriever:
@@ -1746,20 +2737,19 @@ class Retriever:
             ):
                 continue
 
-            text = str(item.get("text", "")).lower()
+            candidate = self._build_document_candidate(item)
+            text = candidate.search_text.lower()
             filename = str(item.get("filename", "")).lower()
-            snippet = str(item.get("snippet", "")).lower()
-            haystack = " ".join([text, filename, snippet]).lower()
+            haystack = " ".join([text, filename]).lower()
             matched_terms = tuple(
                 sorted({token for token in tokens if token in haystack})
             )
-            score = len(matched_terms)
+            score = len(matched_terms) + candidate.score_bonus
 
-            compact_text = text.replace(" ", "")
             if (
                 compact_query
                 and len(compact_query) >= 3
-                and compact_query in compact_text
+                and compact_query in candidate.compact_text
             ):
                 score += 2
 
@@ -1769,20 +2759,105 @@ class Retriever:
             if score > best_score:
                 best_score = score
                 best_hit = RetrievalHit(
-                    item={
-                        "id": item["chunk_id"],
-                        "answer": item["text"],
-                        "source_label": item.get(
-                            "source_label", item.get("filename", "Document")
-                        ),
-                        "source_locator": item.get("source_locator", item["chunk_id"]),
-                        "snippet": item.get("snippet", item["text"][:160]),
-                    },
+                    item=candidate.item,
                     score=score,
                     matched_terms=matched_terms,
                 )
 
         return best_hit if best_hit is not None and best_hit.score > 0 else None
+
+    def _build_document_candidate(self, item: dict[str, Any]) -> _DocumentCandidate:
+        text = str(item.get("text", ""))
+        extracted = self._extract_structured_faq(text)
+        if extracted is None:
+            snippet = str(item.get("snippet", text[:160]))
+            search_text = " ".join(
+                part for part in (text, snippet) if part
+            ).strip()
+            return _DocumentCandidate(
+                item={
+                    "id": item["chunk_id"],
+                    "answer": text,
+                    "source_label": item.get(
+                        "source_label", item.get("filename", "Document")
+                    ),
+                    "source_locator": item.get("source_locator", item["chunk_id"]),
+                    "snippet": snippet,
+                },
+                search_text=search_text,
+                compact_text=search_text.lower().replace(" ", ""),
+                score_bonus=0,
+            )
+
+        faq_id = extracted.get("id")
+        question = extracted.get("question", "")
+        answer = extracted.get("answer", "")
+        keywords = extracted.get("keywords", [])
+        search_text = " ".join(
+            part for part in (question, answer, " ".join(keywords)) if part
+        ).strip()
+        return _DocumentCandidate(
+            item={
+                "id": faq_id or item["chunk_id"],
+                "answer": answer,
+                "source_label": extracted.get("source_label", "HR FAQ"),
+                "source_locator": (
+                    f"hr_faq_seed_v1#{faq_id}"
+                    if faq_id
+                    else extracted.get("source_locator")
+                    or item.get("source_locator", item["chunk_id"])
+                ),
+                "snippet": answer[:160],
+            },
+            search_text=search_text or answer,
+            compact_text=(search_text or answer).lower().replace(" ", ""),
+            score_bonus=2,
+        )
+
+    @staticmethod
+    def _extract_structured_faq(text: str) -> dict[str, Any] | None:
+        answer = Retriever._extract_json_field(text, "answer")
+        if not answer:
+            return None
+
+        faq_id = Retriever._extract_json_field(text, "id")
+        question = Retriever._extract_json_field(text, "question") or ""
+        source_label = Retriever._extract_json_field(text, "source_label") or "HR FAQ"
+        source_locator = Retriever._extract_json_field(text, "source_locator")
+        keywords = Retriever._extract_json_array(text, "keywords")
+        return {
+            "id": faq_id,
+            "question": question,
+            "answer": answer,
+            "keywords": keywords,
+            "source_label": source_label,
+            "source_locator": source_locator,
+        }
+
+    @staticmethod
+    def _extract_json_field(text: str, field_name: str) -> str | None:
+        pattern = re.compile(
+            rf'"{re.escape(field_name)}"\s*:\s*"((?:\\.|[^"\\])*)"',
+            re.DOTALL,
+        )
+        match = pattern.search(text)
+        if match is None:
+            return None
+        return json.loads(f'"{match.group(1)}"')
+
+    @staticmethod
+    def _extract_json_array(text: str, field_name: str) -> list[str]:
+        pattern = re.compile(
+            rf'"{re.escape(field_name)}"\s*:\s*\[(.*?)\]',
+            re.DOTALL,
+        )
+        match = pattern.search(text)
+        if match is None:
+            return []
+        return [
+            json.loads(f'"{value}"')
+            for value in re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1))
+        ]
 
     def _search_faq(self, tokens: list[str], compact_query: str) -> RetrievalHit | None:
         best_hit: RetrievalHit | None = None
@@ -1872,55 +2947,28 @@ class Retriever:
         )
 </file>
 
-<file path="backend/app/storage/repositories/feedback_repo.py">
-import json
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+<file path="backend/main.py">
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.chat import router as chat_router
+from app.api.routes.documents import router as documents_router
+from app.api.routes.health import router as health_router
+from app.config.settings import settings
 
-class FeedbackRepository:
-    def __init__(self, *, max_count: int = 0) -> None:
-        self._path = (
-            Path(__file__).resolve().parents[1] / "feedback" / "feedback_records.jsonl"
-        )
-        self._max_count = max_count
+app = FastAPI(title=settings.app_name, version="0.1.0")
 
-    def save(self, record: dict[str, Any]) -> dict[str, Any]:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        enriched_record = {
-            **record,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(enriched_record, ensure_ascii=False) + "\n")
-        self._truncate_if_needed()
-        return enriched_record
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    def _truncate_if_needed(self) -> None:
-        if self._max_count <= 0 or not self._path.exists():
-            return
-
-        lines = self._path.read_text(encoding="utf-8").splitlines()
-        non_empty = [line for line in lines if line.strip()]
-        if len(non_empty) <= self._max_count:
-            return
-
-        retained = non_empty[-self._max_count :]
-        serialized = "\n".join(retained) + "\n"
-        self._path.write_text(serialized, encoding="utf-8")
-
-    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
-        if not self._path.exists():
-            return []
-
-        records = [
-            json.loads(line)
-            for line in self._path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        records.reverse()
-        return records[:limit]
+app.include_router(health_router)
+app.include_router(chat_router)
+app.include_router(documents_router)
 </file>
 
 <file path="backend/app/services/chat_service.py">
@@ -1928,8 +2976,10 @@ from __future__ import annotations
 
 from app.config.settings import settings
 from app.guardrails.normalize import normalize_query
+from app.query.query_planner import PlannerOutput, QueryPlanner
 from app.retrieval.citation_mapper import map_citation
 from app.retrieval.retriever import Retriever
+from app.routing.contracts import IntentDecision
 from app.routing.resolver import RouteResolver
 from app.schemas.request import ChatAskRequest
 from app.schemas.response import ChatAskResponse, DebugInfo
@@ -1939,6 +2989,27 @@ from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 
 class ChatService:
+    _ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP = 0.35
+    _SMALL_QUERY_RULES = (
+        {
+            "queries": ("请假", "怎么请假", "如何请假"),
+            "search_query": "请假 申请 审批 流程",
+            "lexical_terms": ("请假", "申请", "审批", "流程"),
+            "business_domain": "hr",
+        },
+        {
+            "queries": ("病假材料",),
+            "search_query": "病假 证明 材料 提交",
+            "lexical_terms": ("病假", "证明", "材料", "提交"),
+            "business_domain": "hr",
+        },
+        {
+            "queries": ("请假进度怎么看",),
+            "search_query": "请假 进度 审批 记录 查询",
+            "lexical_terms": ("请假", "进度", "审批", "记录", "查询"),
+            "business_domain": "hr",
+        },
+    )
     _REFUSAL_TERMS = {
         "unsafe_request": (
             "炸弹",
@@ -1961,9 +3032,23 @@ class ChatService:
         )
         self._retriever = Retriever(self._faq_repo, self._chunk_repo)
         self._resolver = RouteResolver()
+        self._query_planner = None
+        if settings.enable_query_planner:
+            self._query_planner = self._create_query_planner()
         self._lexical_retriever = None
+        self._hybrid_retriever = None
+        self._reranker = None
         if settings.search_backend == "elasticsearch":
             self._lexical_retriever = self._create_lexical_retriever()
+            self._hybrid_retriever = self._create_hybrid_retriever()
+            if self._hybrid_retriever is not None:
+                self._reranker = self._create_reranker()
+
+    def _create_query_planner(self) -> QueryPlanner:
+        return QueryPlanner(
+            provider=settings.planner_provider,
+            model=settings.planner_model,
+        )
 
     def _create_lexical_retriever(self):
         from app.retrieval.lexical_retriever import LexicalRetriever
@@ -1971,6 +3056,22 @@ class ChatService:
 
         es = Elasticsearch(settings.elastic_url)
         return LexicalRetriever(es, index_name=settings.elastic_index)
+
+    def _create_hybrid_retriever(self):
+        from app.retrieval.hybrid_retriever import HybridRetriever
+        from app.retrieval.lexical_retriever import LexicalRetriever
+        from app.retrieval.vector_retriever import VectorRetriever
+        from elasticsearch import Elasticsearch
+
+        es = Elasticsearch(settings.elastic_url)
+        lexical_retriever = LexicalRetriever(es, index_name=settings.elastic_index)
+        vector_retriever = VectorRetriever(es, index_name=settings.elastic_index)
+        return HybridRetriever(lexical_retriever, vector_retriever)
+
+    def _create_reranker(self):
+        from app.retrieval.reranker import Reranker
+
+        return Reranker()
 
     def ask(
         self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
@@ -1992,6 +3093,7 @@ class ChatService:
                     normalized_query,
                     route_result="refused",
                     chunk_ids=[],
+                    router_used="rule_parser",
                     route_confidence=0.0,
                     fallback_reason="empty_after_normalization",
                 ),
@@ -2009,12 +3111,13 @@ class ChatService:
                     normalized_query,
                     route_result="refused",
                     chunk_ids=[],
+                    router_used="rule_parser",
                     route_confidence=0.0,
                     fallback_reason=refusal_reason,
                 ),
             )
 
-        decision = self._resolver.resolve(normalized_query)
+        decision, planner_output, router_used = self._resolve_decision(normalized_query)
 
         if (
             decision.route != "faq_qa"
@@ -2030,8 +3133,10 @@ class ChatService:
                     normalized_query,
                     route_result=decision.route,
                     chunk_ids=[],
+                    router_used=router_used,
                     route_confidence=decision.confidence,
                     fallback_reason="route_not_confident_enough",
+                    planner_output=planner_output,
                 ),
             )
 
@@ -2040,27 +3145,74 @@ class ChatService:
             and self._lexical_retriever is not None
         ):
             return self._search_elastic(
-                normalized_query, trace_id=trace_id, debug_enabled=debug_enabled
+                normalized_query,
+                planner_output=planner_output,
+                router_used=router_used,
+                trace_id=trace_id,
+                debug_enabled=debug_enabled,
             )
 
         return self._search_local(
             decision,
-            normalized_query,
+            normalized_query=normalized_query,
+            planner_output=planner_output,
             document_ids=document_ids,
+            router_used=router_used,
             trace_id=trace_id,
             debug_enabled=debug_enabled,
         )
 
     def _search_elastic(
-        self, normalized_query: str, *, trace_id: str, debug_enabled: bool
+        self,
+        normalized_query: str,
+        *,
+        planner_output: PlannerOutput | None,
+        router_used: str,
+        trace_id: str,
+        debug_enabled: bool,
     ) -> ChatAskResponse:
-        hits = self._lexical_retriever.search(
-            normalized_query,
-            lexical_terms=self._extract_lexical_terms(normalized_query),
-            min_score=0.1,
-            lifecycle_status="active",
-            size=5,
+        base_query = (
+            normalized_query
+            if planner_output is None
+            else planner_output.normalized_query
         )
+        search_query = base_query
+        lexical_terms = (
+            planner_output.lexical_terms
+            if planner_output is not None and planner_output.lexical_terms
+            else self._extract_lexical_terms(search_query)
+        )
+        business_domain = None if planner_output is None else planner_output.domain_hint
+
+        if settings.enable_fast_track:
+            small_query_rule = self._match_small_query_rule(normalized_query)
+            if small_query_rule is not None:
+                search_query = small_query_rule["search_query"]
+                lexical_terms = self._merge_lexical_terms(
+                    lexical_terms,
+                    [normalized_query, search_query, *small_query_rule["lexical_terms"]],
+                )
+                business_domain = small_query_rule["business_domain"]
+
+        used_hybrid = planner_output is not None and self._hybrid_retriever is not None
+        if used_hybrid:
+            hits = self._hybrid_retriever.search(
+                lexical_query=search_query,
+                vector_query=base_query,
+                lexical_terms=lexical_terms,
+                business_domain=business_domain,
+                lifecycle_status="active",
+                size=5,
+            )
+        else:
+            hits = self._lexical_retriever.search(
+                search_query,
+                lexical_terms=lexical_terms,
+                min_score=0.1,
+                business_domain=business_domain,
+                lifecycle_status="active",
+                size=5,
+            )
 
         if not hits:
             return ChatAskResponse(
@@ -2073,21 +3225,49 @@ class ChatService:
                     normalized_query,
                     route_result="faq_qa_elastic",
                     chunk_ids=[],
+                    router_used=router_used,
                     route_confidence=None,
                     retrieval_score=None,
                     fallback_reason="retrieval_no_hit",
+                    planner_output=planner_output,
                 ),
             )
 
-        best = hits[0]
+        evidence_spans = []
+        if used_hybrid and self._reranker is not None:
+            reranked = self._select_reranked_hit(base_query, hits)
+            if reranked is None:
+                return ChatAskResponse(
+                    response_status="fallback",
+                    trace_id=trace_id,
+                    answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+                    citations=[],
+                    debug_info=self._build_debug_info(
+                        debug_enabled,
+                        normalized_query,
+                        route_result="faq_qa_elastic",
+                        chunk_ids=[],
+                        router_used=router_used,
+                        route_confidence=None,
+                        retrieval_score=None,
+                        fallback_reason="no_evidence",
+                        planner_output=planner_output,
+                    ),
+                )
+            best = reranked.hit
+            evidence_spans = reranked.evidence_spans
+        else:
+            best = self._select_elastic_hit(hits)
+
         answer = best.answer or best.body_text
+        snippet = answer[:160] if not evidence_spans else evidence_spans[0].text
         citation = map_citation(
             {
                 "id": best.unit_id,
                 "answer": answer,
                 "source_label": best.source_label,
                 "source_locator": best.source_locator,
-                "snippet": answer[:160],
+                "snippet": snippet,
             }
         )
 
@@ -2101,17 +3281,88 @@ class ChatService:
                 normalized_query,
                 route_result="faq_qa_elastic",
                 chunk_ids=[best.unit_id],
+                router_used=router_used,
                 route_confidence=None,
                 retrieval_score=best.score,
+                planner_output=planner_output,
             ),
         )
 
+    @classmethod
+    def _select_elastic_hit(cls, hits):
+        best = hits[0]
+        if best.source_kind == "faq":
+            return best
+
+        faq_candidate = next(
+            (
+                hit
+                for hit in hits
+                if hit.source_kind == "faq" and (hit.answer or hit.body_text)
+            ),
+            None,
+        )
+        if faq_candidate is None:
+            return best
+
+        score_gap = best.score - faq_candidate.score
+        if score_gap <= cls._ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP:
+            return faq_candidate
+        return best
+
+    def _select_reranked_hit(self, query: str, hits):
+        reranked_hits = self._reranker.rerank(query, hits, top_n=min(len(hits), 3))
+        accepted_hits = [
+            item
+            for item in reranked_hits
+            if item.accept and (item.hit.answer or item.hit.body_text)
+        ]
+        if not accepted_hits:
+            return None
+
+        best = accepted_hits[0]
+        if best.hit.source_kind == "faq":
+            return best
+
+        faq_candidate = next(
+            (item for item in accepted_hits if item.hit.source_kind == "faq"),
+            None,
+        )
+        if faq_candidate is None:
+            return best
+
+        score_gap = best.rerank_score - faq_candidate.rerank_score
+        if score_gap <= self._ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP:
+            return faq_candidate
+        return best
+
+    @classmethod
+    def _match_small_query_rule(
+        cls, normalized_query: str
+    ) -> dict[str, str | tuple[str, ...]] | None:
+        for rule in cls._SMALL_QUERY_RULES:
+            if normalized_query in rule["queries"]:
+                return rule
+        return None
+
+    @staticmethod
+    def _merge_lexical_terms(
+        base_terms: list[str], extra_terms: list[str]
+    ) -> list[str]:
+        merged = list(base_terms)
+        for term in extra_terms:
+            if term and term not in merged:
+                merged.append(term)
+        return merged
+
     def _search_local(
         self,
-        decision,
-        normalized_query: str,
+        decision: IntentDecision,
         *,
+        normalized_query: str,
+        planner_output: PlannerOutput | None,
         document_ids: list[str],
+        router_used: str,
         trace_id: str,
         debug_enabled: bool,
     ) -> ChatAskResponse:
@@ -2131,11 +3382,13 @@ class ChatService:
                     normalized_query,
                     route_result=decision.route,
                     chunk_ids=[] if hit is None else [hit.item["id"]],
+                    router_used=router_used,
                     route_confidence=decision.confidence,
                     retrieval_score=None if hit is None else float(hit.score),
                     fallback_reason="retrieval_score_below_threshold"
                     if hit is not None
                     else "retrieval_no_hit",
+                    planner_output=planner_output,
                 ),
             )
 
@@ -2150,10 +3403,40 @@ class ChatService:
                 normalized_query,
                 route_result=decision.route,
                 chunk_ids=[hit.item["id"]],
+                router_used=router_used,
                 route_confidence=decision.confidence,
                 retrieval_score=float(hit.score),
+                planner_output=planner_output,
             ),
         )
+
+    def _resolve_decision(
+        self, normalized_query: str
+    ) -> tuple[IntentDecision, PlannerOutput | None, str]:
+        if self._query_planner is None:
+            decision = self._resolver.resolve(normalized_query)
+            return decision, None, "rule_parser"
+
+        try:
+            planner_output = self._query_planner.plan(normalized_query)
+        except Exception:
+            decision = self._resolver.resolve(normalized_query)
+            return decision, None, "rule_parser"
+
+        if (
+            not planner_output.normalized_query
+            or not planner_output.lexical_terms
+            or planner_output.planner_confidence < settings.route_confidence_threshold
+        ):
+            decision = self._resolver.resolve(normalized_query)
+            return decision, None, "rule_parser"
+
+        decision = IntentDecision(
+            route="faq_qa",
+            confidence=planner_output.planner_confidence,
+            query_for_search=planner_output.normalized_query,
+        )
+        return decision, planner_output, self._query_planner.router_name
 
     @staticmethod
     def _extract_lexical_terms(query: str) -> list[str]:
@@ -2185,45 +3468,23 @@ class ChatService:
         route_result: str,
         chunk_ids: list[str],
         *,
+        router_used: str,
         route_confidence: float | None,
         retrieval_score: float | None = None,
         fallback_reason: str | None = None,
+        planner_output: PlannerOutput | None = None,
     ) -> DebugInfo | None:
         if not enabled:
             return None
         return DebugInfo(
             normalized_query=normalized_query,
             route_result=route_result,
-            router_used="rule_parser",
+            router_used=router_used,
             retrieved_chunks=chunk_ids,
             route_confidence=route_confidence,
             retrieval_score=retrieval_score,
             fallback_reason=fallback_reason,
         )
-</file>
-
-<file path="backend/main.py">
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.api.routes.chat import router as chat_router
-from app.api.routes.documents import router as documents_router
-from app.api.routes.health import router as health_router
-from app.config.settings import settings
-
-app = FastAPI(title=settings.app_name, version="0.1.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=list(settings.cors_origins),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(health_router)
-app.include_router(chat_router)
-app.include_router(documents_router)
 </file>
 
 <file path="backend/app/config/settings.py">

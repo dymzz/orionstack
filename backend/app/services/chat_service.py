@@ -261,7 +261,7 @@ class ChatService:
 
         evidence_spans = []
         if used_hybrid and self._reranker is not None:
-            reranked = self._select_reranked_hit(base_query, hits)
+            reranked = self._select_reranked_hit(search_query, hits)
             if reranked is None:
                 return ChatAskResponse(
                     response_status="fallback",
@@ -337,7 +337,7 @@ class ChatService:
         return best
 
     def _select_reranked_hit(self, query: str, hits):
-        reranked_hits = self._reranker.rerank(query, hits, top_n=min(len(hits), 3))
+        reranked_hits = self._reranker.rerank(query, hits, top_n=len(hits))
         accepted_hits = [
             item
             for item in reranked_hits

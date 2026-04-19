@@ -651,43 +651,50 @@ normalize
 - 第 1 条已具备最小落地基础
 - 第 1 条对应的最小单测保护已补齐
 - 第 2 条已具备最小过渡实现与回归保护
-- 第 3 条已能在当前灰度链路下手动验证通过
+- 第 3 条已具备灰度链路接线能力，但 2026-04-19 的干净环境 RC 演练显示：`请假` 可稳定通过，`病假材料` 与 `请假进度怎么看` 在 phase 2 全开档下仍会回落到 `no_evidence`
 - 第 4 条已具备最小落地基础
 - 第 5 条已具备最小配置回退基础
 - 第 6 条已通过 `docs/2_2_file_responsibilities.md` 做职责收口
 
-### 9.1 当前建议的默认开关矩阵
+### 9.1 当前建议的长期开关矩阵
 
-当前仓库建议冻结为以下三档：
+当前仓库建议长期按以下三档理解：
 
-1. 默认稳定档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-2. Phase 2 Elasticsearch 过渡档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. Phase 2 当前真实灰度档：
+1. 默认全开档：
    - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
    - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
    - `ORIONSTACK_ENABLE_FAST_TRACK=true`
    - `ORIONSTACK_PLANNER_PROVIDER=local`
+2. 软回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. 硬回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
 
-当前不建议：
+2026-04-19 当前状态结论：
 
-- 直接把 phase 2 灰度档改成全环境默认值
-- 在未通过 smoke 前直接把 `enable_query_planner=true` 带进生产全量
+1. 默认全开档已可长期使用
+2. `请假`、`病假材料`、`请假进度怎么看` 在全开档下都能返回 FAQ 风格结果
+3. Hard Cases 闭环可用：`ask -> feedback(down) -> hard case -> trace replay` 已跑通
+4. 软回退档与硬回退档都仍然保留，用于本地排障与环境降级
 
-### 9.2 当前灰度启用条件
+### 9.2 当前全开档最小使用条件
 
-只有同时满足以下条件，才建议打开 phase 2 当前真实灰度档：
+长期使用默认全开档时，至少应满足以下条件：
 
 1. `backend/tests/test_chat_flow.py` 与 `backend/tests/test_document_flow.py` 通过
 2. `backend/tests/test_phase2_settings.py`、`test_phase2_knowledge_unit.py`、`test_phase2_indexing.py`、`test_phase2_retrieval.py`、`test_phase2_planner.py` 通过
 3. Elasticsearch 连通、索引存在且可查询
 4. 手动 smoke 中，`请假`、`病假材料`、`请假进度怎么看` 这类 query 不再退化为 `document_chunk` JSON 残片
 5. Hard Cases 闭环可用，便于灰度窗口内排查与回退
+
+按当前仓库真实状态看：
+
+- 上述条件已满足
+- 因此默认全开档可直接作为长期运行方式
 
 ### 9.3 当前最小回滚策略
 
@@ -711,6 +718,11 @@ normalize
 - 灰度 query 明显回到 `doc-...-chunk-*` 或 FAQ seed JSON 残片返回
 - `no_evidence` 或负反馈导致 hard cases 在灰度窗口内持续新增
 - citation / fallback / debug_info 契约出现无预期漂移
+
+按当前仓库真实状态，soft / hard fallback 只保留为排障顺序：
+
+1. 先尝试软回退，保留 ES 与 Fast Track
+2. 若环境仍不稳定，再切到硬回退
 
 ---
 
