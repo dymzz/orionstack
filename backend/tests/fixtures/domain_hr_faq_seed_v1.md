@@ -1,15 +1,15 @@
-# 第一阶段可入库 FAQ 内容：HR 业务域 v1
+# 第一阶段可直接入库 FAQ 内容：HR 业务域 v1
 
 ## 1. 文档目标
 
-本文档用于提供一份 **清洗后可入库** 的企业通用 HR 业务域 FAQ 内容，供第一阶段知识库导入使用。
+本文档提供一份已按第一阶段边界清洗的 HR 业务域 FAQ 种子内容，供知识库直接入库使用。
 
 本内容遵循当前第一阶段边界：
 
 - 以 FAQ / 业务知识问答主链路为核心
-- 适用于企业内部常见 HR 问答
-- 只做轻量访问范围标记，不做 RBAC / ABAC 权限系统
-- 作为知识库导入内容，而不是完整 HR 管理制度全集 fileciteturn3file4turn3file12
+- 适用于企业内部高频 HR 问答
+- 当前阶段只做轻量元数据与访问范围标记
+- 作为 FAQ 种子内容导入，而不是完整 HR 制度文档全集
 
 ---
 
@@ -18,16 +18,16 @@
 本 FAQ 内容适用于以下场景：
 
 - 企业内部知识助手的 HR 问答
-- 文档清洗后作为 `manual_faq` 导入
+- 作为 A 类输入直接按 `manual_faq` 导入
 - 提供可检索、可引用、可回源的基础问答内容
-- 支撑请假、考勤、入离职、福利、证明、报销协同等高频 HR 问题
+- 支撑请假、考勤、入离职、福利、证明等高频 HR 问题
 
 本 FAQ 内容不用于：
 
 - 替代正式员工手册
 - 替代完整制度原文
-- 输出高敏感人事数据
-- 承担复杂权限控制逻辑 fileciteturn3file4turn3file12
+- 输出高敏感个体人事数据
+- 承担复杂权限控制逻辑或跨系统编排
 
 ---
 
@@ -38,9 +38,9 @@
 1. 问句统一为员工自然问法
 2. 回答统一为稳定、简洁、可引用表达
 3. 去除冗余口语、重复表述和不必要背景说明
-4. 每条 FAQ 均补齐最小元数据
-5. 默认作为 `active` 状态内容导入
-6. 默认只做 `access_scope` 标记，不做实际权限判断
+4. 每条 FAQ 均保留可回源的最小问答元数据
+5. 默认按 `active` 状态导入
+6. 当前阶段只做 `access_scope` 标记，不做实际权限判断
 
 建议默认元数据：
 
@@ -50,9 +50,11 @@
 - `lifecycle_status = active`
 - `access_scope = internal`
 - `source_label = HR FAQ`
-- `source_locator = hr_faq_seed_v1`
+- `source_locator = hr_faq_seed_v1#<faq-id>`
 
-这与当前第一阶段支持 FAQ 标准问答导入、基础解析、简单切块、基础索引构建的边界一致。fileciteturn3file8turn3file15
+如进入文档登记层，可按第一阶段文档库最小字段表补齐 `document_id / created_at / updated_at` 等字段。
+
+本文件属于文档接入边界中的 A 类输入，可不经过独立 cleaning adapter，直接进入 FAQ 入库链路。
 
 ---
 
@@ -251,19 +253,15 @@
 
 建议将上述 FAQ 内容按以下方式导入：
 
-1. 每条 FAQ 作为一条独立知识单元
-2. 保留 `id / question / answer / keywords / source_locator / snippet`
+1. 每条 FAQ 作为一条独立知识条目或知识单元
+2. 至少保留 `id / question / answer / keywords / source_locator / snippet`
 3. 统一标记：
    - `business_domain = hr`
    - `document_type = faq`
    - `source_type = manual_faq`
    - `lifecycle_status = active`
    - `access_scope = internal`
-4. 如后续系统支持更完整文档库元数据，可再补：
-   - `created_at`
-   - `updated_at`
-   - `owner_team`
-   - `version`
+4. 如进入文档库登记层，再补齐 `document_id / title / created_at / updated_at`
 
 ---
 
@@ -273,15 +271,15 @@
 
 - 支撑第一阶段企业内部 HR 高频问答
 - 让系统先具备稳定、可控、可检索的 HR FAQ 基础内容
-- 为后续接入更完整 HR 制度文档保留统一入库标准
+- 为后续接入 `policy / process / guide / notice` 保留一致的元数据习惯
 
 当前阶段不追求：
 
 - 覆盖所有 HR 制度细节
 - 覆盖所有地方政策差异
 - 处理高敏感个体人事信息
-- 代替正式制度原文或审批系统
+- 代替正式制度原文、审批系统或权限系统
 
 一句话总结：
 
-**本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可直接作为企业内部知识问答系统的基础入库数据。**
+**本文件是一份按第一阶段 HR 业务域标准清洗后的 FAQ 种子内容，可作为 A 类输入直接进入企业内部知识问答系统的 FAQ 入库链路。**

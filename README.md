@@ -28,7 +28,29 @@ python scripts/dev-demo.py
 
 ## Phase 2 检索增强
 
-默认使用本地关键词检索（`ORIONSTACK_SEARCH_BACKEND=local`）。要启用 Elasticsearch 语义检索：
+默认使用本地关键词检索（`ORIONSTACK_SEARCH_BACKEND=local`）。当前 phase 2 的真实链路分成三档：
+
+1. 默认稳定档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+2. Elasticsearch 过渡档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. Phase 2 当前灰度档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+   - `ORIONSTACK_PLANNER_PROVIDER=local`
+
+说明：
+
+- planner 高置信时：进入 `lexical + vector + RRF -> rerank + evidence`
+- planner 低置信时：回退到 `Fast Track + lexical-only`
+- 若线上需要快速回退，优先先把 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+
+要启用 Elasticsearch 过渡检索：
 
 ### 1. 启动 Elasticsearch
 
@@ -49,11 +71,45 @@ ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
 # 本地关键词检索（默认）
 ORIONSTACK_SEARCH_BACKEND=local python scripts/dev-backend.py
 
-# Elasticsearch lexical 检索
-ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
+# Elasticsearch lexical-only 过渡链
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true python scripts/dev-backend.py
+
+# Phase 2 当前灰度链
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
+```
+
+快速回退：
+
+```bash
+# 软回退：回到 Elasticsearch lexical-only
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
+
+# 硬回退：完整回到主线 1 默认链路
+ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
 ```
 
 旧链路可通过 `ORIONSTACK_SEARCH_BACKEND=local` 完整回退
+
+### 4. 发布前最小 smoke
+
+建议至少执行：
+
+```bash
+python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```
+
+若准备启用 phase 2 当前灰度档，建议再手动验证：
+
+- `请假`
+- `病假材料`
+- `请假进度怎么看`
+
+预期：
+
+- `route_result = faq_qa_elastic`
+- `retrieved_chunks` 为 FAQ 风格 ID
+- `citation.source_locator` 为 `hr_faq_seed_v1#...`
+- 不返回 `document_chunk` JSON 残片
 
 ## 生产部署
 
@@ -97,6 +153,8 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_SEARCH_BACKEND` | `local` | `local`：关键词检索；`elasticsearch`：ES lexical 检索 |
 | `ORIONSTACK_ELASTIC_URL` | `http://localhost:9200` | ES 连接地址 |
 | `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名称 |
+| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `false` | 打开后允许进入 planner -> hybrid -> rerank/evidence 灰度链 |
+| `ORIONSTACK_ENABLE_FAST_TRACK` | `false` | 打开后启用小 query 规则与 lexical 过渡优化 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 

@@ -35,7 +35,14 @@
 当前**已实际落地**的第二阶段相关文件主要包括：
 
 - `backend/app/storage/repositories/knowledge_unit_repo.py`
+- `backend/app/query/query_planner.py`
 - `backend/app/retrieval/lexical_retriever.py`
+- `backend/app/retrieval/vector_retriever.py`
+- `backend/app/retrieval/hybrid_retriever.py`
+- `backend/app/retrieval/reranker.py`
+- `backend/app/retrieval/evidence_extractor.py`
+- `backend/app/observability/retrieval_trace.py`
+- `backend/app/testing/hard_cases_repo.py`
 - `backend/app/indexing/elastic_indexer.py`
 - `backend/app/indexing/index_health_checker.py`
 
@@ -136,6 +143,32 @@
 
 ## 4.2 第二阶段检索过渡层
 
+### `backend/app/query/query_planner.py`
+
+职责：
+
+- 作为第二阶段第一轮 planner 的本地确定性实现
+- 输出：
+  - `normalized_query`
+  - `domain_hint`
+  - `lexical_terms`
+  - `planner_confidence`
+- 为 `chat_service.py` 提供可开关的 planner 接入点
+- 为 elastic lexical-only / hybrid 过渡链路提供更稳定的 `lexical_terms` 与 `domain_hint`
+
+不负责：
+
+- 不负责文档召回
+- 不负责 vector retrieval / RRF
+- 不负责 rerank / evidence extraction
+- 不负责替代后续独立 provider 抽象
+
+当前约束：
+
+- 默认仍可关闭
+- 当前是本地规则实现，不等于最终 provider 形态
+- 当前只作为第二阶段最小入口层，不应反向扩张成重型意图中台
+
 ### `backend/app/retrieval/lexical_retriever.py`
 
 职责：
@@ -154,6 +187,43 @@
 - 不负责 rerank 与 evidence extraction
 - 不负责回答文本改写
 
+### `backend/app/retrieval/vector_retriever.py`
+
+职责：
+
+- 承接第二阶段最小向量召回
+- 基于统一 `knowledge_units_v1` 候选集做本地向量相似度排序
+- 支持与 lexical 一致的 metadata filter：`business_domain / access_scope / lifecycle_status`
+- 输出与 lexical 层兼容的命中结构，供 hybrid 层做后续融合
+
+不负责：
+
+- 不负责 Query Planner 生成
+- 不负责 RRF 融合
+- 不负责 rerank 与 evidence extraction
+- 不负责直接决定最终回答
+
+### `backend/app/retrieval/hybrid_retriever.py`
+
+职责：
+
+- 组合 lexical 与 vector 两路候选
+- 以 RRF 执行最小融合
+- 输出带 `bm25_score / vector_score / lexical_rank / vector_rank / rrf_rank` 的 `HybridHit`
+- 作为 planner 高置信时的第二阶段最小检索执行层
+
+不负责：
+
+- 不负责 planner 本身
+- 不负责证据抽取
+- 不负责 rerank gate
+- 不负责响应构造与 citation 组装
+
+当前约束：
+
+- 当前是最小 `lexical + vector + RRF` 过渡层
+- 当前 planner 高置信的服务链会在 hybrid 输出后进入 rerank / evidence
+
 ## 4.3 第二阶段服务与配置接线层
 
 ### `backend/app/services/chat_service.py`
@@ -162,7 +232,7 @@
 
 - 继续作为问答主服务入口
 - 在不改外部 API 形态的前提下，承接第二阶段过渡接线
-- 维护本地检索与 Elasticsearch lexical-only 检索之间的切换入口
+- 维护本地检索、Elasticsearch lexical-only 与最小 hybrid 检索之间的切换入口
 - 统一串联：归一化、基础路由保护、检索、citation 映射、响应构建
 - 持有 `KnowledgeUnitRepository` 作为第二阶段统一数据视图接入点
 
@@ -171,6 +241,13 @@
 - 不负责把 planner、hybrid、rerank 的完整实现全部内联在一个函数里
 - 不负责成为第二阶段所有实验逻辑的堆放点
 - 不负责替代索引层、retrieval 层、provider 层的独立职责
+
+当前约束：
+
+- 当前 planner 高置信时可进入 hybrid
+- 当前 planner 低置信时仍回退到现有 rule_parser / fast track / lexical-only
+- 当前 planner 高置信进入 hybrid 后，会继续接入最小 rerank / evidence
+- 当前 lexical-only 回退路径与主线 1 默认链路不进入 rerank / evidence
 
 ### `backend/app/config/settings.py`
 
@@ -238,7 +315,6 @@
 
 预留文件位：
 
-- `backend/app/query/query_planner.py`
 - `backend/app/llm/providers/base.py`
 - `backend/app/llm/providers/ollama_provider.py`
 - `backend/app/llm/providers/api_provider.py`
@@ -258,34 +334,30 @@
 
 预留文件位：
 
-- `backend/app/retrieval/vector_retriever.py`
-- `backend/app/retrieval/hybrid_retriever.py`
 - `backend/app/retrieval/reranker.py`
 - `backend/app/retrieval/evidence_extractor.py`
 
 未来应承载：
 
-- 向量召回
-- lexical + vector 融合
 - rerank 判断
 - evidence spans 抽取
 
 当前不应塞回：
 
 - `retriever.py`
-- `lexical_retriever.py`
+- `hybrid_retriever.py`
 
 ### 6.3 观测与测试层
 
-预留文件位：
+当前已最小落地文件位：
 
 - `backend/app/observability/retrieval_trace.py`
 - `backend/app/testing/hard_cases_repo.py`
 
-未来应承载：
+当前承载：
 
-- 第二阶段 retrieval trace 落盘与回放
-- hard cases 收集与回归样本管理
+- 第二阶段 retrieval trace 落盘与按 `trace_id` 回放
+- hard cases 最小写入 / 读取与负反馈回流
 
 当前不应塞回：
 

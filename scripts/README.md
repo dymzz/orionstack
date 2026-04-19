@@ -190,6 +190,30 @@ python scripts/start-backend.py --check-only
 
 ## 生产配置说明
 
+### Phase 2 推荐启动矩阵
+
+当前 phase 2 检索链建议按三档使用：
+
+1. 默认稳定档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+2. Elasticsearch 过渡档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. Phase 2 当前灰度档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+   - `ORIONSTACK_PLANNER_PROVIDER=local`
+
+建议理解为：
+
+- planner 高置信时：进入 `lexical + vector + RRF -> rerank + evidence`
+- planner 低置信时：回退到 `Fast Track + lexical-only`
+- 若线上需要快速止损，优先先把 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+
 ### 环境变量
 
 后端通过环境变量读取所有配置。可用变量参见仓库根目录 `.env.example`。
@@ -204,8 +228,55 @@ python scripts/start-backend.py --check-only
 | `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 允许的前端来源，逗号分隔 |
 | `ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD` | `0.6` | 路由置信度阈值 |
 | `ORIONSTACK_RETRIEVAL_MIN_SCORE` | `2` | 检索最低分 |
+| `ORIONSTACK_SEARCH_BACKEND` | `local` | `local`：主线 1 默认链路；`elasticsearch`：phase 2 过渡链 |
+| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `false` | 打开后允许进入 planner -> hybrid -> rerank/evidence 灰度链 |
+| `ORIONSTACK_ENABLE_FAST_TRACK` | `false` | 打开后启用小 query 规则与 lexical 过渡优化 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
+
+### 推荐启动示例
+
+```bash
+# 默认稳定档
+ORIONSTACK_SEARCH_BACKEND=local python scripts/dev-backend.py
+
+# Elasticsearch lexical-only 过渡档
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true python scripts/dev-backend.py
+
+# Phase 2 当前灰度档
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
+```
+
+### 最小回退命令
+
+```bash
+# 软回退：回到 Elasticsearch lexical-only
+ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
+
+# 硬回退：完整回到主线 1 默认链路
+ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
+```
+
+### 发布前最小 smoke
+
+建议至少执行：
+
+```bash
+python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```
+
+若本次准备启用 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`，建议再手动验证：
+
+- `请假`
+- `病假材料`
+- `请假进度怎么看`
+
+预期：
+
+- `route_result = faq_qa_elastic`
+- `retrieved_chunks` 为 FAQ 风格 ID
+- `citation.source_locator` 为 `hr_faq_seed_v1#...`
+- 不返回 `document_chunk` JSON 残片
 
 ### `prod` 模式行为
 

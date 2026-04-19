@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -122,23 +125,42 @@ class KnowledgeUnitRepository:
     ) -> None:
         self._faq_repo = faq_repo
         self._chunk_repo = chunk_repo
+        self._seed_dir = Path(__file__).resolve().parents[1] / "seed"
 
     def list_all(self) -> list[KnowledgeUnit]:
         units: list[KnowledgeUnit] = []
+        known_faq_ids: set[str] = set()
         if self._faq_repo is not None:
             for item in self._faq_repo.list_all():
-                units.append(map_faq_item_to_knowledge_unit(item))
+                unit = map_faq_item_to_knowledge_unit(item)
+                units.append(unit)
+                if unit.unit_id:
+                    known_faq_ids.add(unit.unit_id)
+        for item in self._list_seed_faq_items():
+            unit = map_faq_item_to_knowledge_unit(item)
+            if unit.unit_id and unit.unit_id not in known_faq_ids:
+                units.append(unit)
+                known_faq_ids.add(unit.unit_id)
         if self._chunk_repo is not None:
             for chunk in self._chunk_repo.list_all():
                 units.append(map_chunk_to_knowledge_unit(chunk))
         return units
 
     def list_faq_units(self) -> list[KnowledgeUnit]:
-        if self._faq_repo is None:
-            return []
-        return [
-            map_faq_item_to_knowledge_unit(item) for item in self._faq_repo.list_all()
-        ]
+        units: list[KnowledgeUnit] = []
+        known_faq_ids: set[str] = set()
+        if self._faq_repo is not None:
+            for item in self._faq_repo.list_all():
+                unit = map_faq_item_to_knowledge_unit(item)
+                units.append(unit)
+                if unit.unit_id:
+                    known_faq_ids.add(unit.unit_id)
+        for item in self._list_seed_faq_items():
+            unit = map_faq_item_to_knowledge_unit(item)
+            if unit.unit_id and unit.unit_id not in known_faq_ids:
+                units.append(unit)
+                known_faq_ids.add(unit.unit_id)
+        return units
 
     def list_chunk_units(self) -> list[KnowledgeUnit]:
         if self._chunk_repo is None:
@@ -146,3 +168,24 @@ class KnowledgeUnitRepository:
         return [
             map_chunk_to_knowledge_unit(chunk) for chunk in self._chunk_repo.list_all()
         ]
+
+    def _list_seed_faq_items(self) -> list[dict[str, Any]]:
+        if not self._seed_dir.exists():
+            return []
+
+        seed_items: list[dict[str, Any]] = []
+        for path in sorted(self._seed_dir.glob("*_faq_seed_*.md")):
+            seed_items.extend(_parse_seed_markdown_faq_items(path))
+        return seed_items
+
+
+def _parse_seed_markdown_faq_items(path: Path) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r"```json\s*(\[[\s\S]*?\])\s*```", text)
+    if match is None:
+        return []
+
+    payload = json.loads(match.group(1))
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]

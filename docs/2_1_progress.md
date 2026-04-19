@@ -47,12 +47,17 @@
   - `backend/app/indexing/index_health_checker.py`
 - `backend/app/config/settings.py` 已补入第二阶段最小配置项
 - `backend/app/services/chat_service.py` 已接入第二阶段过渡性的 search backend 切换入口
+- `backend/app/query/query_planner.py` 已落地第一轮本地确定性 planner
+- `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
+- `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链
+- `backend/app/observability/retrieval_trace.py` 与 `backend/app/testing/hard_cases_repo.py` 已落地第一轮最小排查链路
 - Phase 2 已补齐第一轮最小单测保护：
   - `backend/tests/test_phase2_settings.py`
   - `backend/tests/test_phase2_knowledge_unit.py`
   - `backend/tests/test_phase2_indexing.py`
   - `backend/tests/test_phase2_retrieval.py`
-- 但默认链路仍未完全切换到第二阶段目标形态；planner / hybrid / rerank / trace 仍未落地
+  - `backend/tests/test_phase2_planner.py`
+- 但默认链路仍未完全切换到第二阶段目标形态；当前已落地的是 planner + hybrid + rerank / evidence + trace / hard cases 最小链路，clarification / API fallback 仍未作为默认服务链接入
 
 ---
 
@@ -140,14 +145,13 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 - 已补入第二阶段最小配置开关
 - 当前已覆盖 search backend / elastic / planner / fast track 的第一轮占位配置
 
-### 3.1 当前尚未落地的 Query 与 LLM Provider
+### 3.1 当前已部分落地的 Query，与尚未落地的 LLM Provider
 
 #### `backend/app/query/query_planner.py`
 职责：
 
 - 生成 `normalized_query`
 - 生成 `domain_hint`
-- 生成 `semantic_expansions`
 - 生成 `lexical_terms`
 - 执行 planner guardrails：
   - hard keyword locking
@@ -159,6 +163,18 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 - 可由本地实现或简单 provider 调用驱动
 - 支持关闭 semantic expansion，仅保留 normalized + lexical_terms
+
+当前状态：
+
+- 已落地第一轮本地确定性 planner
+- 当前已输出：
+  - `normalized_query`
+  - `domain_hint`
+  - `lexical_terms`
+  - `planner_confidence`
+- 当前 guardrails 以轻量本地规则实现为主
+- 当前仍未接入独立 LLM provider
+- 当前已可作为 hybrid 与 lexical-only 的统一输入层，但不直接承载 rerank / evidence
 
 #### `backend/app/llm/providers/base.py`
 职责：
@@ -200,10 +216,11 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 #### `backend/app/retrieval/vector_retriever.py`
 职责：
 
-- 承接 `question_vector` / `answer_vector` 双向量检索
+- 承接第二阶段最小向量召回
+- 基于统一 `knowledge_units_v1` 候选集做本地向量相似度排序
 - 支持：
   - normalized_query
-  - semantic_expansions
+  - metadata pre-filter
 
 第一轮要求：
 
@@ -274,21 +291,22 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 ---
 
-### 3.4 当前尚未落地的运行与观测层
+### 3.4 当前已最小落地的运行与观测层
 
 #### `backend/app/observability/retrieval_trace.py`
 职责：
 
 - 统一生成 Retrieval Trace
+- 当前已支持按 `trace_id` 回放
 - 包含：
   - raw_query
   - normalized_query
   - domain_hint
-  - lexical_hits
-  - vector_hits
-  - rrf_hits
-  - rerank_result
-  - evidence_spans
+  - lexical_terms
+  - filters
+  - retrieved_chunks
+  - citations
+  - fallback_reason
   - final_status
 
 #### `backend/app/testing/hard_cases_repo.py`
@@ -296,8 +314,9 @@ Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、re
 
 - 管理 hard cases
 - 支持：
+  - `no_evidence` fallback 写入
   - 用户负反馈样本回流
-  - smoke set / regression set 读取
+  - 最小读取 / 排查查看
 
 #### `backend/app/cache/query_cache.py`
 职责：
@@ -553,8 +572,16 @@ normalize
 
 当前状态：
 
-- 尚未落地
-- 目前仅 `settings.py` 中预留了 planner 相关配置项
+- 已部分落地
+- `query_planner.py` 已进入仓库
+- `chat_service.py` 已支持在 `enable_query_planner=true` 时切入 planner
+- 当前 planner 真实输出为：
+  - `normalized_query`
+  - `domain_hint`
+  - `lexical_terms`
+  - `planner_confidence`
+- 当前 planner 高置信时可为 ES 过渡链提供更稳定的检索输入；低置信时仍回退到现有 rule_parser / fast track 路径
+- `ollama_provider.py` 与更强 provider 形态仍未落地
 
 ### Step 4：Hybrid + RRF
 优先做：
@@ -572,7 +599,11 @@ normalize
 
 当前状态：
 
-- 尚未落地
+- 已最小落地
+- `vector_retriever.py` 已进入仓库
+- `hybrid_retriever.py` 已进入仓库
+- `chat_service.py` 已支持在 planner 高置信时进入 `lexical + vector + RRF`
+- 当前 FAQ-first 仍然成立；hybrid 不会把返回重新退化成 `document_chunk` JSON 残片
 
 ### Step 5：Rerank + Evidence
 优先做：
@@ -583,18 +614,24 @@ normalize
 
 当前状态：
 
-- 尚未落地
+- 已最小接入默认 phase 2 hybrid 服务链
+- `reranker.py` 与 `evidence_extractor.py` 已进入仓库
+- `chat_service.py` 已在 planner 高置信进入 hybrid path 后接入 topN rerank 与 evidence extraction
+- 当前 FAQ / document 冲突会优先返回带可接受证据的 FAQ 候选，并用 evidence span 强化 citation snippet
+- 当前 lexical-only 回退路径与主线 1 默认链路仍不进入 rerank / evidence
 
 ### Step 6：缓存 / hard cases / API fallback
 最后做：
 
 - `query_cache.py`
-- `hard_cases_repo.py`
 - `api_provider.py`
 
 当前状态：
 
-- 尚未落地
+- 已部分落地
+- `retrieval_trace.py` 已支持 trace 落盘与按 `trace_id` 回放
+- `hard_cases_repo.py` 已支持最小写入 / 读取
+- `query_cache.py` 与 `api_provider.py` 仍未落地
 
 ---
 
@@ -613,9 +650,67 @@ normalize
 
 - 第 1 条已具备最小落地基础
 - 第 1 条对应的最小单测保护已补齐
+- 第 2 条已具备最小过渡实现与回归保护
+- 第 3 条已能在当前灰度链路下手动验证通过
+- 第 4 条已具备最小落地基础
 - 第 5 条已具备最小配置回退基础
 - 第 6 条已通过 `docs/2_2_file_responsibilities.md` 做职责收口
-- 第 2 / 3 / 4 条仍不能视为已整体完成
+
+### 9.1 当前建议的默认开关矩阵
+
+当前仓库建议冻结为以下三档：
+
+1. 默认稳定档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+2. Phase 2 Elasticsearch 过渡档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. Phase 2 当前真实灰度档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+   - `ORIONSTACK_PLANNER_PROVIDER=local`
+
+当前不建议：
+
+- 直接把 phase 2 灰度档改成全环境默认值
+- 在未通过 smoke 前直接把 `enable_query_planner=true` 带进生产全量
+
+### 9.2 当前灰度启用条件
+
+只有同时满足以下条件，才建议打开 phase 2 当前真实灰度档：
+
+1. `backend/tests/test_chat_flow.py` 与 `backend/tests/test_document_flow.py` 通过
+2. `backend/tests/test_phase2_settings.py`、`test_phase2_knowledge_unit.py`、`test_phase2_indexing.py`、`test_phase2_retrieval.py`、`test_phase2_planner.py` 通过
+3. Elasticsearch 连通、索引存在且可查询
+4. 手动 smoke 中，`请假`、`病假材料`、`请假进度怎么看` 这类 query 不再退化为 `document_chunk` JSON 残片
+5. Hard Cases 闭环可用，便于灰度窗口内排查与回退
+
+### 9.3 当前最小回滚策略
+
+当前建议优先使用“开关回退”，而不是代码回滚：
+
+1. 软回退：
+   - 保留 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - 将 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - 保留 `ORIONSTACK_ENABLE_FAST_TRACK=true`
+   - 作用：回到 FAQ-first 的 lexical-only 过渡链
+2. 硬回退：
+   - 设置 `ORIONSTACK_SEARCH_BACKEND=local`
+   - 同时将 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - 同时将 `ORIONSTACK_ENABLE_FAST_TRACK=false`
+   - 作用：完整回到当前主线 1 默认链路
+
+触发任一情况，建议立即回到至少“软回退”：
+
+- phase 2 相关 pytest / smoke 未通过
+- Elasticsearch 连通或索引健康检查失败
+- 灰度 query 明显回到 `doc-...-chunk-*` 或 FAQ seed JSON 残片返回
+- `no_evidence` 或负反馈导致 hard cases 在灰度窗口内持续新增
+- citation / fallback / debug_info 契约出现无预期漂移
 
 ---
 

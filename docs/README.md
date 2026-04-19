@@ -269,6 +269,55 @@ docs/
   -> 改 `docs/designs/document_ingestion_boundary.md`
 - 改文档库分类标准、字段冻结或业务域收录边界  
   -> 改 `docs/designs/document_library/` 下对应文档
+- 改“职责链拆分定义”或“某条链负责什么 / 不负责什么”  
+  -> 同时改对应 `docs/designs/*system_design.md` 与 `docs/*_2_file_responsibilities.md`
+
+## 4.7 想按职责链推进开发
+
+推荐先判断当前问题属于哪条职责链，再进入对应文档组。
+
+### 当前默认实现（主线 1）
+
+- Query / Routing 链  
+  阅读顺序：  
+  1. `docs/designs/1_system_design.md`  
+  2. `docs/1_2_file_responsibilities.md`  
+  3. 对应后端 `routing/`、`guardrails/`、`schemas/request.py`
+
+- Retrieval / Answering 链  
+  阅读顺序：  
+  1. `docs/designs/1_system_design.md`  
+  2. `docs/1_2_file_responsibilities.md`  
+  3. 对应后端 `chat_service.py`、`retriever.py`、`citation_mapper.py`
+
+- Document Ingestion / Knowledge 链  
+  阅读顺序：  
+  1. `docs/designs/document_ingestion_boundary.md`  
+  2. `docs/designs/document_library/README.md`  
+  3. `docs/designs/document_library/phase1_document_library_fields_freeze.md`  
+  4. 对应后端 `document_service.py`、`document_parser.py`、`chunk_service.py`
+
+- API / Response / Frontend Contract 链  
+  阅读顺序：  
+  1. `docs/designs/1_system_design.md`  
+  2. `docs/1_2_file_responsibilities.md`  
+  3. 对应 `api/routes/`、`schemas/response.py`、前端 `components/chat/`
+
+- Trace / Feedback / DevOps 链  
+  阅读顺序：  
+  1. `docs/designs/1_system_design.md`  
+  2. `docs/1_1_progress.md`  
+  3. `scripts/README.md` 与记录相关 repo
+
+### 第二阶段升级（主线 2）
+
+- Query Planner / Knowledge Unit / Retrieval Execution / Rerank / Evidence / Trace Gray Rollback  
+  阅读顺序：  
+  1. `docs/designs/2_system_design.md`  
+  2. `docs/2_2_file_responsibilities.md`  
+  3. `docs/2_1_progress.md`  
+  4. `docs/2_3_field_definitions.md`  
+  5. `docs/2_4_test_strategy.md`
 
 ---
 

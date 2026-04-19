@@ -1,20 +1,28 @@
 import json
 from pathlib import Path
-import sys
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-if str(BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.api.routes import chat as chat_route
+from app.api.routes import documents as documents_route
 from app.config.settings import Settings
 from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
 from app.services.chat_service import ChatService
+from fastapi.testclient import TestClient
+from main import app
 
 
 def _configure_chat_record_storage(tmp_path: Path) -> None:
     chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
     chat_route.chat_record_repository._path = tmp_path / "chat_records.jsonl"
+    chat_route.retrieval_trace_repository._path = tmp_path / "retrieval_traces.jsonl"
+    chat_route.hard_cases_repository._path = tmp_path / "hard_cases.jsonl"
+
+
+def _configure_shared_document_and_chat_storage(tmp_path: Path) -> None:
+    _configure_chat_record_storage(tmp_path)
+    documents_route.service._repository._meta_path = tmp_path / "documents.jsonl"
+    documents_route.service._repository._upload_dir = tmp_path / "uploads"
+    documents_route.service._chunk_repository._path = tmp_path / "chunks.jsonl"
+    chat_route.service._chunk_repo._path = tmp_path / "chunks.jsonl"
 
 
 def test_chat_service_returns_ok_for_known_faq_query(tmp_path) -> None:
@@ -311,6 +319,115 @@ def test_chat_route_records_feedback(tmp_path) -> None:
     assert feedback_records_response.items[0].feedback_label == "up"
 
 
+def test_chat_route_persists_retrieval_trace_and_replays_by_trace_id(
+    tmp_path,
+) -> None:
+    _configure_chat_record_storage(tmp_path)
+
+    ask_response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
+
+    trace_lines = (
+        (tmp_path / "retrieval_traces.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(trace_lines) == 1
+    trace_record = json.loads(trace_lines[0])
+    assert trace_record["trace_id"] == ask_response.trace_id
+    assert trace_record["raw_query"] == "如何上传文档？"
+    assert trace_record["normalized_query"] == "如何上传文档？"
+    assert trace_record["intent"] == "faq_qa"
+    assert trace_record["final_status"] == "ok"
+    assert trace_record["retrieved_chunks"] == ["hr-faq-001"]
+    assert trace_record["citations"][0]["citation_id"] == "hr-faq-001"
+    assert trace_record["created_at"]
+
+    replayed_trace = chat_route.get_retrieval_trace(ask_response.trace_id)
+    assert replayed_trace["trace_id"] == ask_response.trace_id
+    assert replayed_trace["citations"][0]["source_locator"] == "hr_faq_seed_v1#hr-faq-001"
+
+
+def test_chat_route_records_hard_case_for_negative_feedback(tmp_path) -> None:
+    _configure_chat_record_storage(tmp_path)
+
+    ask_response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True)
+    )
+
+    chat_route.submit_feedback(
+        ChatFeedbackRequest(
+            trace_id=ask_response.trace_id,
+            raw_query="如何上传文档？",
+            answer_text="请在文档页面点击上传按钮。",
+            feedback_label="down",
+            response_status="ok",
+            retrieved_chunk_ids=["faq-001"],
+            normalized_query="如何上传文档？",
+            router_used="rule_parser",
+            route_result="faq_qa",
+        )
+    )
+
+    hard_case_lines = (
+        (tmp_path / "hard_cases.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(hard_case_lines) == 1
+    hard_case = json.loads(hard_case_lines[0])
+    assert hard_case["trace_id"] == ask_response.trace_id
+    assert hard_case["user_feedback"] == "down"
+    assert hard_case["raw_query"] == "如何上传文档？"
+    assert hard_case["top_candidates"][0]["citation_id"] == "hr-faq-001"
+    assert hard_case["evidence_spans"][0]["text"]
+
+    listed = chat_route.list_hard_cases(limit=10)
+    assert len(listed["items"]) == 1
+    assert listed["items"][0]["trace_id"] == ask_response.trace_id
+
+
+def test_chat_route_records_hard_case_for_no_evidence_fallback(
+    monkeypatch, tmp_path
+) -> None:
+    _configure_chat_record_storage(tmp_path)
+
+    def return_no_evidence(payload, *, trace_id: str, debug_enabled: bool):
+        from app.schemas.response import ChatAskResponse, DebugInfo
+
+        return ChatAskResponse(
+            response_status="fallback",
+            trace_id=trace_id,
+            answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
+            citations=[],
+            debug_info=DebugInfo(
+                normalized_query=payload.raw_query.strip(),
+                route_result="faq_qa_elastic",
+                router_used="query_planner_local",
+                retrieved_chunks=[],
+                route_confidence=None,
+                retrieval_score=None,
+                fallback_reason="no_evidence",
+            ),
+        )
+
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+    monkeypatch.setattr(chat_route.service, "ask", return_no_evidence)
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="请假", debug=True))
+
+    assert response.response_status == "fallback"
+    hard_case_lines = (
+        (tmp_path / "hard_cases.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    assert len(hard_case_lines) == 1
+    hard_case = json.loads(hard_case_lines[0])
+    assert hard_case["trace_id"] == response.trace_id
+    assert hard_case["fallback_reason"] == "no_evidence"
+    assert hard_case["raw_query"] == "请假"
+
+    replayed_trace = chat_route.get_retrieval_trace(response.trace_id)
+    assert replayed_trace["final_status"] == "fallback"
+    assert replayed_trace["fallback_reason"] == "no_evidence"
+
+
 def test_chat_route_lists_recent_records_in_demo(tmp_path, monkeypatch) -> None:
     _configure_chat_record_storage(tmp_path)
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
@@ -353,6 +470,20 @@ def test_chat_route_hides_record_endpoints_in_prod(monkeypatch) -> None:
         assert getattr(error, "status_code", None) == 404
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("expected feedback endpoint to be hidden in prod")
+
+    try:
+        chat_route.get_retrieval_trace("trace-missing")
+    except Exception as error:
+        assert getattr(error, "status_code", None) == 404
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected trace replay endpoint to be hidden in prod")
+
+    try:
+        chat_route.list_hard_cases(limit=10)
+    except Exception as error:
+        assert getattr(error, "status_code", None) == 404
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected hard cases endpoint to be hidden in prod")
 
 
 def test_chat_record_repo_truncates_oldest_records(tmp_path) -> None:
@@ -484,3 +615,37 @@ def test_short_chinese_query_hits_document_chunk(tmp_path) -> None:
     assert response.response_status == "ok"
     assert "请假" in response.answer
     assert len(response.citations) == 1
+
+
+def test_chat_route_returns_structured_answer_for_uploaded_hr_faq_seed(tmp_path) -> None:
+    _configure_shared_document_and_chat_storage(tmp_path)
+
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "domain_hr_faq_seed_v1.md"
+    client = TestClient(app)
+    upload_response = client.post(
+        "/api/documents/upload",
+        files={
+            "file": (
+                fixture_path.name,
+                fixture_path.read_bytes(),
+                "text/markdown",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 200
+
+    ask_response = client.post(
+        "/api/chat/ask",
+        json={"raw_query": "病假材料", "debug": True},
+    )
+
+    assert ask_response.status_code == 200
+    payload = ask_response.json()
+    assert payload["response_status"] == "ok"
+    assert "病假通常需要提交医院证明或诊断材料" in payload["answer"]
+    assert len(payload["citations"]) == 1
+    assert payload["citations"][0]["citation_id"] == "hr-faq-002"
+    assert payload["citations"][0]["source_label"] == "HR FAQ"
+    assert payload["citations"][0]["source_locator"] == "hr_faq_seed_v1#hr-faq-002"
+    assert payload["citations"][0]["snippet"]

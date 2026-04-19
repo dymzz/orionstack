@@ -30,9 +30,10 @@
 
 - `Knowledge Unit` 统一数据层
 - Elasticsearch lexical-only 过渡检索链路
+- 最小 Query Planner 与 Hybrid Retrieval 过渡链路
 - 第二阶段索引写入与索引健康检查
 - 主服务中的 phase 2 search backend 切换入口
-- 后续将接入的 planner / hybrid / rerank / trace / hard cases
+- 后续将继续扩展的 rerank / trace / hard cases
 
 当前仓库中**已落地并应纳入最小测试策略**的文件主要包括：
 
@@ -103,6 +104,8 @@
 - 基础安全拒答
 - debug 信息在不同运行模式下的暴露边界
 - citation 最小结构与最小回源定位断言
+- retrieval trace 落盘与按 `trace_id` 回放
+- hard cases 最小写入 / 读取与负反馈回流
 
 当前意义：
 
@@ -167,14 +170,34 @@
 - `ChatService` 在 `search_backend = elasticsearch` 下的最小切换行为
 - `ChatService` 在 Elasticsearch 无命中时的 fallback 行为
 - `ChatService._extract_lexical_terms()` 的最小稳定输出
+- `VectorRetriever` 的最小候选过滤与排序行为
+- `HybridRetriever` 的 lexical + vector + RRF 融合行为
+- `ChatService` 在 planner 高置信时进入 hybrid path 的最小接线行为
+- `EvidenceExtractor` 的最小证据句抽取
+- `Reranker` 在 FAQ / document 冲突时的最小重排行为
+- `ChatService` 在 hybrid path 上使用 rerank / evidence 的最终返回行为
+- `ChatService` 在 planner 低置信时回退到 rule_parser / fast track / lexical-only 的行为
+- FAQ-first 在 ES 过渡链路下不退化回 `document_chunk`
+
+#### `backend/tests/test_phase2_planner.py`
+
+当前已覆盖：
+
+- `QueryPlanner` 最小字段输出：
+  - `normalized_query`
+  - `domain_hint`
+  - `lexical_terms`
+  - `planner_confidence`
+- `ChatService` 在 planner 开启时对 ES lexical-only 过渡链路的最小参数透传
+- `ChatService` 在 planner 低置信时保持当前回退路径
 
 ### 4.4 当前仍待补齐、但已明确存在测试价值的 phase 2 模块
 
 当前尚缺少专门测试文件或明确断言的模块主要包括：
 
-- `retrieval_trace.py` 真正落地后的 trace 回放行为
-- `hard_cases_repo.py` 真正落地后的样本回流与读取行为
-- planner / hybrid / rerank / evidence 真正进入仓库后的最小可执行测试位
+- `query_cache.py` 真正落地后的缓存一致性行为
+- `api_provider.py` 真正落地后的降级与回退行为
+- retrieval trace / hard cases 的更完整发布前门槛
 
 ---
 
@@ -196,7 +219,7 @@
 当前建议命令：
 
 ```bash
-python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
+python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
 ```
 
 当前 smoke 至少应覆盖：
@@ -298,11 +321,29 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 - `search_backend` 切换后的最小服务行为
 - Elasticsearch 无命中时的 fallback 行为
 - `_extract_lexical_terms()` 的最小稳定输出
+- `VectorRetriever` 的最小召回排序
+- `HybridRetriever` 的 RRF 融合
+- planner 高置信时进入 hybrid 的服务层接线
+- `EvidenceExtractor` 的最小证据抽取
+- `Reranker` 的 FAQ / document 冲突重排
+- hybrid path 上 `citation snippet` 使用 evidence span 的行为
+- 无可接受证据时的 `no_evidence` fallback
+- planner 低置信时的回退路径
+- FAQ-first 在 ES 过渡链路下的最终返回行为
 
 说明：
 
 - 当前实现主要通过 stub / monkeypatch 完成
 - 不要求这些 regression 依赖真实 Elasticsearch 实例
+
+### `backend/tests/test_phase2_planner.py`
+
+已覆盖：
+
+- planner 输出字段稳定性
+- planner 在主服务中的最小接线行为
+- planner 对 elastic lexical-only 过渡链路的参数透传
+- planner 低置信时的回退行为
 
 ### `backend/tests/test_phase2_indexing.py`
 
@@ -332,14 +373,14 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 - hard cases 样本读取
 - user feedback 回流后的最小字段完整性
 
-### planner / hybrid / rerank 对应测试文件
+### trace / hard cases 对应测试文件
 
 建议覆盖：
 
-- planner 输出字段稳定性
-- hybrid top-k 基本行为
-- rerank accept / reject 判断
-- evidence spans 最小结构
+- retrieval trace 落盘结构
+- trace 按 `trace_id` 回放
+- hard cases 写入
+- hard cases 样本读取
 
 ---
 
@@ -365,10 +406,8 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 
 ### 7.2 后续目标测试层
 
-只有当以下能力真正落地后，才应把对应测试升级为默认要求：
+只有当以下能力真正接入默认服务链后，才应把对应测试升级为默认要求：
 
-- planner 输出
-- hybrid retrieval
 - rerank + evidence
 - retrieval trace 落盘
 - hard cases 样本回流
@@ -382,9 +421,69 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 
 1. `backend/tests/test_chat_flow.py` 通过
 2. `backend/tests/test_document_flow.py` 通过
-3. 若修改涉及 phase 2 Elasticsearch 过渡链路，则补一轮环境可用下的 elastic smoke
-4. 不允许因为 phase 2 新能力而破坏当前 local 默认链路
-5. 不允许因为 phase 2 字段或职责扩展而让 citation / debug_info / fallback 契约无声漂移
+3. `backend/tests/test_phase2_settings.py`、`test_phase2_knowledge_unit.py`、`test_phase2_indexing.py`、`test_phase2_retrieval.py`、`test_phase2_planner.py` 通过
+4. 若修改涉及 phase 2 Elasticsearch 过渡链路，则补一轮环境可用下的 elastic smoke
+5. 不允许因为 phase 2 新能力而破坏当前 local 默认链路
+6. 不允许因为 phase 2 字段或职责扩展而让 citation / debug_info / fallback 契约无声漂移
+
+### 8.1 当前建议的发布开关矩阵
+
+当前建议冻结为三档：
+
+1. 默认稳定档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+2. Elasticsearch 过渡档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. Phase 2 当前真实灰度档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+   - `ORIONSTACK_PLANNER_PROVIDER=local`
+
+### 8.2 当前建议的发布前最小 smoke
+
+当前建议至少执行：
+
+```bash
+python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```
+
+若本次发布启用了 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`，还应额外做一轮环境可用下的手动 smoke：
+
+1. 确认 Elasticsearch 连通，索引存在且可查询
+2. 手动请求 `请假`
+3. 手动请求 `病假材料`
+4. 手动请求 `请假进度怎么看`
+5. 核对返回：
+   - `route_result = faq_qa_elastic`
+   - `retrieved_chunks` 为 FAQ 风格 ID，而不是 `doc-...-chunk-*`
+   - `citation.source_locator` 为 `hr_faq_seed_v1#...`
+   - 不返回 FAQ seed JSON 残片
+
+### 8.3 当前建议的最小回滚条件
+
+满足任一情况，建议立即回滚：
+
+1. 上述 pytest 或手动 smoke 未通过
+2. Elasticsearch 连通或索引健康检查失败
+3. 灰度 query 返回重新退化为 `document_chunk` 残片
+4. `no_evidence` 或负反馈导致 hard cases 在灰度窗口内持续新增
+5. citation / fallback / debug_info 契约出现无预期漂移
+
+当前回滚顺序建议为：
+
+1. 先做软回退：
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - 保留 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - 保留 `ORIONSTACK_ENABLE_FAST_TRACK=true`
+2. 若问题仍在，再做硬回退：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
 
 ---
 
@@ -402,4 +501,4 @@ python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2
 
 ## 10. 一句话收口
 
-**第二阶段最小测试策略的目标不是提前建设完整评测平台，而是先为已落地过渡模块建立 smoke 与 regression 保护带，并为后续 planner / hybrid / rerank / trace 的测试位预留清晰入口。**
+**第二阶段最小测试策略的目标不是提前建设完整评测平台，而是先为已落地的 planner / hybrid / rerank / trace 过渡模块建立 smoke 与 regression 保护带，并为后续 query cache / API fallback / 更完整 hard cases 门槛预留清晰入口。**

@@ -48,6 +48,7 @@ docs/1_3_field_definitions.md
 docs/2_1_progress.md
 docs/2_2_file_responsibilities.md
 docs/2_3_field_definitions.md
+docs/2_4_test_strategy.md
 docs/designs/1_system_design.md
 docs/designs/2_system_design.md
 docs/designs/document_ingestion_boundary.md
@@ -2881,530 +2882,327 @@ storage -> local jsonl data / seed/mock data
 **`1_system_design.md` 当前应优先冻结 citation、结果状态、轻量路由、回源定位、反馈与观测字段；不要把下一阶段的检索增强字段提前混入当前实现。**
 </file>
 
-<file path="docs/2_1_progress.md">
-# OrionStack 第二阶段系统设计对应的文件级最小改造清单 v1
+<file path="docs/2_2_file_responsibilities.md">
+# OrionStack 第二阶段文件职责说明 v1
 
-> 状态：执行清单 v1  
-> 对应设计文档：`docs/designs/system_design_phase2_v1.md`  
-> 目标：把第二阶段设计从“系统设计基线”收成“第一轮最小可执行改造范围”  
-> 原则：**最小切入、分步替换、旧链路可回退、先数据统一再切检索**
+> 对应设计文档：`docs/designs/2_system_design.md`  
+> 配套进度文档：`docs/2_1_progress.md`  
+> 配套字段文档：`docs/2_3_field_definitions.md`  
+> 配套测试文档：`docs/2_4_test_strategy.md`
 
----
+## 1. 文档目标
 
-## 1. 当前目标
+本文档用于配合 `docs/designs/2_system_design.md` 与 `docs/2_1_progress.md`，说明第二阶段**已落地文件**与**预留文件位**的职责边界。
 
-本清单只解决一件事：
+本文档只解决一件事：
 
-**把 Phase 2 的目标链路，拆成当前仓库中可落地的最小文件级改造范围。**
+**避免第二阶段升级时，把新检索、新索引、新统一数据层的职责重新塞回第一阶段旧文件。**
 
-当前不追求：
+本文档不承担以下职责：
 
-- 一次性切完整 Query Planner + Hybrid + Rerank + Clarification 全链路
-- 直接删除旧 FAQ / document-first 代码
-- 在第一轮就把所有接口彻底冻结到最终形态
-
-当前优先级按 Phase 2 设计顺序收敛为：
-
-1. 统一 Knowledge Unit 入库
-2. 接 Elastic lexical-only 过渡链路
-3. 再接 vector + RRF
-4. 再接 rerank + evidence extraction
-5. 最后接 clarification / 按需 API fallback
+- 不重写 `2_system_design.md` 的系统设计正文
+- 不替代 `2_1_progress.md` 的推进顺序与状态说明
+- 不替代 `2_3_field_definitions.md` 的字段语义解释
+- 不替代 `2_4_test_strategy.md` 的测试分层与回归策略说明
+- 不假设第二阶段目标链路已经一次性全部落地
 
 ---
 
-## 2. 文件级改造总原则
+## 2. 适用范围
 
-### 2.1 原则一：先并行，不先替换
+本文档适用于第二阶段当前已经在仓库中出现、或已经明确预留文件位的能力，包括：
 
-第一轮改造以“并行引入新模块”为主，不直接拆旧链路。
+- FAQ 与 document chunk 统一为 `Knowledge Unit` 的数据层
+- Elasticsearch lexical-only 过渡链路
+- 第二阶段索引写入与索引健康检查
+- 第二阶段配置开关与主服务过渡接线
+
+当前**已实际落地**的第二阶段相关文件主要包括：
+
+- `backend/app/storage/repositories/knowledge_unit_repo.py`
+- `backend/app/retrieval/lexical_retriever.py`
+- `backend/app/indexing/elastic_indexer.py`
+- `backend/app/indexing/index_health_checker.py`
+
+当前**已具备第二阶段过渡职责**、但不属于“纯新增文件”的文件包括：
+
+- `backend/app/services/chat_service.py`
+- `backend/app/config/settings.py`
+- `backend/app/retrieval/retriever.py`
+- `backend/app/storage/repositories/faq_repo.py`
+
+---
+
+## 3. 使用原则
+
+### 3.1 先并行新增，不先回写旧链路
+
+第二阶段新增能力优先通过新文件并行引入。
 
 含义：
 
-- 新文件优先新增
-- 旧文件先降职责，不先删除
-- 默认主链路先保持可运行
-- 新链路先通过 feature flag / 配置开关灰度启用
+- 能新增文件承载的职责，不应继续堆到旧 `retriever.py`
+- 能落在统一数据层的逻辑，不应继续散落在 FAQ / chunk 两套入口里重复实现
 
-### 2.2 原则二：先收数据，再切检索
+### 3.2 文件职责按“已落地”和“预留”分开理解
 
-在 FAQ 与 document chunk 尚未统一成 Knowledge Unit 之前，不应直接切默认检索主链路。
+- 已落地文件：按当前真实代码职责维护
+- 预留文件：只定义未来应放在哪里，不提前当作已实现模块使用
 
-### 2.3 原则三：先 lexical-only，再 hybrid
+### 3.3 第二阶段重型能力必须可关闭
 
-Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、rerank 全部一起打开。
+第二阶段相关文件职责应默认服从配置开关：
 
-### 2.4 原则四：所有重型能力都必须可关闭
+- lexical-only 可单独开启
+- planner 可关闭
+- hybrid / rerank / online fallback 不应默认硬依赖
 
-以下能力第一轮必须支持关闭：
+### 3.4 服务入口稳定优先
 
-- Query Planner 强改写
-- vector retrieval
-- rerank
-- clarification mode
-- online API fallback
+第二阶段第一轮不优先改外部 API 形态。
 
----
+因此：
 
-## 3. 第一轮新增文件清单
-
-以下文件建议在第一轮新增。
-
-### 3.1 Query 与 LLM Provider
-
-#### `backend/app/query/query_planner.py`
-职责：
-
-- 生成 `normalized_query`
-- 生成 `domain_hint`
-- 生成 `semantic_expansions`
-- 生成 `lexical_terms`
-- 执行 planner guardrails：
-  - hard keyword locking
-  - circuit breaker
-  - drift guard
-  - domain anchoring
-
-第一轮要求：
-
-- 可由本地实现或简单 provider 调用驱动
-- 支持关闭 semantic expansion，仅保留 normalized + lexical_terms
-
-#### `backend/app/llm/providers/base.py`
-职责：
-
-- 定义统一 provider 接口：
-  - QueryPlannerProvider
-  - RerankProvider
-  - AnswerComposerProvider
-
-#### `backend/app/llm/providers/ollama_provider.py`
-职责：
-
-- 承接本地 Ollama 模型调用
-- 用于：
-  - planner
-  - 可选 rerank
-  - 可选 composer
-
-#### `backend/app/llm/providers/api_provider.py`
-职责：
-
-- 承接在线 LLM API
-- 默认关闭，仅按需启用
+- `chat.py` 仍保持稳定 API 入口
+- 新能力优先在 `chat_service.py` 内部通过 adapter / 开关接入
 
 ---
 
-### 3.2 Retrieval 层
+## 4. 第二阶段已落地新增文件职责
 
-#### `backend/app/retrieval/lexical_retriever.py`
+## 4.1 统一数据层与索引层
+
+### `backend/app/storage/repositories/knowledge_unit_repo.py`
+
 职责：
 
-- 承接 Elastic lexical-only 检索
-- 作为当前 `retriever.py` 的过渡替代层
-- 支持：
-  - normalized_query
-  - lexical_terms
-  - metadata pre-filter
+- 作为第二阶段统一知识单元读取入口
+- 把 FAQ 记录映射成 `KnowledgeUnit`
+- 把 document chunk 映射成 `KnowledgeUnit`
+- 提供统一的 `list_all / list_faq_units / list_chunk_units` 读取能力
+- 为索引层与后续统一检索层提供统一数据视图
 
-#### `backend/app/retrieval/vector_retriever.py`
+不负责：
+
+- 不负责原始 FAQ 文件读取
+- 不负责原始文档上传与切块
+- 不负责检索排序、分数融合与回答生成
+- 不负责直接决定哪些知识单元应被召回
+
+### `backend/app/indexing/elastic_indexer.py`
+
 职责：
 
-- 承接 `question_vector` / `answer_vector` 双向量检索
-- 支持：
-  - normalized_query
-  - semantic_expansions
+- 维护 `knowledge_units_v1` 索引的最小建库与写入入口
+- 负责索引 mapping 创建
+- 负责将 `KnowledgeUnit` 批量写入 Elasticsearch
+- 负责索引刷新与重建时的最小支持
 
-第一轮要求：
+不负责：
 
-- 允许关闭
-- 不作为默认主路径强依赖
+- 不负责知识单元如何生成
+- 不负责查询路由与召回策略
+- 不负责索引健康裁决之外的系统降级决策
 
-#### `backend/app/retrieval/hybrid_retriever.py`
+### `backend/app/indexing/index_health_checker.py`
+
 职责：
 
-- 组合 lexical + vector
-- 应用 metadata pre-filter
-- 执行 RRF 融合
-- 输出：
-  - lexical_hits
-  - vector_hits
-  - rrf_hits
-  - 原始 retrieval signals
+- 检查 Elasticsearch 连通性
+- 检查目标索引是否存在
+- 输出最小索引状态信息，例如 `connected / index_exists / doc_count / errors`
+- 为第二阶段检索链路切换提供最小健康前置判断
 
-#### `backend/app/retrieval/reranker.py`
+不负责：
+
+- 不负责自动修复索引
+- 不负责建索引
+- 不负责完整可观测平台或复杂巡检编排
+
+## 4.2 第二阶段检索过渡层
+
+### `backend/app/retrieval/lexical_retriever.py`
+
 职责：
 
-- 执行候选重排
-- 判定：
-  - accept_threshold
-  - margin_threshold
-- 输出：
-  - top1_score
-  - top2_score
-  - accept / reject
-  - conflict_detected
+- 承接 Elasticsearch lexical-only 检索
+- 面向 `knowledge_units_v1` 执行统一词法召回
+- 支持 `normalized_query` 与 `lexical_terms`
+- 支持最小 metadata filter：`business_domain / access_scope / lifecycle_status`
+- 输出统一 `LexicalHit` 结构，供服务层后续处理
 
-#### `backend/app/retrieval/evidence_extractor.py`
+不负责：
+
+- 不负责 Query Planner 生成
+- 不负责 vector retrieval
+- 不负责 RRF 融合
+- 不负责 rerank 与 evidence extraction
+- 不负责回答文本改写
+
+## 4.3 第二阶段服务与配置接线层
+
+### `backend/app/services/chat_service.py`
+
 职责：
 
-- 从 top 候选中提取 `evidence_spans`
-- 若无明确证据，直接标记弱证据
+- 继续作为问答主服务入口
+- 在不改外部 API 形态的前提下，承接第二阶段过渡接线
+- 维护本地检索与 Elasticsearch lexical-only 检索之间的切换入口
+- 统一串联：归一化、基础路由保护、检索、citation 映射、响应构建
+- 持有 `KnowledgeUnitRepository` 作为第二阶段统一数据视图接入点
+
+不负责：
+
+- 不负责把 planner、hybrid、rerank 的完整实现全部内联在一个函数里
+- 不负责成为第二阶段所有实验逻辑的堆放点
+- 不负责替代索引层、retrieval 层、provider 层的独立职责
+
+### `backend/app/config/settings.py`
+
+职责：
+
+- 维护第二阶段最小配置开关与环境变量入口
+- 当前已承接：
+  - `search_backend`
+  - `elastic_url`
+  - `elastic_index`
+  - `elastic_use_ik_analyzer`
+  - `enable_query_planner`
+  - `planner_provider`
+  - `planner_model`
+  - `ollama_url`
+  - `enable_fast_track`
+- 为第二阶段重型能力保留“默认可关闭”的配置基础
+
+不负责：
+
+- 不负责实现 planner 本身
+- 不负责实现检索逻辑本身
+- 不负责承载复杂运行时状态
 
 ---
 
-### 3.3 索引与数据层
+## 5. 第二阶段中保留但不应继续堆新逻辑的旧文件
 
-#### `backend/app/storage/repositories/knowledge_unit_repo.py`
-职责：
+### `backend/app/retrieval/retriever.py`
 
-- 统一 FAQ 与 document chunk 的入库读取接口
-- 提供：
-  - FAQ -> Knowledge Unit 映射
-  - chunk -> Knowledge Unit 映射
-  - 历史回填入口
+当前定位：
 
-#### `backend/app/indexing/elastic_indexer.py`
-职责：
+- 仍是当前本地链路与 document-first 的兼容实现
+- 属于过渡层，不是第二阶段新能力的长期主承载文件
 
-- 建立 / 更新 `knowledge_units_v1`
-- 处理：
-  - 索引创建
-  - 文档写入
-  - question / answer 双向量写入
-  - version / valid_from / valid_until 元数据同步
+约束：
 
-#### `backend/app/indexing/index_health_checker.py`
-职责：
+- 不应继续往其中堆 planner、hybrid、rerank、evidence 等第二阶段新逻辑
+- 如有新检索模块，应优先新增独立文件承载
 
-- 检查索引是否存在
-- 检查字段与 dims 是否匹配配置
-- 执行最小联通性查询
-- 验证 Hybrid + RRF 查询路径可用
+### `backend/app/storage/repositories/faq_repo.py`
+
+当前定位：
+
+- 保留为 mock / demo FAQ 数据源读取器
+- 继续服务第一阶段兼容链路与第二阶段统一映射输入
+
+约束：
+
+- 不应再次演化成第二阶段统一数据中心
+- FAQ 与 document 的统一视图应优先落在 `knowledge_unit_repo.py`
 
 ---
 
-### 3.4 运行与观测层
+## 6. 第二阶段预留但当前尚未落地的文件位
 
-#### `backend/app/observability/retrieval_trace.py`
-职责：
+以下文件位在第二阶段设计中是合理的，但当前仓库尚未真正落地。
 
-- 统一生成 Retrieval Trace
-- 包含：
-  - raw_query
-  - normalized_query
-  - domain_hint
-  - lexical_hits
-  - vector_hits
-  - rrf_hits
-  - rerank_result
-  - evidence_spans
-  - final_status
+当前要求是：
 
-#### `backend/app/testing/hard_cases_repo.py`
-职责：
+- 先在职责文档中冻结“该放哪类逻辑”
+- 不把这些职责提前塞回旧文件
 
-- 管理 hard cases
-- 支持：
-  - 用户负反馈样本回流
-  - smoke set / regression set 读取
+### 6.1 Query / Provider 层
 
-#### `backend/app/cache/query_cache.py`
-职责：
+预留文件位：
 
-- 提供轻量缓存能力
-- key 至少包含：
-  - normalized_query
-  - domain_hint
-  - access_scope
-  - doc_version_snapshot
+- `backend/app/query/query_planner.py`
+- `backend/app/llm/providers/base.py`
+- `backend/app/llm/providers/ollama_provider.py`
+- `backend/app/llm/providers/api_provider.py`
 
----
+未来应承载：
 
-## 4. 第一轮需要改职责的旧文件
+- planner 输出生成
+- provider 统一抽象
+- Ollama / API 调用封装
 
-以下旧文件建议“改职责”，而不是立即删除。
+当前不应塞回：
 
-### 4.1 `backend/app/services/chat_service.py`
-当前问题：
+- `chat_service.py`
+- `settings.py`
 
-- 仍围绕旧主链路组织
-- 直接依赖旧 resolver / retriever / faq fallback 习惯
+### 6.2 Retrieval 扩展层
 
-第一轮改造目标：
+预留文件位：
 
-- 保持它继续作为主服务入口
-- 但把内部流程改成可切换：
+- `backend/app/retrieval/vector_retriever.py`
+- `backend/app/retrieval/hybrid_retriever.py`
+- `backend/app/retrieval/reranker.py`
+- `backend/app/retrieval/evidence_extractor.py`
 
-```text
-normalize
--> optional query planner
--> fast track gate
--> retrieval adapter
--> optional rerank
--> optional answer composer
--> response builder
-```
+未来应承载：
 
-最小要求：
+- 向量召回
+- lexical + vector 融合
+- rerank 判断
+- evidence spans 抽取
 
-- 能通过配置在旧链路 / lexical-only / hybrid 之间切换
-- 不直接把所有 phase2 逻辑硬编码在一个函数里
+当前不应塞回：
 
----
-
-### 4.2 `backend/app/routing/rule_parser.py`
-当前问题：
-
-- 对 FAQ 短 query 有硬门效应
-
-第一轮改造目标：
-
-- 从“决定问题是否进入主链路”
-- 降级为：
-  - 空输入保护
-  - 明显无效输入保护
-  - 极少数安全拒答
-
-第一轮不再要求它负责：
-
-- 判断“请假”是否像 FAQ
-- 决定 query 是否值得检索
-
----
-
-### 4.3 `backend/app/retrieval/retriever.py`
-当前问题：
-
-- 是旧最小检索器
-- 职责混合：
-  - lexical
-  - FAQ fallback
-  - 阈值判定
-
-第一轮改造目标：
-
-- 不立刻删除
-- 降级为：
-  - 兼容旧链路的过渡实现
-  - 或封装到 lexical-only adapter 中
-
-原则：
-
-- 旧链路仍可回退使用
-- 不再继续向这个文件堆 phase2 新逻辑
-
----
-
-### 4.4 `backend/app/storage/repositories/faq_repo.py`
-当前问题：
-
-- 仍是独立 FAQ 数据源读取器
-- 容易继续强化“FAQ 一套、document 一套”的分裂结构
-
-第一轮改造目标：
-
-- 保留为 demo/mock provider
-- 不再作为 phase2 主数据源中心
-- 后续通过 `knowledge_unit_repo.py` 做统一映射
-
----
-
-### 4.5 `backend/app/config/settings.py`
-第一轮改造目标：
-
-新增以下配置分组：
-
-- Query Planner
-- Elastic Search Backend
-- Embedding dims
-- Fast Track
-- RRF 参数
-- Rerank 阈值
-- API fallback
-- Index health check
-- Cache / trace / smoke test
-
-原则：
-
-- 当前值可先占位
-- 设计先冻结字段名与职责，不先冻结所有阈值数值
-
----
-
-## 5. 第一轮建议保留不动的旧文件
-
-这些文件第一轮建议不主动大改，只在必要时做兼容补充。
-
-### `backend/app/api/routes/chat.py`
-原因：
-
-- API 入口尽量稳定
-- Phase 2 第一轮不应先改外部路由形态
-
-### `backend/app/schemas/request.py`
-原因：
-
-- 请求体第一轮不需要暴露复杂新参数
-- 内部可先通过配置开关驱动 phase2
-
-### `backend/app/schemas/document.py`
-原因：
-
-- 文档上传与基础 document 结构仍可继续使用
-- 知识单元转换逻辑放到 repo / indexing 层处理
-
-### `frontend/src/pages/chat/ChatPage.vue`
-原因：
-
-- 第一轮重点在后端链路
-- 前端只需兼容新增状态字段，不先重做页面结构
-
----
-
-## 6. 第一轮前后端最小契约改动
-
-### 6.1 后端响应建议新增字段
-
-第一轮建议在现有响应基础上最少补：
-
-- `fallback_reason`
-- `clarification_required`
-- `conflict_detected`
-- `cache_served`
-- `trace_id`
-
-### 6.2 前端第一轮只需识别的新增状态
-
-前端第一轮不需要做完整新交互，只要能识别：
-
-- `no_evidence`
-- `low_confidence`
-- `stale_policy_blocked`
-- `conflict_requires_clarification`
-- `model_timeout`
-- `system_degraded`
-
----
-
-## 7. 第一轮明确不做的文件/实现
-
-以下内容明确不在第一轮落地：
-
-### 7.1 不做的实现
-- Elasticsearch + Milvus 双系统
-- learned fusion
-- 全库人工同义词平台
-- 每次请求都跑的 Planner embedding self-check
-- 多 Agent / workflow graph
-- 全量 Clarification Mode 对话树
-- 默认开启 online API fallback
-
-### 7.2 不急着新增的文件
-- 复杂多租户权限文件
-- 独立的 workflow 编排器
-- 多索引分治管理器
-- 复杂 cache cluster 管理器
-
----
-
-## 8. 第一轮文件级实施顺序
-
-### Step 1：数据与索引基座
-优先做：
-
-- `knowledge_unit_repo.py`
-- `elastic_indexer.py`
-- `index_health_checker.py`
-
-目标：
-
-- 先把 FAQ / chunk 统一进 `knowledge_units_v1`
-- 不切默认主链路
-
-### Step 2：lexical-only 过渡层
-优先做：
-
+- `retriever.py`
 - `lexical_retriever.py`
-- `chat_service.py` 中的 retrieval adapter 切换
 
-目标：
+### 6.3 观测与测试层
 
-- 先用 Elastic 承接 lexical
-- 保留旧 retriever 回退路径
+预留文件位：
 
-### Step 3：Planner 最小可用
-优先做：
+- `backend/app/observability/retrieval_trace.py`
+- `backend/app/testing/hard_cases_repo.py`
 
-- `query_planner.py`
-- `ollama_provider.py`
-- settings 中的 planner 配置
+未来应承载：
 
-目标：
+- 第二阶段 retrieval trace 落盘与回放
+- hard cases 收集与回归样本管理
 
-- 先输出：
-  - normalized_query
-  - domain_hint
-  - lexical_terms
-- semantic expansions 可先弱化
+当前不应塞回：
 
-### Step 4：Hybrid + RRF
-优先做：
-
-- `vector_retriever.py`
-- `hybrid_retriever.py`
-
-目标：
-
-- 小范围灰度：
-  - 请假
-  - 病假材料
-  - 工资条
-  - 调休
-
-### Step 5：Rerank + Evidence
-优先做：
-
-- `reranker.py`
-- `evidence_extractor.py`
-- retrieval trace 落盘
-
-### Step 6：缓存 / hard cases / API fallback
-最后做：
-
-- `query_cache.py`
-- `hard_cases_repo.py`
-- `api_provider.py`
+- `feedback_repo.py`
+- `chat_record_repo.py`
 
 ---
 
-## 9. 第一轮最小验收清单
+## 7. 前端边界说明
 
-第一轮文件级改造完成后，至少要满足：
+第二阶段当前尚未新增独立的前端检索升级文件树。
 
-1. FAQ 与 document chunk 已能映射成统一 Knowledge Unit
-2. Elastic lexical-only 可独立跑通
-3. `请假`、`病假材料` 这类 query 至少能在灰度链路中进入新检索
-4. Retrieval Trace 可落盘
-5. 旧链路仍可通过配置回退
-6. phase2 新增文件职责清晰，不把逻辑重新堆回旧 `retriever.py`
+当前边界：
+
+- 前端仍由现有 `ChatPage.vue` 与相关组件做最小兼容
+- 不新增第二套 phase2 专用前端目录
+- 若未来出现 clarification、trace、冲突解释等复杂交互，再新增专门组件文件承载
 
 ---
 
-## 10. 一句话收口
+## 8. 一句话收口
 
-这份文件级最小改造清单 v1 的核心不是“把所有第二阶段能力一次性写完”，而是：
-
-**把第二阶段系统设计拆成当前仓库里最小、可回退、可灰度、可执行的文件级落地范围。**
-</file>
-
-<file path="docs/2_2_file_responsibilities.md">
-
+**第二阶段文件职责的核心原则是：统一数据层、独立检索层、配置开关优先、旧链路可回退；新增能力优先落新文件，不再反向堆回第一阶段旧文件。**
 </file>
 
 <file path="docs/2_3_field_definitions.md">
 # OrionStack 第二阶段新增字段说明 v1
 
+> 对应设计文档：`docs/designs/2_system_design.md`  
+> 配套进度文档：`docs/2_1_progress.md`  
+> 配套职责文档：`docs/2_2_file_responsibilities.md`  
+> 配套测试文档：`docs/2_4_test_strategy.md`  
 > 文档定位：`2_system_design.md` 的字段解释表  
 > 命名说明：仅按 `1_2_file_responsibilities.md` / `2_2_file_responsibilities.md` 的命名规范延续为 `2_3_field_definitions.md`，不假设未上传文件的具体内容与版式。  
 > 适用范围：`2_system_design.md` + `document_ingestion_boundary.md`
@@ -3422,6 +3220,7 @@ normalize
 - 不重写 `2_system_design.md` 的系统设计
 - 不重复解释 `1_system_design.md` 已冻结且语义未变化的字段
 - 不替代检索、索引、API、数据库的详细实现文档
+- 不替代 `2_4_test_strategy.md` 的测试分层与验证策略说明
 
 ---
 
@@ -3445,6 +3244,28 @@ normalize
 5. Rerank / Evidence / Clarification 字段
 6. 第二阶段失败类型与响应补充字段
 7. Retrieval Trace / hard_cases 字段
+
+### 3.1 当前落地状态说明
+
+为避免把“第二阶段目标字段”和“当前仓库已出现字段”混读，需先明确：
+
+- 本文档中的字段**并不等于都已经落地**
+- 其中一部分已经以最小实现或配置占位的形式进入仓库
+- 另一部分仍属于 `2_system_design.md` 的目标字段，不应被误读成当前默认链路已启用
+
+当前仓库中**已经出现或已有最小占位**的第二阶段字段，主要包括：
+
+- 配置字段：`search_backend`、`elastic_url`、`elastic_index`、`elastic_use_ik_analyzer`、`enable_query_planner`、`planner_provider`、`planner_model`、`ollama_url`、`enable_fast_track`
+- `KnowledgeUnit` 最小字段：`unit_id`、`source_kind`、`question`、`answer`、`body_text`、`keywords`、`business_domain`、`document_type`、`source_type`、`source_label`、`source_locator`、`access_scope`、`lifecycle_status`、`valid_from`、`valid_until`、`version`、`created_at`
+- lexical-only 过渡链路已实际使用的过滤字段：`business_domain`、`access_scope`、`lifecycle_status`
+- 当前链路已具备基础意义的追踪字段：`trace_id`
+
+当前**仍主要属于第二阶段目标设计、尚未在仓库中完整落地**的字段，主要包括：
+
+- planner 扩写结果：`intent`、`semantic_expansions`、`planner_confidence`
+- vector / hybrid / RRF 相关字段：`question_vector`、`answer_vector`、`vector_score`、`vector_rank`、`rrf_rank`
+- rerank / evidence / clarification 相关字段：`rerank_score`、`evidence_spans`、`evidence_confidence`、`conflict_reason`
+- retrieval trace / hard cases 的完整字段集合
 
 ---
 
@@ -3652,7 +3473,7 @@ normalize
 
 ---
 
-## 12. 最终结论
+## 12. 一句话收口
 
 `2_3_field_definitions.md` 的目标不是制造更多字段，而是把第二阶段真正新增的字段分层解释清楚：
 
@@ -3661,8 +3482,6 @@ normalize
 - Knowledge Unit 至少要有什么字段
 - rerank / evidence / clarification 依赖什么字段
 - trace / hard_cases 如何回放
-
-一句话收敛：
 
 **`2_system_design.md` 的新增字段应围绕 Query Planner、Knowledge Unit、Hybrid Retrieval、Rerank / Evidence、Clarification、Trace 6 条主线收敛，不应回流污染 `1_system_design.md` 的当前最小实现。**
 </file>
@@ -6896,324 +6715,6 @@ OrionStack 当前不需要改成通用文档产品。
 **OrionStack 当前最合理的演进，不是把问答系统改写成通用文档平台，而是在其上游冻结一层“文档接入与清洗边界”，把复杂文档转换为可检索、可引用、可控版本的标准化知识输入，再交给下游问答主链路处理。**
 </file>
 
-<file path="docs/README.md">
-# docs 使用说明
-
-## 1. 文档目标
-
-`/docs` 是当前主仓的正式文档目录。
-
-本目录的目标是：
-
-- 为当前仓提供统一的正式文档入口
-- 统一设计文档、进度文档、文件职责文档的外部命名规则
-- 让人和 AI 都能快速判断：某份文档属于哪条主线、处于哪一层、对应哪份设计
-- 在调整命名规则时，坚持“外部命名与引用先收口，正文主体最小修改”
-
-本文件只约束：
-
-- 文档目录层级
-- 文件命名规则
-- 文档之间的引用关系
-- 文档新增与迁移时的最小修改原则
-
-本文件不承担：
-
-- 具体业务设计说明
-- 实时进度记录
-- 文件职责明细
-- 项目总体定位说明
-
----
-
-## 2. 最小修改原则
-
-当前阶段如果决定调整文档命名规则，默认只做以下改动：
-
-1. 修改文件名
-2. 修改文档标题
-3. 修改文档开头的定位说明
-4. 修改文档之间的引用名称
-
-默认不做以下动作：
-
-1. 不因改名而重写正文主体
-2. 不因改名而顺手重构章节结构
-3. 不把历史内容整体改写成另一套表达
-4. 不把命名收口任务扩展成文档内容重写任务
-
-一句话原则：
-
-**先收口外部命名与引用，再决定是否需要调整正文；没有必要时，正文不动。**
-
----
-
-## 3. 文档层级模型
-
-`/docs` 下当前主线文档统一按“顶层设计 / 子层进度 / 子层文件职责”组织。
-
-层级语义固定如下：
-
-- `1`：第 1 条顶层设计主线
-- `1.1`：第 1 条主线对应的进度文档
-- `1.2`：第 1 条主线对应的文件职责文档
-- `2`：第 2 条顶层设计主线
-- `2.1`：第 2 条主线对应的进度文档
-- `2.2`：第 2 条主线对应的文件职责文档
-
-也就是说：
-
-- 顶层设计文档定义“这条线是什么、边界是什么”
-- 进度文档定义“这条线当前做到哪里、下一步是什么”
-- 文件职责文档定义“这条线落到哪些文件、各文件负责什么”
-
----
-
-## 4. 文件命名规则
-
-### 4.1 命名格式
-
-统一格式：
-
-```text
-<level>_<doc_type>.md
-```
-
-说明：
-
-- `<level>`：层级编号，承担主线分类与排序作用
-- `<doc_type>`：文档类型
-
-### 4.2 层级编号写法
-
-为了避免文件扩展名歧义，文件名前缀不用 `1.1` 直接落地，统一改写为：
-
-- `1`   → `1`
-- `1.1` → `1_1`
-- `1.2` → `1_2`
-- `2`   → `2`
-- `2.1` → `2_1`
-- `2.2` → `2_2`
-
-也就是：
-
-- 逻辑层级写作：`1 / 1.1 / 1.2`
-- 文件名前缀写作：`1 / 1_1 / 1_2`
-
-### 4.3 文档类型固定集合
-
-当前只允许以下类型：
-
-- `system_design`
-- `progress`
-- `file_responsibilities`
-
-### 4.4 不再追加主题后缀
-
-当前规则下：
-
-- 主线区分已经由层级编号承担
-- 排序关系已经由层级编号承担
-- 同层文档职责已经由 `doc_type` 承担
-
-因此，文件名末尾不再追加：
-
-- `_faq`
-- `_retrieval`
-- 其他重复表达主线含义的主题后缀
-
-一句话原则：
-
-**编号负责主线分类与排序，类型负责文档职责；文件名不再重复编码同一层信息。**
-
-### 4.5 不推荐使用的命名词
-
-当前活文档命名中，不推荐继续使用：
-
-- `current`
-- `latest`
-- `final`
-- `new`
-- `integrated`
-- `phase1`
-- `phase2`
-- `p1`
-- `p2`
-- `v1`
-- `v2`
-
----
-
-## 5. 当前主线文件命名
-
-当前阶段统一按以下方式命名：
-
-```text
-docs/
-├── README.md
-├── 1_system_design.md
-├── 1_1_progress.md
-├── 1_2_file_responsibilities.md
-├── 2_system_design.md
-├── 2_1_progress.md
-└── 2_2_file_responsibilities.md
-```
-
-含义固定为：
-
-- `1_system_design.md`
-  - 第 1 条主线的顶层设计文档
-- `1_1_progress.md`
-  - 第 1 条主线的当前进度与下一步计划
-- `1_2_file_responsibilities.md`
-  - 第 1 条主线对应的文件职责文档
-- `2_system_design.md`
-  - 第 2 条主线的顶层设计文档
-- `2_1_progress.md`
-  - 第 2 条主线的当前进度与下一步计划
-- `2_2_file_responsibilities.md`
-  - 第 2 条主线对应的文件职责文档
-
-主线的具体主题含义，不再放在文件名后缀中重复表达，而应写在：
-
-- 文档标题
-- 文档开头定位说明
-- README 中的主线说明
-
----
-
-## 6. 各类文档职责边界
-
-### 6.1 `system_design`
-
-负责：
-
-- 这条主线的目标
-- 边界与约束
-- 模块关系
-- 方案选择
-- In Scope / Out of Scope
-
-不负责：
-
-- 逐条记录当前执行状态
-- 承担任务流水账
-- 逐文件变更清单
-
-### 6.2 `progress`
-
-负责：
-
-- 当前执行到哪一步
-- 已完成什么
-- 未完成什么
-- 下一步计划是什么
-- 与顶层设计相比，当前落地差距在哪里
-
-不负责：
-
-- 重复写一遍完整设计
-- 替代文件职责文档
-- 变成杂乱的临时备忘录
-
-### 6.3 `file_responsibilities`
-
-负责：
-
-- 当前主线涉及哪些文件
-- 每个文件在该主线下承担什么职责
-- 哪些文件已落地，哪些文件待落地
-- 哪些文件只允许最小修改
-
-不负责：
-
-- 代替设计文档定义总体方案
-- 代替进度文档记录时间顺序
-- 写成通用排查笔记
-
----
-
-## 7. 引用规则
-
-### 7.1 顶层设计文档引用
-
-顶层设计文档应优先引用：
-
-- `README.md`
-- `docs/architecture/*`
-- `docs/product/*`
-- `docs/workflows/*`
-
-### 7.2 子层文档引用
-
-`1.1 / 1.2 / 2.1 / 2.2` 这类子层文档应优先引用：
-
-- 对应的顶层设计文档
-- 同主线的兄弟文档
-- 必要的正式架构 / 产品文档
-
-### 7.3 禁止引用
-
-当前主仓文档默认不再引用：
-
-- 已删除路径
-- 临时草稿目录
-- 旧双仓路径
-- 无正式入口的聊天式结论文件
-
----
-
-## 8. 新增文档规则
-
-新增文档前，先判断它属于哪条主线：
-
-### 属于已有主线
-如果只是补充已有主线，优先落到现有 `1 / 2` 体系下，不新开一条主线。
-
-### 需要新开主线
-只有在主题边界已经明显独立时，才新增：
-
-- `3_system_design.md`
-- `3_1_progress.md`
-- `3_2_file_responsibilities.md`
-
-新主线一旦建立，后续子文档必须按同样层级扩展，不允许随意平铺。
-
----
-
-## 9. 迁移规则
-
-从旧命名迁移到新命名时，默认步骤如下：
-
-1. 先确定该文档属于哪条主线
-2. 再确定它是 `system_design`、`progress` 还是 `file_responsibilities`
-3. 只修改文件名
-4. 只修改文档标题与开头定位说明
-5. 只修改互相引用的文件名
-6. 正文主体默认不重写
-
----
-
-## 10. 当前执行结论
-
-当前 `/docs` 目录统一采用：
-
-**层级编号 + 文档类型**
-
-来命名正式文档。
-
-这套规则的核心目的不是“名字好看”，而是：
-
-- 一眼看出主从关系
-- 一眼看出属于哪条主线
-- 一眼看出它是设计、进度还是文件职责
-- 在不重写正文的前提下，先结束命名混乱
-
-一句话总结：
-
-**编号负责主线分类与排序，类型负责文档职责；正文主题放在文档标题与开头说明中表达。**
-</file>
-
 <file path="docs/designs/document_library/domain_finance_library_v1.md">
 # 第一阶段业务域文档库说明：Finance
 
@@ -9957,6 +9458,1359 @@ docs/
 - 可执行的文档分类基线
 - 可复用的业务域标准
 - 可落地的入库判断依据
+</file>
+
+<file path="docs/README.md">
+# docs 文档目录引导
+
+## 1. 文档目标
+
+`/docs` 是 OrionStack 当前正式文档目录。
+
+本文件只承担**目录导航**职责，帮助人和 AI 快速判断：
+
+1. 当前有哪些正式文档
+2. 每份文档分别负责什么
+3. 应该先读哪份，再读哪份
+4. 当前实现基线、后续升级基线、接入边界与文档库标准分别落在哪组文档
+
+本文件不承担以下职责：
+
+- 不替代 `docs/designs/1_system_design.md`
+- 不替代 `docs/designs/2_system_design.md`
+- 不记录逐日开发流水
+- 不冻结字段契约或接口细节
+- 不替代子目录中的专用 README
+
+---
+
+## 2. 当前目录结构总览
+
+```text
+docs/
+├── README.md
+├── 1_1_progress.md
+├── 1_2_file_responsibilities.md
+├── 1_3_field_definitions.md
+├── 2_1_progress.md
+├── 2_2_file_responsibilities.md
+├── 2_3_field_definitions.md
+├── 2_4_test_strategy.md
+└── designs/
+   ├── 1_system_design.md
+   ├── 2_system_design.md
+   ├── document_ingestion_boundary.md
+   └── document_library/
+      ├── README.md
+      ├── phase1_document_library_fields_freeze.md
+      ├── domain_general_library_v1.md
+      ├── domain_hr_library_v1.md
+      ├── domain_finance_library_v1.md
+      ├── domain_it_library_v1.md
+      ├── domain_legal_library_v1.md
+      ├── domain_ops_library_v1.md
+      ├── domain_product_library_v1.md
+      └── domain_sales_library_v1.md
+```
+
+---
+
+## 3. 如何理解当前 `/docs` 分层
+
+## 3.1 主线 1：当前真实实现基线
+
+这一组文档描述**当前已经进入默认实现链路**的系统状态。
+
+### `docs/designs/1_system_design.md`
+
+职责：
+
+- 定义当前真实实现基线
+- 说明当前系统定位、范围、主链路、模块边界与不做什么
+- 约束当前默认运行链路
+
+### `docs/1_1_progress.md`
+
+职责：
+
+- 记录主线 1 当前真实进度
+- 标记已完成、进行中与下一步工作
+- 防止重复扩写已完成内容
+
+### `docs/1_2_file_responsibilities.md`
+
+职责：
+
+- 说明当前默认链路下的文件职责与边界
+- 帮助判断某段逻辑应放在哪个现有文件
+
+### `docs/1_3_field_definitions.md`
+
+职责：
+
+- 解释主线 1 当前冻结字段的语义
+- 对齐请求、响应、存储与调试字段含义
+
+---
+
+## 3.2 主线 2：后续升级设计基线
+
+这一组文档描述**后续升级目标**，以及第二阶段已经开始落地的过渡模块。
+
+### `docs/designs/2_system_design.md`
+
+职责：
+
+- 作为第二阶段升级设计基线
+- 说明 Query Planner、Knowledge Unit、Elastic lexical-only、Hybrid Retrieval、RRF、Rerank、Evidence 等目标链路
+- 约束升级顺序与目标边界
+
+### `docs/2_1_progress.md`
+
+职责：
+
+- 记录第二阶段从设计到最小可执行改造的推进状态
+- 说明哪些能力只是目标，哪些已经开始进入仓库
+
+### `docs/2_2_file_responsibilities.md`
+
+职责：
+
+- 说明第二阶段新增文件、过渡文件与预留文件位的职责边界
+- 避免把第二阶段新能力重新堆回第一阶段旧文件
+
+### `docs/2_3_field_definitions.md`
+
+职责：
+
+- 解释第二阶段新增字段与结构化契约
+- 对齐 Query Planner、Knowledge Unit、检索信号、Rerank、Trace 等字段含义
+
+### `docs/2_4_test_strategy.md`
+
+职责：
+
+- 说明第二阶段当前最小测试策略
+- 区分当前可执行的 smoke / regression 与后续目标测试位
+- 为已落地 phase 2 过渡模块提供最小回归保护带
+
+### 当前第二阶段已开始落地的过渡模块
+
+当前仓库中已经出现、并应按第二阶段语义理解的文件主要包括：
+
+- `backend/app/storage/repositories/knowledge_unit_repo.py`
+- `backend/app/retrieval/lexical_retriever.py`
+- `backend/app/indexing/elastic_indexer.py`
+- `backend/app/indexing/index_health_checker.py`
+- `backend/app/config/settings.py` 中的第二阶段配置项
+- `backend/app/services/chat_service.py` 中的第二阶段过渡接线
+
+因此：
+
+- 主线 2 不是“纯未来文档”
+- 但也不是“已经完全切换完成的默认链路”
+- 具体已落地边界，应优先看 `docs/2_1_progress.md` 与 `docs/2_2_file_responsibilities.md`
+
+---
+
+## 3.3 文档接入边界补充
+
+### `docs/designs/document_ingestion_boundary.md`
+
+职责：
+
+- 说明原始文档如何进入下游问答链路
+- 冻结 direct ingest 与 cleaning-required 的边界
+- 说明 ingestion / cleaning adapter 负责什么、不负责什么
+
+适合优先阅读的场景：
+
+- 判断某类文档能否直接入链路
+- 判断复杂文档是否必须先清洗
+- 设计接入与清洗服务时收口边界
+
+---
+
+## 3.4 文档库标准目录
+
+### `docs/designs/document_library/README.md`
+
+职责：
+
+- 作为文档库标准目录说明
+- 说明文档库标准的使用范围、目录结构与分类基线
+
+### `docs/designs/document_library/phase1_document_library_fields_freeze.md`
+
+职责：
+
+- 冻结第一阶段文档库最小字段基线
+- 服务于文档清洗、分类、入库与引用回源
+
+### `docs/designs/document_library/domain_*_library_v1.md`
+
+职责：
+
+- 定义各业务域文档库边界与收录标准
+- 说明适合纳入哪些文档、不纳入哪些文档、建议如何标记
+
+当前目录已包含的业务域：
+
+- `general`
+- `hr`
+- `finance`
+- `it`
+- `legal`
+- `ops`
+- `product`
+- `sales`
+
+---
+
+## 4. 推荐阅读路径
+
+## 4.1 想快速了解“当前系统已经做到什么”
+
+推荐顺序：
+
+1. `docs/designs/1_system_design.md`
+2. `docs/1_1_progress.md`
+3. `docs/1_2_file_responsibilities.md`
+4. `docs/1_3_field_definitions.md`
+
+## 4.2 想继续推进“第二阶段升级”
+
+推荐顺序：
+
+1. `docs/designs/2_system_design.md`
+2. `docs/2_1_progress.md`
+3. `docs/2_2_file_responsibilities.md`
+4. `docs/2_3_field_definitions.md`
+5. `docs/2_4_test_strategy.md`
+
+## 4.3 想判断“第二阶段当前应该怎么测”
+
+推荐顺序：
+
+1. `docs/designs/2_system_design.md`
+2. `docs/2_1_progress.md`
+3. `docs/2_4_test_strategy.md`
+
+## 4.4 想判断“某项能力到底是当前默认链路，还是第二阶段过渡能力”
+
+推荐顺序：
+
+1. `docs/designs/1_system_design.md`
+2. `docs/designs/2_system_design.md`
+3. `docs/1_1_progress.md`
+4. `docs/2_1_progress.md`
+
+## 4.5 想判断“文档接入与清洗”边界
+
+推荐顺序：
+
+1. `docs/designs/document_ingestion_boundary.md`
+2. `docs/designs/document_library/README.md`
+3. `docs/designs/document_library/phase1_document_library_fields_freeze.md`
+4. 对应业务域的 `domain_*_library_v1.md`
+
+## 4.6 想判断“当前改动应该落在哪份文档”
+
+可按以下原则判断：
+
+- 改系统边界、模块关系、In Scope / Out of Scope  
+  -> 改 `docs/designs/*system_design.md`
+- 改推进状态、已完成项、下一步顺序  
+  -> 改 `docs/*_1_progress.md`
+- 改文件级职责边界  
+  -> 改 `docs/*_2_file_responsibilities.md`
+- 改字段语义解释  
+  -> 改 `docs/*_3_field_definitions.md`
+- 改测试分层、smoke / regression 策略  
+  -> 改 `docs/*_4_test_strategy.md`
+- 改原始文档接入 / 清洗边界  
+  -> 改 `docs/designs/document_ingestion_boundary.md`
+- 改文档库分类标准、字段冻结或业务域收录边界  
+  -> 改 `docs/designs/document_library/` 下对应文档
+
+---
+
+## 5. 当前维护原则
+
+### 5.1 导航文档与正文文档分离
+
+- `docs/README.md` 只负责导航
+- `docs/designs/*.md` 负责设计基线
+- `docs/*_progress.md` 负责推进状态
+- `docs/*_file_responsibilities.md` 负责文件边界
+- `docs/*_field_definitions.md` 负责字段解释
+- `docs/*_test_strategy.md` 负责测试策略
+
+### 5.2 主线 1 与主线 2 分开维护
+
+- 主线 1 记录当前默认实现基线
+- 主线 2 记录升级目标与过渡落地状态
+- 不把第二阶段内容反向写进主线 1 文档里冒充“当前默认实现”
+
+### 5.3 接入边界与文档库标准不回写系统主设计正文
+
+- `document_ingestion_boundary.md` 只负责接入边界
+- `document_library/` 只负责文档库标准
+- 它们不替代主系统设计与进度文档
+
+### 5.4 目录导航优先保持稳定
+
+`docs/README.md` 应优先保持：
+
+- 目录清楚
+- 分组清楚
+- 阅读顺序清楚
+- 交叉引用清楚
+
+而不应继续膨胀成新的系统设计正文。
+
+---
+
+## 6. 一句话收口
+
+**`/docs` 当前应理解为：以 `docs/designs/1_system_design.md` 为当前默认实现基线、以 `docs/designs/2_system_design.md` 为第二阶段升级基线、以 `document_ingestion_boundary.md` 为接入边界补充、以 `document_library/` 为文档库标准目录的正式文档入口。**
+</file>
+
+<file path="docs/2_1_progress.md">
+# OrionStack 第二阶段系统设计对应的文件级最小改造清单 v1
+
+> 状态：执行清单 v1  
+> 对应设计文档：`docs/designs/2_system_design.md`  
+> 配套职责文档：`docs/2_2_file_responsibilities.md`  
+> 配套字段文档：`docs/2_3_field_definitions.md`  
+> 配套测试文档：`docs/2_4_test_strategy.md`  
+> 目标：把第二阶段设计从“系统设计基线”收成“第一轮最小可执行改造范围”  
+> 原则：**最小切入、分步替换、旧链路可回退、先数据统一再切检索**
+
+---
+
+## 1. 当前目标
+
+本清单只解决一件事：
+
+**把 Phase 2 的目标链路，拆成当前仓库中可落地的最小文件级改造范围。**
+
+本文档不承担以下职责：
+
+- 不重写 `2_system_design.md` 的系统设计正文
+- 不替代 `2_2_file_responsibilities.md` 的文件职责边界说明
+- 不替代 `2_3_field_definitions.md` 的字段语义解释
+- 不替代 `2_4_test_strategy.md` 的测试分层与回归策略说明
+
+当前不追求：
+
+- 一次性切完整 Query Planner + Hybrid + Rerank + Clarification 全链路
+- 直接删除旧 FAQ / document-first 代码
+- 在第一轮就把所有接口彻底冻结到最终形态
+
+当前优先级按 Phase 2 设计顺序收敛为：
+
+1. 统一 Knowledge Unit 入库
+2. 接 Elastic lexical-only 过渡链路
+3. 再接 vector + RRF
+4. 再接 rerank + evidence extraction
+5. 最后接 clarification / 按需 API fallback
+
+当前真实状态补充：
+
+- Phase 2 已不是纯规划：仓库中已出现最小过渡实现
+- 当前已落地的核心文件包括：
+  - `backend/app/storage/repositories/knowledge_unit_repo.py`
+  - `backend/app/retrieval/lexical_retriever.py`
+  - `backend/app/indexing/elastic_indexer.py`
+  - `backend/app/indexing/index_health_checker.py`
+- `backend/app/config/settings.py` 已补入第二阶段最小配置项
+- `backend/app/services/chat_service.py` 已接入第二阶段过渡性的 search backend 切换入口
+- Phase 2 已补齐第一轮最小单测保护：
+  - `backend/tests/test_phase2_settings.py`
+  - `backend/tests/test_phase2_knowledge_unit.py`
+  - `backend/tests/test_phase2_indexing.py`
+  - `backend/tests/test_phase2_retrieval.py`
+- 但默认链路仍未完全切换到第二阶段目标形态；planner / hybrid / rerank / trace 仍未落地
+
+---
+
+## 2. 文件级改造总原则
+
+### 2.1 原则一：先并行，不先替换
+
+第一轮改造以“并行引入新模块”为主，不直接拆旧链路。
+
+含义：
+
+- 新文件优先新增
+- 旧文件先降职责，不先删除
+- 默认主链路先保持可运行
+- 新链路先通过 feature flag / 配置开关灰度启用
+
+### 2.2 原则二：先收数据，再切检索
+
+在 FAQ 与 document chunk 尚未统一成 Knowledge Unit 之前，不应直接切默认检索主链路。
+
+### 2.3 原则三：先 lexical-only，再 hybrid
+
+Elastic 接入第一轮先承接 lexical 检索，不立即把 vector、RRF、rerank 全部一起打开。
+
+### 2.4 原则四：所有重型能力都必须可关闭
+
+以下能力第一轮必须支持关闭：
+
+- Query Planner 强改写
+- vector retrieval
+- rerank
+- clarification mode
+- online API fallback
+
+---
+
+## 3. 第一轮新增文件清单
+
+以下文件分为两类：
+
+- 已经在仓库中落地的第一轮过渡文件
+- 尚未落地、但已在第二阶段中明确预留的文件位
+
+### 3.0 当前已落地的第一轮文件
+
+#### `backend/app/storage/repositories/knowledge_unit_repo.py`
+
+当前状态：
+
+- 已落地
+- 已提供 FAQ / chunk -> `KnowledgeUnit` 的统一映射入口
+
+#### `backend/app/retrieval/lexical_retriever.py`
+
+当前状态：
+
+- 已落地
+- 已提供 Elasticsearch lexical-only 检索过渡实现
+
+#### `backend/app/indexing/elastic_indexer.py`
+
+当前状态：
+
+- 已落地
+- 已提供 `knowledge_units_v1` 的最小建索引与写入能力
+
+#### `backend/app/indexing/index_health_checker.py`
+
+当前状态：
+
+- 已落地
+- 已提供最小 Elasticsearch 连通性与索引状态检查
+
+#### `backend/app/services/chat_service.py`
+
+当前状态：
+
+- 已出现第二阶段过渡接线
+- 当前可通过 `settings.search_backend` 在本地链路与 Elasticsearch lexical-only 之间切换
+
+#### `backend/app/config/settings.py`
+
+当前状态：
+
+- 已补入第二阶段最小配置开关
+- 当前已覆盖 search backend / elastic / planner / fast track 的第一轮占位配置
+
+### 3.1 当前尚未落地的 Query 与 LLM Provider
+
+#### `backend/app/query/query_planner.py`
+职责：
+
+- 生成 `normalized_query`
+- 生成 `domain_hint`
+- 生成 `semantic_expansions`
+- 生成 `lexical_terms`
+- 执行 planner guardrails：
+  - hard keyword locking
+  - circuit breaker
+  - drift guard
+  - domain anchoring
+
+第一轮要求：
+
+- 可由本地实现或简单 provider 调用驱动
+- 支持关闭 semantic expansion，仅保留 normalized + lexical_terms
+
+#### `backend/app/llm/providers/base.py`
+职责：
+
+- 定义统一 provider 接口：
+  - QueryPlannerProvider
+  - RerankProvider
+  - AnswerComposerProvider
+
+#### `backend/app/llm/providers/ollama_provider.py`
+职责：
+
+- 承接本地 Ollama 模型调用
+- 用于：
+  - planner
+  - 可选 rerank
+  - 可选 composer
+
+#### `backend/app/llm/providers/api_provider.py`
+职责：
+
+- 承接在线 LLM API
+- 默认关闭，仅按需启用
+
+---
+
+### 3.2 第二阶段 Retrieval 层（已落地过渡 + 后续扩展）
+
+#### `backend/app/retrieval/lexical_retriever.py`
+职责：
+
+- 承接 Elastic lexical-only 检索
+- 作为当前 `retriever.py` 的过渡替代层
+- 支持：
+  - normalized_query
+  - lexical_terms
+  - metadata pre-filter
+
+#### `backend/app/retrieval/vector_retriever.py`
+职责：
+
+- 承接 `question_vector` / `answer_vector` 双向量检索
+- 支持：
+  - normalized_query
+  - semantic_expansions
+
+第一轮要求：
+
+- 允许关闭
+- 不作为默认主路径强依赖
+
+#### `backend/app/retrieval/hybrid_retriever.py`
+职责：
+
+- 组合 lexical + vector
+- 应用 metadata pre-filter
+- 执行 RRF 融合
+- 输出：
+  - lexical_hits
+  - vector_hits
+  - rrf_hits
+  - 原始 retrieval signals
+
+#### `backend/app/retrieval/reranker.py`
+职责：
+
+- 执行候选重排
+- 判定：
+  - accept_threshold
+  - margin_threshold
+- 输出：
+  - top1_score
+  - top2_score
+  - accept / reject
+  - conflict_detected
+
+#### `backend/app/retrieval/evidence_extractor.py`
+职责：
+
+- 从 top 候选中提取 `evidence_spans`
+- 若无明确证据，直接标记弱证据
+
+---
+
+### 3.3 第二阶段索引与数据层（已落地基座 + 后续目标）
+
+#### `backend/app/storage/repositories/knowledge_unit_repo.py`
+职责：
+
+- 统一 FAQ 与 document chunk 的入库读取接口
+- 提供：
+  - FAQ -> Knowledge Unit 映射
+  - chunk -> Knowledge Unit 映射
+  - 历史回填入口
+
+#### `backend/app/indexing/elastic_indexer.py`
+职责：
+
+- 建立 / 更新 `knowledge_units_v1`
+- 处理：
+  - 索引创建
+  - 文档写入
+  - question / answer 双向量写入
+  - version / valid_from / valid_until 元数据同步
+
+#### `backend/app/indexing/index_health_checker.py`
+职责：
+
+- 检查索引是否存在
+- 检查字段与 dims 是否匹配配置
+- 执行最小联通性查询
+- 验证 Hybrid + RRF 查询路径可用
+
+---
+
+### 3.4 当前尚未落地的运行与观测层
+
+#### `backend/app/observability/retrieval_trace.py`
+职责：
+
+- 统一生成 Retrieval Trace
+- 包含：
+  - raw_query
+  - normalized_query
+  - domain_hint
+  - lexical_hits
+  - vector_hits
+  - rrf_hits
+  - rerank_result
+  - evidence_spans
+  - final_status
+
+#### `backend/app/testing/hard_cases_repo.py`
+职责：
+
+- 管理 hard cases
+- 支持：
+  - 用户负反馈样本回流
+  - smoke set / regression set 读取
+
+#### `backend/app/cache/query_cache.py`
+职责：
+
+- 提供轻量缓存能力
+- key 至少包含：
+  - normalized_query
+  - domain_hint
+  - access_scope
+  - doc_version_snapshot
+
+---
+
+## 4. 第一轮需要改职责的旧文件
+
+以下旧文件建议“改职责”，而不是立即删除。
+
+### 4.1 `backend/app/services/chat_service.py`
+当前问题：
+
+- 仍围绕旧主链路组织
+- 直接依赖旧 resolver / retriever / faq fallback 习惯
+
+第一轮改造目标：
+
+- 保持它继续作为主服务入口
+- 但把内部流程改成可切换：
+
+```text
+normalize
+-> optional query planner
+-> fast track gate
+-> retrieval adapter
+-> optional rerank
+-> optional answer composer
+-> response builder
+```
+
+最小要求：
+
+- 能通过配置在旧链路 / lexical-only / hybrid 之间切换
+- 不直接把所有 phase2 逻辑硬编码在一个函数里
+
+---
+
+### 4.2 `backend/app/routing/rule_parser.py`
+当前问题：
+
+- 对 FAQ 短 query 有硬门效应
+
+第一轮改造目标：
+
+- 从“决定问题是否进入主链路”
+- 降级为：
+  - 空输入保护
+  - 明显无效输入保护
+  - 极少数安全拒答
+
+第一轮不再要求它负责：
+
+- 判断“请假”是否像 FAQ
+- 决定 query 是否值得检索
+
+---
+
+### 4.3 `backend/app/retrieval/retriever.py`
+当前问题：
+
+- 是旧最小检索器
+- 职责混合：
+  - lexical
+  - FAQ fallback
+  - 阈值判定
+
+第一轮改造目标：
+
+- 不立刻删除
+- 降级为：
+  - 兼容旧链路的过渡实现
+  - 或封装到 lexical-only adapter 中
+
+原则：
+
+- 旧链路仍可回退使用
+- 不再继续向这个文件堆 phase2 新逻辑
+
+---
+
+### 4.4 `backend/app/storage/repositories/faq_repo.py`
+当前问题：
+
+- 仍是独立 FAQ 数据源读取器
+- 容易继续强化“FAQ 一套、document 一套”的分裂结构
+
+第一轮改造目标：
+
+- 保留为 demo/mock provider
+- 不再作为 phase2 主数据源中心
+- 后续通过 `knowledge_unit_repo.py` 做统一映射
+
+---
+
+### 4.5 `backend/app/config/settings.py`
+第一轮改造目标：
+
+新增以下配置分组：
+
+- Query Planner
+- Elastic Search Backend
+- Embedding dims
+- Fast Track
+- RRF 参数
+- Rerank 阈值
+- API fallback
+- Index health check
+- Cache / trace / smoke test
+
+原则：
+
+- 当前值可先占位
+- 设计先冻结字段名与职责，不先冻结所有阈值数值
+
+---
+
+## 5. 第一轮建议保留不动的旧文件
+
+这些文件第一轮建议不主动大改，只在必要时做兼容补充。
+
+### `backend/app/api/routes/chat.py`
+原因：
+
+- API 入口尽量稳定
+- Phase 2 第一轮不应先改外部路由形态
+
+### `backend/app/schemas/request.py`
+原因：
+
+- 请求体第一轮不需要暴露复杂新参数
+- 内部可先通过配置开关驱动 phase2
+
+### `backend/app/schemas/document.py`
+原因：
+
+- 文档上传与基础 document 结构仍可继续使用
+- 知识单元转换逻辑放到 repo / indexing 层处理
+
+### `frontend/src/pages/chat/ChatPage.vue`
+原因：
+
+- 第一轮重点在后端链路
+- 前端只需兼容新增状态字段，不先重做页面结构
+
+---
+
+## 6. 第一轮前后端最小契约改动
+
+### 6.1 后端响应建议新增字段
+
+第一轮建议在现有响应基础上最少补：
+
+- `fallback_reason`
+- `clarification_required`
+- `conflict_detected`
+- `cache_served`
+- `trace_id`
+
+### 6.2 前端第一轮只需识别的新增状态
+
+前端第一轮不需要做完整新交互，只要能识别：
+
+- `no_evidence`
+- `low_confidence`
+- `stale_policy_blocked`
+- `conflict_requires_clarification`
+- `model_timeout`
+- `system_degraded`
+
+---
+
+## 7. 第一轮明确不做的文件/实现
+
+以下内容明确不在第一轮落地：
+
+### 7.1 不做的实现
+- Elasticsearch + Milvus 双系统
+- learned fusion
+- 全库人工同义词平台
+- 每次请求都跑的 Planner embedding self-check
+- 多 Agent / workflow graph
+- 全量 Clarification Mode 对话树
+- 默认开启 online API fallback
+
+### 7.2 不急着新增的文件
+- 复杂多租户权限文件
+- 独立的 workflow 编排器
+- 多索引分治管理器
+- 复杂 cache cluster 管理器
+
+---
+
+## 8. 第一轮文件级实施顺序
+
+### Step 1：数据与索引基座
+优先做：
+
+- `knowledge_unit_repo.py`
+- `elastic_indexer.py`
+- `index_health_checker.py`
+
+目标：
+
+- 先把 FAQ / chunk 统一进 `knowledge_units_v1`
+- 不切默认主链路
+
+当前状态：
+
+- 已基本落地
+- `knowledge_unit_repo.py`、`elastic_indexer.py`、`index_health_checker.py` 已进入仓库
+- 但是否作为团队默认运行链路使用，仍取决于部署配置与索引环境
+
+### Step 2：lexical-only 过渡层
+优先做：
+
+- `lexical_retriever.py`
+- `chat_service.py` 中的 retrieval adapter 切换
+
+目标：
+
+- 先用 Elastic 承接 lexical
+- 保留旧 retriever 回退路径
+
+当前状态：
+
+- 已部分落地
+- `lexical_retriever.py` 已进入仓库
+- `chat_service.py` 已出现最小 retrieval adapter 切换
+- 旧 `retriever.py` 仍保留作为本地兼容回退路径
+
+### Step 3：Planner 最小可用
+优先做：
+
+- `query_planner.py`
+- `ollama_provider.py`
+- settings 中的 planner 配置
+
+目标：
+
+- 先输出：
+  - normalized_query
+  - domain_hint
+  - lexical_terms
+- semantic expansions 可先弱化
+
+当前状态：
+
+- 尚未落地
+- 目前仅 `settings.py` 中预留了 planner 相关配置项
+
+### Step 4：Hybrid + RRF
+优先做：
+
+- `vector_retriever.py`
+- `hybrid_retriever.py`
+
+目标：
+
+- 小范围灰度：
+  - 请假
+  - 病假材料
+  - 工资条
+  - 调休
+
+当前状态：
+
+- 尚未落地
+
+### Step 5：Rerank + Evidence
+优先做：
+
+- `reranker.py`
+- `evidence_extractor.py`
+- retrieval trace 落盘
+
+当前状态：
+
+- 尚未落地
+
+### Step 6：缓存 / hard cases / API fallback
+最后做：
+
+- `query_cache.py`
+- `hard_cases_repo.py`
+- `api_provider.py`
+
+当前状态：
+
+- 尚未落地
+
+---
+
+## 9. 第一轮最小验收清单
+
+第一轮文件级改造完成后，至少要满足：
+
+1. FAQ 与 document chunk 已能映射成统一 Knowledge Unit
+2. Elastic lexical-only 可独立跑通
+3. `请假`、`病假材料` 这类 query 至少能在灰度链路中进入新检索
+4. Retrieval Trace 可落盘
+5. 旧链路仍可通过配置回退
+6. phase2 新增文件职责清晰，不把逻辑重新堆回旧 `retriever.py`
+
+按当前真实状态看：
+
+- 第 1 条已具备最小落地基础
+- 第 1 条对应的最小单测保护已补齐
+- 第 5 条已具备最小配置回退基础
+- 第 6 条已通过 `docs/2_2_file_responsibilities.md` 做职责收口
+- 第 2 / 3 / 4 条仍不能视为已整体完成
+
+---
+
+## 10. 一句话收口
+
+这份文件级最小改造清单 v1 的核心不是“把所有第二阶段能力一次性写完”，而是：
+
+**把第二阶段系统设计拆成当前仓库里最小、可回退、可灰度、可执行的文件级落地范围。**
+</file>
+
+<file path="docs/2_4_test_strategy.md">
+# OrionStack 第二阶段最小测试策略 v1
+
+> 对应设计文档：`docs/designs/2_system_design.md`  
+> 配套进度文档：`docs/2_1_progress.md`  
+> 配套职责文档：`docs/2_2_file_responsibilities.md`  
+> 配套字段文档：`docs/2_3_field_definitions.md`
+
+---
+
+## 1. 文档目标
+
+本文档只解决一件事：
+
+**为第二阶段当前已经落地的过渡模块，以及后续将继续落地的检索升级模块，定义一套最小、可执行、可回归的测试策略。**
+
+本文档不承担以下职责：
+
+- 不重写 `2_system_design.md` 的系统设计
+- 不替代 `2_2_file_responsibilities.md` 的文件职责边界说明
+- 不替代 `2_3_field_definitions.md` 的字段语义解释
+- 不替代 `2_1_progress.md` 的推进状态说明
+- 不替代详细测试用例文件本身
+- 不引入重型 benchmark 平台或新的测试基础设施要求
+
+---
+
+## 2. 适用范围
+
+本文档适用于第二阶段当前已经进入仓库、或明确将在后续接入的能力，包括：
+
+- `Knowledge Unit` 统一数据层
+- Elasticsearch lexical-only 过渡检索链路
+- 第二阶段索引写入与索引健康检查
+- 主服务中的 phase 2 search backend 切换入口
+- 后续将接入的 planner / hybrid / rerank / trace / hard cases
+
+当前仓库中**已落地并应纳入最小测试策略**的文件主要包括：
+
+- `backend/app/storage/repositories/knowledge_unit_repo.py`
+- `backend/app/retrieval/lexical_retriever.py`
+- `backend/app/indexing/elastic_indexer.py`
+- `backend/app/indexing/index_health_checker.py`
+- `backend/app/services/chat_service.py`
+- `backend/app/config/settings.py`
+
+当前仓库中**已经存在的最小测试基础**主要包括：
+
+- `backend/tests/test_chat_flow.py`
+- `backend/tests/test_document_flow.py`
+
+---
+
+## 3. 使用原则
+
+### 3.1 先保证最小可执行，再扩大覆盖
+
+第二阶段测试当前不追求一次性覆盖 planner、hybrid、rerank、clarification、trace 全链路。
+
+当前优先目标是：
+
+- 已落地能力有最小回归保护
+- 切换 search backend 时不至于无测试保护
+- 关键升级不破坏第一阶段当前默认可运行链路
+
+### 3.2 默认测试基线不依赖外部重型服务
+
+默认本地回归基线应优先依赖：
+
+- `pytest`
+- 临时目录 / 本地 jsonl
+- monkeypatch / stub
+
+而不应默认要求：
+
+- 在线 API
+- 完整 benchmark 平台
+- 复杂 observability 平台
+- 永久在线 Elasticsearch 集群
+
+### 3.3 测试分为 smoke 与 regression 两层
+
+- **smoke**：修改后快速确认主链路还能跑通
+- **regression**：对已落地边界做稳定断言，防止行为回退
+
+### 3.4 当前已落地能力与目标能力分开验收
+
+- 已落地模块：要求有明确测试入口或建议补齐的直接测试位
+- 尚未落地模块：只先定义未来测试应覆盖什么，不提前写成“已具备测试保护”
+
+---
+
+## 4. 当前仓库已具备的测试基础
+
+### 4.1 `backend/tests/test_chat_flow.py`
+
+当前已覆盖的核心场景包括：
+
+- FAQ 已知问题命中
+- document-first 命中优先于 FAQ
+- `document_ids` 范围限制下的检索行为
+- 选中文档不命中时的 fallback
+- 弱检索命中下的 fallback / FAQ 兜底
+- 基础安全拒答
+- debug 信息在不同运行模式下的暴露边界
+- citation 最小结构与最小回源定位断言
+
+当前意义：
+
+- 它已经承担了第二阶段之前主链路的最小保护带
+- 后续 phase 2 过渡接线若破坏默认链路，应首先在这里暴露
+
+### 4.2 `backend/tests/test_document_flow.py`
+
+当前已覆盖的核心场景包括：
+
+- 文档上传
+- 文档列表
+- 文档删除
+- 文档解析与切块落盘
+- chunk 最小回源元数据
+- citation 回源定位字段
+- 非法后缀拦截
+
+当前意义：
+
+- 它提供了 document chunk -> citation -> retrieval 之前的数据基座保护
+- 后续 phase 2 若继续统一 document chunk 为 `Knowledge Unit`，这里仍是上游数据正确性的最小保障
+
+### 4.3 当前已补齐的 phase 2 最小单测
+
+当前已新增并通过验证的 phase 2 最小单测主要包括：
+
+#### `backend/tests/test_phase2_settings.py`
+
+当前已覆盖：
+
+- `search_backend` 的环境变量解析
+- 无效 search backend 的回退行为
+- `elastic_use_ik_analyzer / enable_query_planner / enable_fast_track` 的布尔开关解析
+- `elastic_url / elastic_index / planner_provider / planner_model / ollama_url` 的环境变量读取
+
+#### `backend/tests/test_phase2_knowledge_unit.py`
+
+当前已覆盖：
+
+- FAQ -> `KnowledgeUnit` 映射
+- chunk -> `KnowledgeUnit` 映射
+- `list_all / list_faq_units / list_chunk_units` 行为
+- 默认字段与最小兼容值
+
+#### `backend/tests/test_phase2_indexing.py`
+
+当前已覆盖：
+
+- `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
+- `ElasticIndexer.index_units()` 的最小写入流程
+- `IndexHealthChecker.check()` 的基础输出结构
+- 连通异常时的错误输出
+
+#### `backend/tests/test_phase2_retrieval.py`
+
+当前已覆盖：
+
+- `LexicalRetriever` 的空 query 行为
+- `LexicalRetriever` 的默认 `lifecycle_status = active` 过滤
+- `business_domain / access_scope / lifecycle_status` filter 拼装行为
+- `ChatService` 在 `search_backend = elasticsearch` 下的最小切换行为
+- `ChatService` 在 Elasticsearch 无命中时的 fallback 行为
+- `ChatService._extract_lexical_terms()` 的最小稳定输出
+
+### 4.4 当前仍待补齐、但已明确存在测试价值的 phase 2 模块
+
+当前尚缺少专门测试文件或明确断言的模块主要包括：
+
+- `retrieval_trace.py` 真正落地后的 trace 回放行为
+- `hard_cases_repo.py` 真正落地后的样本回流与读取行为
+- planner / hybrid / rerank / evidence 真正进入仓库后的最小可执行测试位
+
+---
+
+## 5. 第二阶段最小 Smoke 策略
+
+## 5.1 当前必须可执行的本地 smoke
+
+每次涉及以下改动之一时，至少应执行一轮本地 smoke：
+
+- `chat_service.py`
+- `retriever.py`
+- `lexical_retriever.py`
+- `knowledge_unit_repo.py`
+- `document_service.py`
+- `chunk_repo.py`
+- `settings.py`
+- 任何会影响 citation、fallback、debug_info、document scope 的修改
+
+当前建议命令：
+
+```bash
+python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
+```
+
+当前 smoke 至少应覆盖：
+
+1. FAQ 命中仍然正常
+2. document-first 命中仍然正常
+3. 选中文档范围限制仍然生效
+4. 弱命中时 fallback 仍然正常
+5. unsafe 请求仍然拒答
+6. 文档上传 / 列表 / 删除仍然可用
+7. citation 最小结构与最小回源字段未退化
+
+### 5.2 Phase 2 环境就绪时的可选 smoke
+
+当 Elasticsearch 环境可用时，建议额外执行一轮 phase 2 过渡 smoke：
+
+目标：
+
+- 确认 `search_backend = elasticsearch` 时主链路能切到 lexical-only 检索
+- 确认索引可连通、可写入、可查询
+- 确认默认链路仍可回退
+
+当前建议覆盖：
+
+1. `IndexHealthChecker.check()` 返回基本可用状态
+2. `ElasticIndexer.ensure_index()` 可成功建索引
+3. `ElasticIndexer.index_units()` 可成功写入最小知识单元
+4. `LexicalRetriever.search()` 能返回至少一个有效结果
+5. `ChatService` 在 `search_backend = elasticsearch` 时能进入过渡检索路径
+
+说明：
+
+- 这层 smoke 当前应视为**环境可选项**
+- 不应反向变成所有本地开发的默认前置门槛
+
+---
+
+## 6. 第二阶段最小 Regression 策略
+
+## 6.1 当前必须稳定的 regression 边界
+
+以下边界一旦已落地，就不应在后续 phase 2 改造中被静默破坏：
+
+### A. 当前默认主链路边界
+
+必须稳定：
+
+- FAQ 已知 query 命中
+- document-first 与 FAQ fallback 的相对优先级
+- fallback / refused / ok 的基本响应契约
+- debug_info 在 demo/dev 与 prod 下的暴露边界
+
+### B. 文档链路边界
+
+必须稳定：
+
+- 文档上传成功后有最小元数据
+- chunk 落地后有最小回源字段
+- `source_label / source_locator / snippet` 不退化
+- 文档删除时元数据与 chunk 一起清理
+
+### C. 第二阶段过渡边界
+
+必须稳定：
+
+- `settings.py` 中已有的 phase 2 开关不应被静默删除或改名
+- `KnowledgeUnit` 最小字段集合不应随意漂移
+- lexical-only 已实际使用的 filter 字段不应无提示失效
+- `search_backend` 切换不应破坏 local 默认链路
+
+## 6.2 当前已落地的 regression 测试位
+
+当前已经补齐并可作为 phase 2 最小回归保护带的测试文件包括：
+
+### `backend/tests/test_phase2_settings.py`
+
+已覆盖：
+
+- `search_backend` 的环境变量解析
+- phase 2 配置布尔开关解析
+- phase 2 Elastic / planner 关键配置项读取
+
+### `backend/tests/test_phase2_knowledge_unit.py`
+
+已覆盖：
+
+- FAQ -> `KnowledgeUnit` 映射
+- chunk -> `KnowledgeUnit` 映射
+- `list_all / list_faq_units / list_chunk_units` 行为
+- 默认字段与最小兼容值
+
+### `backend/tests/test_phase2_retrieval.py`
+
+已覆盖：
+
+- `LexicalRetriever` 的 query 为空行为
+- `LexicalRetriever` 的 `lifecycle_status = active` 默认过滤
+- `business_domain / access_scope / lifecycle_status` filter 拼装行为
+- `search_backend` 切换后的最小服务行为
+- Elasticsearch 无命中时的 fallback 行为
+- `_extract_lexical_terms()` 的最小稳定输出
+
+说明：
+
+- 当前实现主要通过 stub / monkeypatch 完成
+- 不要求这些 regression 依赖真实 Elasticsearch 实例
+
+### `backend/tests/test_phase2_indexing.py`
+
+已覆盖：
+
+- `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
+- `ElasticIndexer.index_units()` 的最小写入流程
+- `IndexHealthChecker` 的 `connected / index_exists / doc_count / errors` 输出结构
+
+## 6.3 后续建议继续新增的 regression 测试位
+
+当继续推进 phase 2 时，建议优先新增以下测试文件：
+
+### `backend/tests/test_phase2_trace.py`
+
+建议覆盖：
+
+- retrieval trace 落盘结构
+- trace 按 `trace_id` 回放
+- trace 与 `fallback_reason / final_status` 的一致性
+
+### `backend/tests/test_phase2_hard_cases.py`
+
+建议覆盖：
+
+- hard cases 写入
+- hard cases 样本读取
+- user feedback 回流后的最小字段完整性
+
+### planner / hybrid / rerank 对应测试文件
+
+建议覆盖：
+
+- planner 输出字段稳定性
+- hybrid top-k 基本行为
+- rerank accept / reject 判断
+- evidence spans 最小结构
+
+---
+
+## 7. 与 `2_system_design.md` 的关系
+
+`2_system_design.md` 对第二阶段测试提出了更高目标，包括：
+
+- Hybrid Smoke Test Set
+- Retrieval Trace 契约
+- hard cases 样本池
+- 发布前门槛
+- 回滚触发条件
+
+但当前仓库的最小测试策略应分层理解：
+
+### 7.1 当前已可执行层
+
+当前真正应执行并维护的，是：
+
+- 本地 `pytest` 主链路 smoke
+- 文档链路 regression
+- 对 phase 2 已落地模块的最小单测补齐
+
+### 7.2 后续目标测试层
+
+只有当以下能力真正落地后，才应把对应测试升级为默认要求：
+
+- planner 输出
+- hybrid retrieval
+- rerank + evidence
+- retrieval trace 落盘
+- hard cases 样本回流
+- cache / version snapshot / stale policy 校验
+
+---
+
+## 8. 当前建议的最小发布门槛
+
+在第二阶段继续落地、但尚未切默认链路之前，当前建议门槛为：
+
+1. `backend/tests/test_chat_flow.py` 通过
+2. `backend/tests/test_document_flow.py` 通过
+3. 若修改涉及 phase 2 Elasticsearch 过渡链路，则补一轮环境可用下的 elastic smoke
+4. 不允许因为 phase 2 新能力而破坏当前 local 默认链路
+5. 不允许因为 phase 2 字段或职责扩展而让 citation / debug_info / fallback 契约无声漂移
+
+---
+
+## 9. 当前明确不做的事
+
+本文档当前明确不要求：
+
+- 新增前端测试框架
+- 引入完整 benchmark 平台
+- 为每个 query 建大规模评测集
+- 把 smoke cases 扩展成重型测试矩阵
+- 在未落地 planner / hybrid / rerank 时伪造完整 phase 2 测试通过结论
+
+---
+
+## 10. 一句话收口
+
+**第二阶段最小测试策略的目标不是提前建设完整评测平台，而是先为已落地过渡模块建立 smoke 与 regression 保护带，并为后续 planner / hybrid / rerank / trace 的测试位预留清晰入口。**
 </file>
 
 </files>

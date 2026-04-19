@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
 
+from app.observability.retrieval_trace import RetrievalTraceRepository
 from app.config.settings import settings
 from app.runtime.trace import new_trace_id
 from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
@@ -13,6 +16,7 @@ from app.schemas.response import (
     FeedbackRecordListResponse,
 )
 from app.services.chat_service import ChatService
+from app.testing.hard_cases_repo import HardCasesRepository
 from app.storage.repositories.chat_record_repo import ChatRecordRepository
 from app.storage.repositories.feedback_repo import FeedbackRepository
 
@@ -20,6 +24,8 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 service = ChatService()
 feedback_repository = FeedbackRepository(max_count=settings.feedback_record_max_count)
 chat_record_repository = ChatRecordRepository(max_count=settings.chat_record_max_count)
+retrieval_trace_repository = RetrievalTraceRepository()
+hard_cases_repository = HardCasesRepository()
 
 
 @router.post("/ask", response_model=ChatAskResponse)
@@ -57,6 +63,10 @@ def ask_chat(payload: ChatAskRequest) -> ChatAskResponse:
             "retrieved_chunk_ids": _resolve_retrieved_chunk_ids(response),
         }
     )
+    retrieval_trace = retrieval_trace_repository.save(
+        _build_retrieval_trace_record(payload, response)
+    )
+    _record_hard_case_from_response(retrieval_trace)
     return response
 
 
@@ -84,6 +94,7 @@ def submit_feedback(payload: ChatFeedbackRequest) -> ChatFeedbackResponse:
         feedback_label=payload.feedback_label,
         feedback_created_at=str(feedback_record["created_at"]),
     )
+    _record_hard_case_from_feedback(payload)
     return ChatFeedbackResponse(status="recorded")
 
 
@@ -124,10 +135,107 @@ def list_feedback_records(
     return FeedbackRecordListResponse(items=items)
 
 
+@router.get("/traces/{trace_id}")
+def get_retrieval_trace(trace_id: str) -> dict[str, Any]:
+    _ensure_record_view_enabled()
+    trace = retrieval_trace_repository.get_by_trace_id(trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return trace
+
+
+@router.get("/hard-cases")
+def list_hard_cases(
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, list[dict[str, Any]]]:
+    _ensure_record_view_enabled()
+    return {"items": hard_cases_repository.list_recent(limit)}
+
+
 def _resolve_retrieved_chunk_ids(response: ChatAskResponse) -> list[str]:
     if response.debug_info is not None and response.debug_info.retrieved_chunks:
         return response.debug_info.retrieved_chunks
     return [citation.citation_id for citation in response.citations]
+
+
+def _build_retrieval_trace_record(
+    payload: ChatAskRequest,
+    response: ChatAskResponse,
+) -> dict[str, Any]:
+    debug_info = response.debug_info
+    return {
+        "trace_id": response.trace_id,
+        "raw_query": payload.raw_query,
+        "normalized_query": payload.raw_query.strip()
+        if debug_info is None
+        else debug_info.normalized_query,
+        "intent": None if debug_info is None else debug_info.route_result,
+        "domain_hint": None if debug_info is None else getattr(debug_info, "domain_hint", None),
+        "semantic_expansions": None
+        if debug_info is None
+        else getattr(debug_info, "semantic_expansions", None),
+        "lexical_terms": None
+        if debug_info is None
+        else getattr(debug_info, "lexical_terms", None),
+        "filters": {
+            "document_ids": payload.document_ids,
+        },
+        "retrieved_chunks": _resolve_retrieved_chunk_ids(response),
+        "citations": [
+            {
+                "citation_id": citation.citation_id,
+                "source_label": citation.source_label,
+                "source_locator": citation.source_locator,
+                "snippet": citation.snippet,
+            }
+            for citation in response.citations
+        ],
+        "fallback_reason": None if debug_info is None else debug_info.fallback_reason,
+        "final_status": response.response_status,
+    }
+
+
+def _record_hard_case_from_response(retrieval_trace: dict[str, Any]) -> None:
+    if retrieval_trace.get("fallback_reason") != "no_evidence":
+        return
+    hard_cases_repository.upsert(_build_hard_case_item(retrieval_trace))
+
+
+def _record_hard_case_from_feedback(payload: ChatFeedbackRequest) -> None:
+    if payload.feedback_label != "down":
+        return
+
+    retrieval_trace = retrieval_trace_repository.get_by_trace_id(payload.trace_id)
+    if retrieval_trace is None:
+        return
+
+    hard_cases_repository.upsert(
+        _build_hard_case_item(
+            retrieval_trace,
+            user_feedback=payload.feedback_label,
+        )
+    )
+
+
+def _build_hard_case_item(
+    retrieval_trace: dict[str, Any],
+    *,
+    user_feedback: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "trace_id": retrieval_trace.get("trace_id", ""),
+        "raw_query": retrieval_trace.get("raw_query", ""),
+        "normalized_query": retrieval_trace.get("normalized_query", ""),
+        "domain_hint": retrieval_trace.get("domain_hint"),
+        "fallback_reason": retrieval_trace.get("fallback_reason"),
+        "top_candidates": retrieval_trace.get("citations", []),
+        "evidence_spans": [
+            {"text": citation.get("snippet", "")}
+            for citation in retrieval_trace.get("citations", [])
+            if citation.get("snippet")
+        ],
+        "user_feedback": user_feedback,
+    }
 
 
 def _ensure_record_view_enabled() -> None:

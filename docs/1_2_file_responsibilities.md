@@ -45,7 +45,141 @@
 
 ---
 
-## 4. 当前冻结目录与文件职责
+## 4. 按职责链理解当前默认文件归属
+
+当前主线 1 的文件职责，应先按职责链归属理解，再决定具体改动位置。
+
+### 4.1 Query / Routing 链
+
+主要归属文件：
+
+- `backend/app/guardrails/normalize.py`
+- `backend/app/routing/contracts.py`
+- `backend/app/routing/rule_parser.py`
+- `backend/app/routing/resolver.py`
+- `backend/app/schemas/request.py`
+- `backend/app/config/settings.py`
+
+职责：
+
+- 处理输入归一化
+- 定义最小路由判断结果
+- 承担空输入保护与安全拒答
+- 提供最小门槛配置
+
+不应放入：
+
+- 文档上传与解析逻辑
+- citation 组装逻辑
+- 第二阶段 planner / rerank 目标逻辑
+- 前端展示逻辑
+
+### 4.2 Retrieval / Answering 链
+
+主要归属文件：
+
+- `backend/app/services/chat_service.py`
+- `backend/app/retrieval/retriever.py`
+- `backend/app/retrieval/citation_mapper.py`
+
+职责：
+
+- 组织当前默认问答主链路
+- 调用 FAQ / chunk 检索
+- 组织答案与 citation 原料
+- 承担当前默认 fallback 前的最小结果收口
+
+不应放入：
+
+- 文档解析切块
+- 第二阶段 Hybrid / RRF / Rerank 目标能力
+- 前端展示代码
+- 记录清理与运维脚本逻辑
+
+说明：
+
+- `chat_service.py` 在当前阶段视为链间编排壳；
+- 允许调度当前默认检索，但不应继续膨胀为重型统一调度中心。
+
+### 4.3 Document Ingestion / Knowledge 链
+
+主要归属文件：
+
+- `backend/app/api/routes/documents.py`
+- `backend/app/services/document_service.py`
+- `backend/app/services/document_parser.py`
+- `backend/app/services/chunk_service.py`
+- `backend/app/storage/repositories/document_repo.py`
+- `backend/app/storage/repositories/chunk_repo.py`
+
+职责：
+
+- 文档上传、解析、切块、登记
+- 为问答链路提供可消费的文档与 chunk 输入
+
+不应放入：
+
+- 当前运行时问答路由决策
+- 前端 citation 展示逻辑
+- 第二阶段检索升级目标设计正文
+
+### 4.4 API / Response / Frontend Contract 链
+
+主要归属文件：
+
+- `backend/app/api/routes/chat.py`
+- `backend/app/api/routes/health.py`
+- `backend/app/schemas/response.py`
+- `frontend/src/types/chat.ts`
+- `frontend/src/components/chat/AnswerCard.vue`
+- `frontend/src/components/chat/CitationList.vue`
+- `frontend/src/pages/chat/ChatPage.vue`
+
+职责：
+
+- 暴露 API
+- 冻结当前响应结构
+- 展示答案、citation 与最小调试信息
+
+不应放入：
+
+- 检索排序策略
+- 文档清洗规则
+- 运维脚本逻辑
+
+### 4.5 Trace / Feedback / DevOps 链
+
+主要归属文件：
+
+- `backend/app/runtime/trace.py`
+- `backend/app/storage/repositories/chat_record_repo.py`
+- `backend/app/storage/repositories/feedback_repo.py`
+- `scripts/README.md`
+- `scripts/dev-backend.py`
+- `scripts/dev-demo.py`
+- `scripts/start-backend.py`
+- `scripts/clean-local-records.py`
+
+职责：
+
+- 生成与贯穿 `trace_id`
+- 记录问答与反馈
+- 提供本地开发与生产启动入口
+- 提供最小维护脚本
+
+不应放入：
+
+- FAQ / 检索业务规则
+- 文档接入清洗规则
+- 前端页面业务决策
+
+## 5. 使用方式补充
+
+以后新增或修改逻辑时，应先判断它属于哪条职责链，再判断它应落在哪个具体文件。
+
+若某项改动同时跨越多条链，应先拆成多个最小修改，而不是一次把路由、检索、接入、展示、脚本混写。
+
+## 6. 当前冻结目录与文件职责
 
 ### `README.md`
 
@@ -60,7 +194,7 @@
 - 不负责替代系统设计文档
 - 不负责替代脚本详细参数说明（参见 `scripts/README.md`）
 
-## 4.1 前端文件职责
+## 6.1 前端文件职责
 
 ### `frontend/package.json`
 
@@ -694,7 +828,7 @@
 
 ---
 
-## 5. 当前最小依赖方向
+## 7. 当前最小依赖方向
 
 当前阶段建议保持以下依赖方向：
 
@@ -713,7 +847,7 @@ storage -> local jsonl data / seed/mock data
 
 ---
 
-## 6. 当前阶段结论
+## 8. 当前阶段结论
 
 当前文件职责冻结的核心目标是：
 
