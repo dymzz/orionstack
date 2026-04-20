@@ -90,6 +90,7 @@ SICK_LEAVE_MATERIALS_LOCATOR = SICK_LEAVE_MATERIALS["source_locator"]
 LEAVE_PROGRESS_LOCATOR = LEAVE_PROGRESS["source_locator"]
 ATTENDANCE_APPEAL_LOCATOR = ATTENDANCE_APPEAL["source_locator"]
 ONBOARDING_DAY_ONE_LOCATOR = ONBOARDING_DAY_ONE["source_locator"]
+TIMEOFF_BALANCE_LOCATOR = TIMEOFF_BALANCE["source_locator"]
 LEAVE_APPLY_FIXTURE_NAME = fixture_path_for_faq_id(LEAVE_APPLY_ID).name
 
 
@@ -1542,7 +1543,17 @@ def test_chat_service_excludes_irrelevant_candidate_from_clarification_options(
     assert response.debug_info.reject_reason == "multiple_close_faq_candidates"
 
 
-@pytest.mark.parametrize("raw_query", ["请假", "怎么请假", "如何请假", "什么叫请假"])
+@pytest.mark.parametrize(
+    "raw_query",
+    [
+        "请假",
+        "怎么请假",
+        "如何请假",
+        "什么叫请假",
+        "请假怎么走",
+        "请假流程",
+    ],
+)
 def test_chat_service_returns_clarification_for_generic_leave_queries(
     monkeypatch,
     raw_query: str,
@@ -1805,6 +1816,27 @@ def test_chat_service_accepts_selected_clarification_option_in_hybrid_path(
             ONBOARDING_DAY_ONE_ID,
             ONBOARDING_DAY_ONE_LOCATOR,
             "入职第一天需要办理什么手续",
+        ),
+        (
+            # 2_4 §9.2 gap closure: timeoff_balance had no direct-answer test
+            # despite being a named backlog query. This exact-question form
+            # exercises the full hybrid-rerank-evidence chain on the last of
+            # the four §9.2 specific HR intents.
+            "调休余额在哪里看？",
+            [
+                _build_hybrid_generic_fixture_hit(
+                    "timeoff_balance",
+                    score=0.032258,
+                    lexical_rank=1,
+                    vector_rank=1,
+                    rrf_rank=1,
+                    bm25_score=2.4,
+                    vector_score=0.88,
+                )
+            ],
+            TIMEOFF_BALANCE_ID,
+            TIMEOFF_BALANCE_LOCATOR,
+            TIMEOFF_BALANCE["question"].rstrip("？?"),
         ),
     ],
 )

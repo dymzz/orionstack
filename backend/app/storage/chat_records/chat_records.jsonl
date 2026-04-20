@@ -130,3 +130,7 @@
 {"trace_id": "ed84e8f42e5243c19eb6de6fe16576ba", "raw_query": "请假咋整", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003", "hr-faq-001"], "created_at": "2026-04-20T11:22:42.530438+00:00"}
 {"trace_id": "48449d3184984b77a1aad216cc3aca9e", "raw_query": "值班怎么安排", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["admin-faq-005", "admin-faq-012"], "created_at": "2026-04-20T11:23:06.650787+00:00"}
 {"trace_id": "d9b83ae7ab4f46659c6a3ae13992365d", "raw_query": "值班安排", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["admin-faq-005", "admin-faq-010"], "created_at": "2026-04-20T11:23:13.269326+00:00"}
+{"trace_id": "d97410a881ae4d5a997292127e128f21", "raw_query": "密码", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-001", "it-faq-007"], "created_at": "2026-04-20T11:49:23.369566+00:00"}
+{"trace_id": "c0ceb656701e4878af334dd6f3e31092", "raw_query": "公司 Wi-Fi 怎么连接？", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-007"], "created_at": "2026-04-20T11:49:38.867161+00:00"}
+{"trace_id": "f883beab5c624a5ca3f8f9c78685c704", "raw_query": "生产变更需要怎么申请", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["admin-faq-002"], "created_at": "2026-04-20T11:49:48.840004+00:00"}
+{"trace_id": "18ff1dfeab4447f1831347991cb8df3a", "raw_query": "系统权限", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-009", "it-faq-003"], "created_at": "2026-04-20T11:50:07.210061+00:00"}

@@ -54,12 +54,19 @@
 - `planner.domain_hint → ChatService → HybridRetriever → Lexical/Vector ES filter` 数据流已核实结构性无缺口，并由 `test_chat_service_propagates_planner_domain_hint_to_both_lexical_and_vector_sides` 断言当 `domain_hint == "hr"` 时 lexical / vector 两侧的 `business_domain` kwarg 都被 narrow，防止未来 refactor 误删某条透传导致跨域噪声回流
 - fusion dominance bonus **每候选归因**已落到 `HybridHit.lexical_dominance_applied` / `HybridHit.vector_dominance_applied` 以及 `RetrievalCandidateSummary` 的同名字段，供 `debug_info.rrf_topk` 与持久化的 `retrieval_trace` JSONL 回放使用；追加 unit 层 `test_hybrid_retriever_records_dominance_attribution_per_candidate_on_hybrid_hits` 与 e2e 层 `test_chat_service_surfaces_fusion_dominance_attribution_in_debug_rrf_topk` 两条断言，钉住“bonus 赢家与普通 RRF 赢家可被 trace 观察者区分”的可观测性契约
 - **检索保护纪律已沉淀为独立文档**：`docs/2_5_retrieval_defense_discipline.md` 整理四层保护网（召回 narrow / 融合 bonus / rerank accept / attribution 观测）、不变式清单、被拒绝的路径、测试到代码映射、五轮讨论时间线，作为未来任何改动 `hybrid_retriever.py` / `reranker.py` / `_search_elastic` 时的纪律入口
-- **内容层线已落地三轮，§9.4 在现有 fixture 数据上饱和**：`backend/tests/test_phase2_cross_domain.py` 共 9 条断言
+- **内容层线已落地四轮**：`backend/tests/test_phase2_cross_domain.py` 共 11 条断言
   - 首轮：多域端到端 smoke（admin / finance / it / ops 四域首条 FAQ）+ HR × Finance 单向污染（`hr-faq-003` vs `finance-faq-004`）
   - 二轮：Admin × IT 权限对称污染对（`admin-faq-003` vs `it-faq-012`）
   - 三轮：Finance × Ops 申请审批对称污染对（`finance-faq-005` vs `ops-faq-003`）
-  - 三对污染测试共同证明：fusion 层被跨域候选污染时，rerank/evidence 层独立决策仍能回收正确答案，且双向对称无偏好 —— 落地了 `2_5` 文档 §2.3 的 defence-in-depth 契约
-- §9.4 剩余簇均为 **fixture data-gap**：HR × IT（需补 HR 账号管理 seed）、Admin × 其他（需补其他域预订 seed）；当前 fixture 数据下继续加测试不会产生新覆盖
+  - 四轮：**补 fixture seed + 补测试**同步完成 HR × IT 登录对称污染对 —— 新增 `hr-faq-013` "HR 系统登录不上怎么办？"（structural parallel 于 `it-faq-001` "忘记登录密码怎么办？"），然后补两条对称断言
+  - 三对对称污染测试共同证明：fusion 层被跨域候选污染时，rerank/evidence 层独立决策仍能回收正确答案，且在所有已测 domain pair 上双向对称无偏好 —— 落地了 `2_5` 文档 §2.3 的 defence-in-depth 契约
+  - 本轮附带验证了 "data-gap 不是永久障碍" —— 走 `补 seed → 补测试` 两步可把 backlog 里任何 data-gap 项转为 test-landed
+- §9.4 剩余簇仅剩 **Admin × 其他（"预订"语义）** 一条 data-gap；其他 domain pair 已全部完成或无结构平行候选对
+- **同域近义查询簇（§9.1 / §9.2）审计后补全**：
+  - §9.1 请假泛问法：`test_chat_service_returns_clarification_for_generic_leave_queries` 参数扩到 6 条（原 backlog 5 条全覆盖 + `什么叫请假`），clarification mode 与 option 排序双保证
+  - §9.2 具体问法：`test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_path` 补 `调休余额在哪里看？` 作为第 5 个参数（backlog 四类 HR 具体问法全部有直接答案测试）
+  - §9.3 上传文档簇不在同域近义这一轮范围内 —— 属于文档上传路由独立线
+- **§9 各轮工作沉淀为可复用方法论**：`docs/2_4_test_strategy.md §12` 新增 "内容层线的审计先行方法论"，覆盖四种缺口分类（cosmetic / real / data-gap / cross-direction）、审计四步骤、扩展 vs 新建判据，以及何时不适用 —— 防止未来接手人面对 backlog 簇时直接机械建测试而产生重复工作
 - `backend/app/query/query_planner.py` 已落地第一轮本地确定性 planner
 - `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
 - `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链

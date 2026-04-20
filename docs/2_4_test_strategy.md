@@ -438,8 +438,10 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
 
 目的：
 
-- 避免系统在“泛问法”与“具体问法”之间反复漂移
+- 避免系统在"泛问法"与"具体问法"之间反复漂移
 - 避免把模糊 query 误答成某一个具体 FAQ
+
+**已完全落地**：`test_chat_service_returns_clarification_for_generic_leave_queries` 参数化覆盖 `["请假", "怎么请假", "如何请假", "什么叫请假", "请假怎么走", "请假流程"]` 6 条（原 backlog 5 条 + 额外 `什么叫请假`），每条均断言进入 clarification mode 且 option 排序正确；反向由 `test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_path` 保证具体问法不会误触发 clarification。
 
 ### 9.2 年假 / 病假 / 审批进度簇
 
@@ -455,6 +457,8 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
 - 锁住 `domain_hint = hr` 后的 lexical_terms 扩展是否真正对检索起作用
 - 锁住 rerank / evidence 接收条件不反向把已有 seed 打成 no_evidence
 
+**已落地**：`test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_path` 参数化覆盖四类 HR 具体问法：`如何申请年假？` / `病假材料` / `请假进度怎么看` / `入职第一天需要办理什么手续？` / `调休余额在哪里看？`（本轮补齐最后一条）；每条断言 citation id、source_locator、rerank_accept、`retrieval_mode=="hybrid_rerank"`、`response.clarification is None`。backlog 中 `病假需要提交什么材料？` / `请假审批进度在哪里查看？` 的近义短问法已覆盖，exact-form 未做 —— 属于 cosmetic 差异，不影响 §9.2 的核心契约（具体问法不 fallback 到 clarification / no_evidence）。
+
 ### 9.3 上传文档簇
 
 - `如何上传文档？`
@@ -465,6 +469,8 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
 目的：
 
 - 这类样本已经出现过真实 down 反馈，应纳入长期 regression，而不是只做一次性修复
+
+**部分落地 / 本质不同簇**：`如何上传文档？` 在 `test_phase2_retrieval.py` / `test_phase2_trace.py` / `test_phase2_hard_cases.py` / `test_chat_flow.py` 中作为 baseline 查询被多处使用；其余 3 条自然语言变体（`上传文档怎么做？` / `文档怎么上传` / `上传后为什么没建立索引`）未测。此簇**与 §9.1 / §9.2 本质不同** —— 前两者是 FAQ 检索行为，此簇涉及文档上传路由与 `document_first` 检索链路，应作为独立聚焦线处理，不在同域近义簇这一轮收口范围内。
 
 ### 9.4 各领域跨域误命中簇
 
@@ -478,7 +484,7 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
 
 - 新增多域 fixture 后，最容易出现的不是“完全查不到”，而是“查到隔壁域”
 
-已落地（文件 `backend/tests/test_phase2_cross_domain.py`，9 条断言，§9.4 在现有 fixture 数据上**已饱和**）：
+已落地（文件 `backend/tests/test_phase2_cross_domain.py`，11 条断言）：
 
 - **多域端到端 smoke**（4 条，参数化）：`test_chat_service_answers_typical_query_for_non_hr_domain_seed` 覆盖 `admin-faq-001 / finance-faq-001 / it-faq-001 / ops-faq-001` 四条代表性 FAQ，断言每条都能走完 ChatService 端到端并正确回源到自己的 `source_locator`
 - **HR × Finance 单向污染**（1 条）：`test_chat_service_picks_hr_leave_progress_over_finance_payment_progress_on_shared_structural_keywords`
@@ -494,13 +500,19 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
   - `test_chat_service_picks_ops_production_change_over_finance_loan_application_when_query_matches_ops`
   - `finance-faq-005` "借款申请怎么走？" vs `ops-faq-003` "生产变更需要怎么申请？"
   - 共享 "按流程提交/发起申请...并提交审批" 结构
+- **HR × IT 登录对称污染对**（2 条，本轮新增）：
+  - `test_chat_service_picks_hr_self_service_login_over_it_password_reset_when_query_matches_hr`
+  - `test_chat_service_picks_it_password_reset_over_hr_self_service_login_when_query_matches_it`
+  - `hr-faq-013` "HR 系统登录不上怎么办？"（本轮新增）vs `it-faq-001` "忘记登录密码怎么办？"
+  - answer 模板："如 X 可先 Y ... 若仍 Z，请通过 ... 入口提交申请，由管理员按流程协助处理"
+  - 本轮通过**补 fixture seed + 补测试**两步把原来的 data-gap 填成 test-landed，证明 "data-gap 不是永久障碍，补 seed 后可直接接上测试框架"
 
-三对污染测试共同证明的契约：**fusion 层被跨域候选污染时，rerank/evidence 层独立决策仍能回收正确答案；且这条性质是双向对称的**（`Admin×IT`、`Finance×Ops` 两对双向测试排除了 rerank 对任一方向的隐藏偏好）。
+三对对称污染测试（Admin×IT / Finance×Ops / HR×IT）共同证明的契约：**fusion 层被跨域候选污染时，rerank/evidence 层独立决策仍能回收正确答案；且这条性质是双向对称的**，rerank 对所有已测 domain pair 均无方向偏好。
 
-剩余 §9.4 簇 —— **fixture data-gap，不是测试缺口**：
+剩余 §9.4 簇 —— **fixture data-gap**：
 
-- **HR × IT**：当前 fixtures 里 HR / IT 之间没有真正结构平行的问答对（HR 入职"账号开通" vs IT "账号密码重置" 只有弱关键词重合），如需补这条簇需要先在 seed 里增加 HR 账号管理类 FAQ
-- **Admin × 其他**："预订" 语义仅出现在 Admin `admin-faq-001`，当前 fixtures 里其他域无对应 FAQ
+- **Admin × 其他**："预订" 语义仅出现在 Admin `admin-faq-001`，当前 fixtures 里其他域无对应 FAQ；如需覆盖需先在某个非 Admin 域（如 Ops 或 Finance）补"预订/预约"相关 seed
+  - 按本轮相同的模式（补 seed → 补对称测试）即可解锁
 
 同域多条 FAQ 的近义查询（`请假` 泛问法簇，见 §9.1）与此簇不重叠，属于另一条 backlog 延续。
 
@@ -578,3 +590,63 @@ curl -X POST "http://localhost:9200/_analyze" -H "Content-Type: application/json
 一句话总结：
 
 **`backend/tests` 新加入的各领域清洗文档，不应只被视为“更多测试文件”，而应正式升级为第二阶段的领域回归资产；`docs/2_4_test_strategy.md` 也应随之从“已有 phase 2 测试说明”升级为“行为测试 + 领域 fixture + hard-case 回归”的执行文档。**
+
+---
+
+## 12. 内容层线的审计先行方法论
+
+本节沉淀 §9 各轮 cross-domain 与 intra-domain 测试工作中得出的一条具体工作方法。它不是对 §2 总原则的替代，而是在**"决定要不要新建测试"** 这一具体环节上的落地指南。面向的对象是未来接手新增 fixture、新增 backlog 簇或新增 seed 的人。
+
+### 12.1 为什么需要审计先行
+
+§9 各簇首次开工时容易产生一种直觉反应："backlog 里列了 N 条查询，那就建一个新文件 `test_domain_XXX.py`，把 N 条都写进去"。这个反应在 §9.1 / §9.2 / §9.4 都被证伪过：
+
+- §9.1 backlog 列 5 条泛问法，实际 `test_chat_service_returns_clarification_for_generic_leave_queries` 已经参数化覆盖其中 4 条（机械建新文件会产生大量重复）
+- §9.2 backlog 列 4 条具体问法，实际 `test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_path` 已经覆盖 3 条核心意图（真实缺口只有 1 条）
+- §9.4 backlog 列 4 对 domain pair，实际 fixtures 里只有 3 对有结构平行的问答对（直接建测试会在无数据的方向反复红）
+
+**审计先行** = 开工前先用 grep / 读既有参数化 / 对比 backlog，把"要做的"与"已经有的"分开，再决定下一步。
+
+### 12.2 四种缺口分类
+
+任何 backlog 项开工前应被归为以下四类之一。不同类别的应对方式完全不同，混淆会导致无效工作：
+
+| 缺口类型 | 定义 | 应对方式 |
+|---|---|---|
+| **cosmetic gap** | 契约已覆盖，只差命名一致的 parameter | 扩展既有 parametrize 一行，不开新文件 |
+| **real test gap** | 契约未覆盖，但 fixture / helper 都就绪 | 补一条断言，用既有 helpers |
+| **fixture data-gap** | fixture 里没有结构平行样本，无法构造载荷 | **不加测试**，先补 seed；补完后走回 real test gap |
+| **cross-direction gap** | backlog 本身指向的是另一条独立聚焦线 | 明确标记为"不在本轮范围"，不强行拉进来做 |
+
+§9.3 上传文档簇是第 4 类的典型例子：名义上在 §9 "hard-case 回归" 下面，实际与 §9.1 / §9.2 的 FAQ 检索行为本质不同，属于文档上传路由独立线。强行在同域近义这一轮做它，会造成聚焦线污染。
+
+### 12.3 审计步骤
+
+对任一 backlog 簇开工前，做下列四步，全部完成再决定是否动代码：
+
+1. **grep 既有参数化**：用 backlog 里的核心词（如"请假" / "调休余额"）在 `backend/tests/*.py` 里搜，列出所有已参数化覆盖的查询
+2. **对比 backlog 清单**：逐条对比"已有 vs 应有"，把每条映射到 §12.2 的四类之一
+3. **识别 data-gap**：对"真实缺口"候选项，进一步确认 fixtures 里是否有可用载荷；若无则降级为 data-gap
+4. **产出最小动作集**：输出"要扩哪些参数 / 要加哪些断言 / 要补哪些 seed"的清单，**每项都能独立 review**
+
+做完这四步，再决定是继续开工、补 seed、还是延缓到新聚焦线。**跳过审计直接建测试是本节想防止的主要失误**。
+
+### 12.4 扩展 vs 新建判据
+
+审计后若决定要补测试，按下列判据选择落位：
+
+- **扩展既有 parametrize**（优先）：新场景与既有断言契约完全相同，仅查询 / 候选集变化
+- **同文件新增函数**：新场景引入新断言（如对称污染对引入"反向防误引"断言），与既有测试同一主题但契约不同
+- **新建文件**（慎用）：新场景跨越一整条聚焦线（如 cross-domain 是全新维度），或与既有文件主题正交
+
+§9.4 建 `test_phase2_cross_domain.py` 属于"新建文件"合理场景 —— cross-domain 与 `test_phase2_retrieval.py` 的 HR-only fusion 测试是正交维度，且预期会承载多轮 symmetric pair 扩张。§9.1 / §9.2 扩既有 parametrize 则避免了把 12 个参数化变体散到 5 个小文件的反模式。
+
+### 12.5 何时不适用
+
+以下情况审计先行**不应作为阻塞**，直接建测试反而更合理：
+
+- 明确的 TDD 先写测试场景（契约定义阶段）
+- 完全新增的顶层功能（第一轮建立最小框架时）
+- 故意建一个"可复用的新断言 shape"供后续参数化扩展（如 §9.4 cross-domain 首轮的 HR × Finance 单向污染测试，目的就是定义 shape）
+
+这些场景的共同特征是：**不存在可审计的既有覆盖**。本节方法论只约束"已有测试生态中补缺口"这一具体动作。

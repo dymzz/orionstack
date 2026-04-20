@@ -243,6 +243,21 @@
     "source_label": "HR FAQ",
     "source_locator": "hr_faq_seed_v1#hr-faq-012",
     "snippet": "试用期考核结果通常通过员工系统、直属上级通知或 HR 通知确认。"
+  },
+  {
+    "id": "hr-faq-013",
+    "title": "HR 系统登录不上怎么办？",
+    "question": "HR 系统登录不上怎么办？",
+    "answer": "如 HR 自助系统登录失败，可先确认账号信息是否正确或稍后再次尝试。若仍无法登录，请通过 HR 服务入口提交申请，由 HR 管理员按流程协助处理。",
+    "keywords": ["HR 系统", "登录", "账号", "HR 管理员", "申请"],
+    "business_domain": "hr",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "HR FAQ",
+    "source_locator": "hr_faq_seed_v1#hr-faq-013",
+    "snippet": "如 HR 自助系统登录失败，可先确认账号信息是否正确或稍后再次尝试。"
   }
 ]
 ```

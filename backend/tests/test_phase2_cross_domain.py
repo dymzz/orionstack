@@ -458,3 +458,144 @@ def test_chat_service_picks_ops_production_change_over_finance_loan_application_
     assert response.debug_info.rerank_accept is True
     assert response.debug_info.retrieved_chunks == ["ops-faq-003"]
     assert "finance-faq-005" not in [c.citation_id for c in response.citations]
+
+
+# ---------------------------------------------------------------------------
+# HR × IT 登录 symmetric contamination pair
+#
+#   hr-faq-013 "HR 系统登录不上怎么办？"         (added this round)
+#   it-faq-001 "忘记登录密码怎么办？"
+#
+# HR fixtures previously had no login/account management FAQ structurally
+# parallel to the IT side, which forced the HR × IT direction of §9.4 to
+# be marked as a fixture data-gap. This round adds hr-faq-013 so the pair
+# is now testable against real seed data.
+#
+# Both answers follow the same template: "如 X 可先 Y ... 若仍 Z，请通过
+# ... 入口提交申请，由管理员按流程协助处理". A user query like
+# "登录不上怎么办" is genuinely ambiguous between the HR self-service
+# system and general IT/company-account login — both directions must
+# resolve to their own domain answer.
+# ---------------------------------------------------------------------------
+
+
+def test_chat_service_picks_hr_self_service_login_over_it_password_reset_when_query_matches_hr(
+    monkeypatch,
+) -> None:
+    hr_item = _seed_by_id("hr-faq-013")
+    it_item = _seed_by_id("it-faq-001")
+
+    fake_lexical = _FakeLexicalRetriever(
+        [_build_fixture_lexical_hit(hr_item, score=2.3)]
+    )
+    fake_hybrid = _FakeHybridRetriever(
+        [
+            _build_fixture_hybrid_hit(
+                it_item,
+                score=0.033,
+                lexical_rank=1,
+                vector_rank=1,
+                rrf_rank=1,
+                bm25_score=2.5,
+                vector_score=0.87,
+            ),
+            _build_fixture_hybrid_hit(
+                hr_item,
+                score=0.031,
+                lexical_rank=2,
+                vector_rank=2,
+                rrf_rank=2,
+                bm25_score=2.4,
+                vector_score=0.85,
+            ),
+        ]
+    )
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="HR 系统登录不上怎么办？",
+            domain_hint=None,
+            lexical_terms=["HR 系统", "登录", "账号"],
+            planner_confidence=0.85,
+        )
+    )
+
+    _install_fakes(
+        monkeypatch, lexical=fake_lexical, hybrid=fake_hybrid, planner=fake_planner
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="HR 系统登录不上怎么办？", debug=True),
+        trace_id="trace-phase2-cross-domain-hr-login",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert len(response.citations) == 1
+    assert response.citations[0].citation_id == "hr-faq-013"
+    assert response.citations[0].source_locator == hr_item["source_locator"]
+    assert response.debug_info is not None
+    assert response.debug_info.rerank_accept is True
+    assert response.debug_info.retrieved_chunks == ["hr-faq-013"]
+    assert "it-faq-001" not in [c.citation_id for c in response.citations]
+
+
+def test_chat_service_picks_it_password_reset_over_hr_self_service_login_when_query_matches_it(
+    monkeypatch,
+) -> None:
+    hr_item = _seed_by_id("hr-faq-013")
+    it_item = _seed_by_id("it-faq-001")
+
+    fake_lexical = _FakeLexicalRetriever(
+        [_build_fixture_lexical_hit(it_item, score=2.3)]
+    )
+    fake_hybrid = _FakeHybridRetriever(
+        [
+            _build_fixture_hybrid_hit(
+                hr_item,
+                score=0.033,
+                lexical_rank=1,
+                vector_rank=1,
+                rrf_rank=1,
+                bm25_score=2.5,
+                vector_score=0.87,
+            ),
+            _build_fixture_hybrid_hit(
+                it_item,
+                score=0.031,
+                lexical_rank=2,
+                vector_rank=2,
+                rrf_rank=2,
+                bm25_score=2.4,
+                vector_score=0.85,
+            ),
+        ]
+    )
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="忘记登录密码怎么办？",
+            domain_hint=None,
+            lexical_terms=["忘记", "登录", "密码"],
+            planner_confidence=0.85,
+        )
+    )
+
+    _install_fakes(
+        monkeypatch, lexical=fake_lexical, hybrid=fake_hybrid, planner=fake_planner
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="忘记登录密码怎么办？", debug=True),
+        trace_id="trace-phase2-cross-domain-it-password",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert len(response.citations) == 1
+    assert response.citations[0].citation_id == "it-faq-001"
+    assert response.citations[0].source_locator == it_item["source_locator"]
+    assert response.debug_info is not None
+    assert response.debug_info.rerank_accept is True
+    assert response.debug_info.retrieved_chunks == ["it-faq-001"]
+    assert "hr-faq-013" not in [c.citation_id for c in response.citations]
