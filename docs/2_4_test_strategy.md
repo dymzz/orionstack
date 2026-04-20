@@ -1,526 +1,554 @@
-# OrionStack 第二阶段最小测试策略 v1
+# OrionStack 第二阶段测试策略 v2
 
 > 对应设计文档：`docs/designs/2_system_design.md`  
 > 配套进度文档：`docs/2_1_progress.md`  
 > 配套职责文档：`docs/2_2_file_responsibilities.md`  
-> 配套字段文档：`docs/2_3_field_definitions.md`
+> 配套字段文档：`docs/2_3_field_definitions.md`  
+> 目标：把第二阶段测试从“已有 phase 2 单测位”推进到“真实链路稳定 + 各领域清洗文档 fixture 化 + hard-case 持续回归”。
 
 ---
 
 ## 1. 文档目标
 
-本文档只解决一件事：
+本文档只回答第二阶段当前应如何测试，不扩写远期测试体系，不讨论通用测试教科书。
 
-**为第二阶段当前已经落地的过渡模块，以及后续将继续落地的检索升级模块，定义一套最小、可执行、可回归的测试策略。**
-
-本文档不承担以下职责：
-
-- 不重写 `2_system_design.md` 的系统设计
-- 不替代 `2_2_file_responsibilities.md` 的文件职责边界说明
-- 不替代 `2_3_field_definitions.md` 的字段语义解释
-- 不替代 `2_1_progress.md` 的推进状态说明
-- 不替代详细测试用例文件本身
-- 不引入重型 benchmark 平台或新的测试基础设施要求
+当前目标不是把整个仓库做成重型 TDD，而是把**最容易漂移的行为层先锁住**，再让新增的各领域清洗文档进入长期回归资产。
 
 ---
 
-## 2. 适用范围
+## 2. 当前测试策略总原则
 
-本文档适用于第二阶段当前已经进入仓库、或明确将在后续接入的能力，包括：
+第二阶段当前建议采用三层策略：
 
-- `Knowledge Unit` 统一数据层
-- Elasticsearch lexical-only 过渡检索链路
-- 最小 Query Planner 与 Hybrid Retrieval 过渡链路
-- 第二阶段索引写入与索引健康检查
-- 主服务中的 phase 2 search backend 切换入口
-- 后续将继续扩展的 rerank / trace / hard cases
+1. **Test-First**
+   - 用于行为边界、返回契约、检索接收条件、反馈闭环等高漂移模块。
+   - 这层的目标是：系统表面能跑时，也不能静默漂移。
 
-当前仓库中**已落地并应纳入最小测试策略**的文件主要包括：
+2. **Smoke**
+   - 用于启动、索引、文档解析、接口健康检查等“通不通”问题。
+   - 这层的目标是：保证环境与主链路基本连通。
 
-- `backend/app/storage/repositories/knowledge_unit_repo.py`
-- `backend/app/retrieval/lexical_retriever.py`
-- `backend/app/indexing/elastic_indexer.py`
-- `backend/app/indexing/index_health_checker.py`
+3. **Hard-Case Regression**
+   - 用于真实失败样本、泛问法、模糊问法、跨域误路由、弱命中等边界问题。
+   - 这层的目标是：把线上/联调失败逐步沉淀成稳定回归集。
+
+---
+
+## 3. 当前真实链路对应的测试分层
+
+### 3.1 优先做 Test-First 的文件与能力
+
+以下能力一旦漂移，系统通常不会立刻报错，但行为会越来越不稳定，因此应优先 test-first：
+
+#### A. 主问答链路编排
+
 - `backend/app/services/chat_service.py`
-- `backend/app/config/settings.py`
+- `backend/app/api/routes/chat.py`
 
-当前仓库中**已经存在的最小测试基础**主要包括：
+要锁住的内容：
 
-- `backend/tests/test_chat_flow.py`
-- `backend/tests/test_document_flow.py`
+- `normalize_query -> route -> planner -> retrieval -> rerank -> response` 的主链路不静默漂移
+- `response_status = ok / fallback / refused / system_error` 的触发边界稳定
+- `trace_id`、`citations`、`debug_info`、`clarification` 的最小返回契约稳定
+- feedback 写入、hard-case 生成、retrieval trace 记录的闭环不丢
 
----
+#### B. 路由与 query planning
 
-## 3. 使用原则
+- `backend/app/routing/rule_parser.py`
+- `backend/app/routing/resolver.py`
+- `backend/app/query/query_planner.py`
 
-### 3.1 先保证最小可执行，再扩大覆盖
+要锁住的内容：
 
-第二阶段测试当前不追求一次性覆盖 planner、hybrid、rerank、clarification、trace 全链路。
+- 空输入 / 非 FAQ 输入 / 正常输入的最小路由边界
+- `route_result` 与 `route_confidence` 的行为稳定
+- `domain_hint` 的域识别稳定
+- `lexical_terms` 的补词行为稳定，尤其是 HR 类 query 的扩词不回退
 
-当前优先目标是：
+#### C. 检索与接收判定
 
-- 已落地能力有最小回归保护
-- 切换 search backend 时不至于无测试保护
-- 关键升级不破坏第一阶段当前默认可运行链路
+- `backend/app/retrieval/lexical_retriever.py`
+- `backend/app/retrieval/vector_retriever.py`
+- `backend/app/retrieval/hybrid_retriever.py`
+- `backend/app/retrieval/evidence_extractor.py`
+- `backend/app/retrieval/reranker.py`
+- `backend/app/retrieval/citation_mapper.py`
 
-### 3.2 默认测试基线不依赖外部重型服务
+要锁住的内容：
 
-默认本地回归基线应优先依赖：
+- lexical / vector / hybrid / rerank 的排序边界不静默变化
+- FAQ 与 document 的相对得分方向稳定
+- `evidence_confidence`、`rerank_accept`、`reject_reason` 等接收判定不漂
+- `source_label / source_locator / snippet / citation_id` 不退化
 
-- `pytest`
-- 临时目录 / 本地 jsonl
-- monkeypatch / stub
+#### D. 反馈、trace 与 hard-case 闭环
 
-而不应默认要求：
+- `backend/app/storage/repositories/feedback_repo.py`
+- `backend/app/observability/retrieval_trace.py`
+- `backend/app/testing/hard_cases_repo.py`
 
-- 在线 API
-- 完整 benchmark 平台
-- 复杂 observability 平台
-- 永久在线 Elasticsearch 集群
+要锁住的内容：
 
-### 3.3 测试分为 smoke 与 regression 两层
+- feedback 能通过 `trace_id` 正确关联已有 ask 记录
+- retrieval trace 能稳定记录与回放关键调试字段
+- hard-case 能按 `trace_id` upsert，而不是重复污染
+- 最近记录 / 最近 hard-case 的读取逻辑不反向破坏现有排查体验
 
-- **smoke**：修改后快速确认主链路还能跑通
-- **regression**：对已落地边界做稳定断言，防止行为回退
+#### E. 前后端返回契约
 
-### 3.4 当前已落地能力与目标能力分开验收
+- `backend/app/schemas/request.py`
+- `backend/app/schemas/response.py`
+- `frontend/src/types/chat.ts`
 
-- 已落地模块：要求有明确测试入口或建议补齐的直接测试位
-- 尚未落地模块：只先定义未来测试应覆盖什么，不提前写成“已具备测试保护”
+要锁住的内容：
 
----
-
-## 4. 当前仓库已具备的测试基础
-
-### 4.1 `backend/tests/test_chat_flow.py`
-
-当前已覆盖的核心场景包括：
-
-- FAQ 已知问题命中
-- document-first 命中优先于 FAQ
-- `document_ids` 范围限制下的检索行为
-- 选中文档不命中时的 fallback
-- 弱检索命中下的 fallback / FAQ 兜底
-- 基础安全拒答
-- debug 信息在不同运行模式下的暴露边界
-- citation 最小结构与最小回源定位断言
-- retrieval trace 落盘与按 `trace_id` 回放
-- hard cases 最小写入 / 读取与负反馈回流
-
-当前意义：
-
-- 它已经承担了第二阶段之前主链路的最小保护带
-- 后续 phase 2 过渡接线若破坏默认链路，应首先在这里暴露
-
-### 4.2 `backend/tests/test_document_flow.py`
-
-当前已覆盖的核心场景包括：
-
-- 文档上传
-- 文档列表
-- 文档删除
-- 文档解析与切块落盘
-- chunk 最小回源元数据
-- citation 回源定位字段
-- 非法后缀拦截
-
-当前意义：
-
-- 它提供了 document chunk -> citation -> retrieval 之前的数据基座保护
-- 后续 phase 2 若继续统一 document chunk 为 `Knowledge Unit`，这里仍是上游数据正确性的最小保障
-
-### 4.3 当前已补齐的 phase 2 最小单测
-
-当前已新增并通过验证的 phase 2 最小单测主要包括：
-
-#### `backend/tests/test_phase2_settings.py`
-
-当前已覆盖：
-
-- `search_backend` 的环境变量解析
-- 无效 search backend 的回退行为
-- `elastic_use_ik_analyzer / enable_query_planner / enable_fast_track` 的布尔开关解析
-- `elastic_url / elastic_index / planner_provider / planner_model / ollama_url` 的环境变量读取
-
-#### `backend/tests/test_phase2_knowledge_unit.py`
-
-当前已覆盖：
-
-- FAQ -> `KnowledgeUnit` 映射
-- chunk -> `KnowledgeUnit` 映射
-- `list_all / list_faq_units / list_chunk_units` 行为
-- 默认字段与最小兼容值
-
-#### `backend/tests/test_phase2_indexing.py`
-
-当前已覆盖：
-
-- `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
-- `ElasticIndexer.index_units()` 的最小写入流程
-- `IndexHealthChecker.check()` 的基础输出结构
-- 连通异常时的错误输出
-
-#### `backend/tests/test_phase2_retrieval.py`
-
-当前已覆盖：
-
-- `LexicalRetriever` 的空 query 行为
-- `LexicalRetriever` 的默认 `lifecycle_status = active` 过滤
-- `business_domain / access_scope / lifecycle_status` filter 拼装行为
-- `ChatService` 在 `search_backend = elasticsearch` 下的最小切换行为
-- `ChatService` 在 Elasticsearch 无命中时的 fallback 行为
-- `ChatService._extract_lexical_terms()` 的最小稳定输出
-- `VectorRetriever` 的最小候选过滤与排序行为
-- `HybridRetriever` 的 lexical + vector + RRF 融合行为
-- `ChatService` 在 planner 高置信时进入 hybrid path 的最小接线行为
-- `EvidenceExtractor` 的最小证据句抽取
-- `Reranker` 在 FAQ / document 冲突时的最小重排行为
-- `ChatService` 在 hybrid path 上使用 rerank / evidence 的最终返回行为
-- `ChatService` 在 planner 低置信时回退到 rule_parser / fast track / lexical-only 的行为
-- FAQ-first 在 ES 过渡链路下不退化回 `document_chunk`
-
-#### `backend/tests/test_phase2_planner.py`
-
-当前已覆盖：
-
-- `QueryPlanner` 最小字段输出：
-  - `normalized_query`
-  - `domain_hint`
-  - `lexical_terms`
-  - `planner_confidence`
-- `ChatService` 在 planner 开启时对 ES lexical-only 过渡链路的最小参数透传
-- `ChatService` 在 planner 低置信时保持当前回退路径
-
-### 4.4 当前仍待补齐、但已明确存在测试价值的 phase 2 模块
-
-当前尚缺少专门测试文件或明确断言的模块主要包括：
-
-- `query_cache.py` 真正落地后的缓存一致性行为
-- `api_provider.py` 真正落地后的降级与回退行为
-- retrieval trace / hard cases 的更完整发布前门槛
+- `debug_info` 中当前已经落地的字段不静默删除或改名
+- `citations` 与前端展示字段不失配
+- `clarification` 与 `response_status` 组合关系稳定
 
 ---
 
-## 5. 第二阶段最小 Smoke 策略
+### 3.2 只保留 Smoke 的文件与能力
 
-## 5.1 当前必须可执行的本地 smoke
+以下能力当前重点是“可用”，不值得先投入大量细粒度行为测试：
 
-每次涉及以下改动之一时，至少应执行一轮本地 smoke：
+#### A. 启动与健康检查
 
-- `chat_service.py`
-- `retriever.py`
-- `lexical_retriever.py`
-- `knowledge_unit_repo.py`
-- `document_service.py`
-- `chunk_repo.py`
-- `settings.py`
-- 任何会影响 citation、fallback、debug_info、document scope 的修改
+- `backend/main.py`
+- `backend/app/api/routes/health.py`
+- `scripts/dev-backend.py`
+- `scripts/dev-demo.py`
+- `scripts/start-backend.py`
 
-当前建议命令：
+Smoke 只要求：
 
-```bash
-python -m pytest backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py backend/tests/test_chat_flow.py backend/tests/test_document_flow.py
-```
+- 后端可启动
+- `/healthz` 正常
+- demo/dev 主链路可跑通
 
-当前 smoke 至少应覆盖：
+#### B. ES 环境与索引基础能力
 
-1. FAQ 命中仍然正常
-2. document-first 命中仍然正常
-3. 选中文档范围限制仍然生效
-4. 弱命中时 fallback 仍然正常
-5. unsafe 请求仍然拒答
-6. 文档上传 / 列表 / 删除仍然可用
-7. citation 最小结构与最小回源字段未退化
+- `backend/app/indexing/index_health_checker.py`
+- `backend/app/indexing/elastic_indexer.py`
 
-### 5.2 Phase 2 环境就绪时的可选 smoke
+Smoke 只要求：
 
-当 Elasticsearch 环境可用时，建议额外执行一轮 phase 2 过渡 smoke：
+- ES 可连通
+- 索引可创建
+- 最小知识单元可写入
+- 索引写入后可被检索链路消费
 
-目标：
+#### C. 文档解析与切块基础能力
 
-- 确认 `search_backend = elasticsearch` 时主链路能切到 lexical-only 检索
-- 确认索引可连通、可写入、可查询
-- 确认默认链路仍可回退
+- `backend/app/services/document_parser.py`
+- `backend/app/services/chunk_service.py`
+- `backend/app/services/document_service.py`
 
-当前建议覆盖：
+Smoke 只要求：
 
-1. `IndexHealthChecker.check()` 返回基本可用状态
-2. `ElasticIndexer.ensure_index()` 可成功建索引
-3. `ElasticIndexer.index_units()` 可成功写入最小知识单元
-4. `LexicalRetriever.search()` 能返回至少一个有效结果
-5. `ChatService` 在 `search_backend = elasticsearch` 时能进入过渡检索路径
-
-说明：
-
-- 这层 smoke 当前应视为**环境可选项**
-- 不应反向变成所有本地开发的默认前置门槛
+- `.txt / .md / .pdf / .docx` 最小解析链路可跑
+- 切块结果非空
+- 文档上传 / 列表 / 删除的主操作可用
 
 ---
 
-## 6. 第二阶段最小 Regression 策略
+## 4. 当前必须稳定的 Regression 边界
 
-## 6.1 当前必须稳定的 regression 边界
-
-以下边界一旦已落地，就不应在后续 phase 2 改造中被静默破坏：
-
-### A. 当前默认主链路边界
+### 4.1 默认主链路边界
 
 必须稳定：
 
 - FAQ 已知 query 命中
-- document-first 与 FAQ fallback 的相对优先级
-- fallback / refused / ok 的基本响应契约
-- debug_info 在 demo/dev 与 prod 下的暴露边界
+- fallback / refused / ok / system_error 的基本响应契约
+- `debug_info` 在 demo/dev 与 prod 下的暴露边界
+- `search_backend` 切换不破坏 local 默认链路
 
-### B. 文档链路边界
+### 4.2 第二阶段检索边界
+
+必须稳定：
+
+- `domain_hint` 与 `lexical_terms` 的已有扩展策略不被静默改坏
+- lexical-only、hybrid、hybrid-rerank、clarification 的切换边界清晰
+- `lifecycle_status = active` 的默认过滤不失效
+- `source_label / source_locator / snippet` 始终保留最小回源能力
+
+### 4.3 文档链路边界
 
 必须稳定：
 
 - 文档上传成功后有最小元数据
 - chunk 落地后有最小回源字段
-- `source_label / source_locator / snippet` 不退化
 - 文档删除时元数据与 chunk 一起清理
+- 清洗后的文档 fixture 在测试中可稳定复用，不与运行时临时数据混用
 
-### C. 第二阶段过渡边界
+### 4.4 闭环排查边界
 
 必须稳定：
 
-- `settings.py` 中已有的 phase 2 开关不应被静默删除或改名
-- `KnowledgeUnit` 最小字段集合不应随意漂移
-- lexical-only 已实际使用的 filter 字段不应无提示失效
-- `search_backend` 切换不应破坏 local 默认链路
-
-## 6.2 当前已落地的 regression 测试位
-
-当前已经补齐并可作为 phase 2 最小回归保护带的测试文件包括：
-
-### `backend/tests/test_phase2_settings.py`
-
-已覆盖：
-
-- `search_backend` 的环境变量解析
-- phase 2 配置布尔开关解析
-- phase 2 Elastic / planner 关键配置项读取
-
-### `backend/tests/test_phase2_knowledge_unit.py`
-
-已覆盖：
-
-- FAQ -> `KnowledgeUnit` 映射
-- chunk -> `KnowledgeUnit` 映射
-- `list_all / list_faq_units / list_chunk_units` 行为
-- 默认字段与最小兼容值
-
-### `backend/tests/test_phase2_retrieval.py`
-
-已覆盖：
-
-- `LexicalRetriever` 的 query 为空行为
-- `LexicalRetriever` 的 `lifecycle_status = active` 默认过滤
-- `business_domain / access_scope / lifecycle_status` filter 拼装行为
-- `search_backend` 切换后的最小服务行为
-- Elasticsearch 无命中时的 fallback 行为
-- `_extract_lexical_terms()` 的最小稳定输出
-- `VectorRetriever` 的最小召回排序
-- `HybridRetriever` 的 RRF 融合
-- planner 高置信时进入 hybrid 的服务层接线
-- `EvidenceExtractor` 的最小证据抽取
-- `Reranker` 的 FAQ / document 冲突重排
-- hybrid path 上 `citation snippet` 使用 evidence span 的行为
-- 无可接受证据时的 `no_evidence` fallback
-- planner 低置信时的回退路径
-- FAQ-first 在 ES 过渡链路下的最终返回行为
-
-说明：
-
-- 当前实现主要通过 stub / monkeypatch 完成
-- 不要求这些 regression 依赖真实 Elasticsearch 实例
-
-### `backend/tests/test_phase2_planner.py`
-
-已覆盖：
-
-- planner 输出字段稳定性
-- planner 在主服务中的最小接线行为
-- planner 对 elastic lexical-only 过渡链路的参数透传
-- planner 低置信时的回退行为
-
-### `backend/tests/test_phase2_indexing.py`
-
-已覆盖：
-
-- `ElasticIndexer.ensure_index()` 的 mapping 选择逻辑
-- `ElasticIndexer.index_units()` 的最小写入流程
-- `IndexHealthChecker` 的 `connected / index_exists / doc_count / errors` 输出结构
-
-## 6.3 后续建议继续新增的 regression 测试位
-
-当继续推进 phase 2 时，建议优先新增以下测试文件：
-
-### `backend/tests/test_phase2_trace.py`
-
-建议覆盖：
-
-- retrieval trace 落盘结构
-- trace 按 `trace_id` 回放
-- trace 与 `fallback_reason / final_status` 的一致性
-
-### `backend/tests/test_phase2_hard_cases.py`
-
-建议覆盖：
-
-- hard cases 写入
-- hard cases 样本读取
-- user feedback 回流后的最小字段完整性
-
-### trace / hard cases 对应测试文件
-
-建议覆盖：
-
-- retrieval trace 落盘结构
-- trace 按 `trace_id` 回放
-- hard cases 写入
-- hard cases 样本读取
+- `trace_id` 贯穿 ask / feedback / trace / hard-case
+- feedback 可生成 hard-case
+- hard-case 可持续追加并支持去重更新
+- retrieval trace 可作为 replay 与坏例复盘输入
 
 ---
 
-## 7. 与 `2_system_design.md` 的关系
+## 5. 当前已落地的最小测试位
 
-`2_system_design.md` 对第二阶段测试提出了更高目标，包括：
+根据现有文档，第二阶段已经有一批最小 phase 2 测试位，至少包括：
 
-- Hybrid Smoke Test Set
-- Retrieval Trace 契约
-- hard cases 样本池
-- 发布前门槛
-- 回滚触发条件
+- `backend/tests/test_phase2_settings.py`
+- `backend/tests/test_phase2_knowledge_unit.py`
+- `backend/tests/test_phase2_retrieval.py`
+- `backend/tests/test_phase2_query_planner.py`
+- `backend/tests/test_phase2_indexing.py`
 
-但当前仓库的最小测试策略应分层理解：
+这些测试位不应删除，后续应继续作为第二阶段最小保护带。
 
-### 7.1 当前已可执行层
+`backend/tests/test_phase2_retrieval.py` 当前已就 strong lexical winner 通用融合规则绑定如下行为断言：
 
-当前真正应执行并维护的，是：
+- `test_hybrid_retriever_keeps_dominant_lexical_faq_ahead_of_noisy_vector_hits`
+  - 原 FAQ 强胜者保护不回归
+- `test_hybrid_retriever_keeps_dominant_lexical_document_chunk_ahead_of_noisy_vector_hits`
+  - document_chunk 强胜者同享同一条通用保护
+- `test_hybrid_retriever_keeps_dominant_lexical_winner_when_runner_up_is_different_source_kind`
+  - 顶位与次位跨 source_kind 时通用规则仍触发
+- `test_hybrid_retriever_protects_lonely_strong_lexical_winner`
+  - 单条强胜者在 fusion 层被识别为 dominant，给未来融合收紧留出前置保护点
+- `test_hybrid_retriever_does_not_find_dominant_lexical_winner_below_absolute_floor`
+  - 低分孤点不触发 dominance bonus，防止 rare-term fluke 反向干扰
 
-- 本地 `pytest` 主链路 smoke
-- 文档链路 regression
-- 对 phase 2 已落地模块的最小单测补齐
+对称地，vector 侧也绑定了同一套通用规则的行为断言：
 
-### 7.2 后续目标测试层
+- `test_hybrid_retriever_keeps_dominant_vector_winner_ahead_of_noisy_lexical_hits`
+  - strong vector winner 不被双榜都在的 noisy lexical 候选反超
+- `test_hybrid_retriever_protects_lonely_strong_vector_winner`
+  - 单条强 vector winner 在 fusion 层被识别为 dominant
+- `test_hybrid_retriever_does_not_find_dominant_vector_winner_below_absolute_floor`
+  - 低分向量孤点不触发 dominance bonus，防止低相似度 fluke 反向干扰
 
-只有当以下能力真正接入默认服务链后，才应把对应测试升级为默认要求：
+这八条断言的共同约束：**只基于 score / rank / count 判断，不依赖任何领域字段或 unit_id 列表**；lexical 与 vector 两侧共用 `_find_dominant_side_winner_id` 抽象，只通过 `ratio` 与 `absolute_floor` 两个参数区分量级。
 
-- rerank + evidence
-- retrieval trace 落盘
-- hard cases 样本回流
-- cache / version snapshot / stale policy 校验
+此外，`test_phase2_retrieval.py` 还绑定两条对称的 **end-to-end 断言**，把 fusion 规则的有效性贯穿整条服务链：
+
+- `test_chat_service_propagates_lexical_dominance_bonus_through_rerank_to_response`
+  - 覆盖 lexical 侧：lexical rank 1 孤点 winner + 双榜 noisy rival
+- `test_chat_service_propagates_vector_dominance_bonus_through_rerank_to_response`
+  - 覆盖 vector 侧：vector rank 1 孤点 winner + 双榜 noisy rival
+
+两条断言的共同结构：
+
+- 使用真实 `HybridRetriever`，fake lexical / vector / planner 驱动 `ChatService`
+- 无对应 bonus 时：双榜 noisy 候选在 fusion rank 1，正确候选被挤出 rerank top_n，最终触发 `no_evidence` fallback
+- 有 bonus 时：正确候选稳居 fusion rank 1，rerank 与 evidence 接力，`ChatAskResponse.answer` 与 `citations[0]` 对应预期单元
+- 断言**不测单一层**，而是直接验证 fusion 规则能落到用户可见的 answer 上
+
+fusion 与 rerank 的关系边界：**rerank 的 accept/reject 由 `evidence_confidence >= 0.15` 决定，不看 fusion score 绝对值**。因此 `+0.02` 级别的 dominance bonus 只影响候选是否进入 rerank top_n 窗口，不会翻转 accept/reject。这也是当前不必对 rerank 阈值做“跟随 fusion 变化”的重校的原因。
+
+数据流纪律（与 fusion 规则互补的上游防线）：
+
+- `test_chat_service_propagates_planner_domain_hint_to_both_lexical_and_vector_sides`
+  - 断言 `planner.domain_hint == "hr"` 时 `fake_lexical_retriever.calls[0]["business_domain"] == "hr"` 且 `fake_vector_retriever.calls[0]["business_domain"] == "hr"`
+  - 用真实 `HybridRetriever` 包裹 fake lexical / vector 两侧，单条测试同时覆盖 `ChatService → HybridRetriever` 与 `HybridRetriever → 两侧 retriever` 两跳 kwarg 透传
+  - 动机：数据流 narrow 与 fusion bonus 是互补关系 —— narrow 在召回阶段砍掉跨域噪声，bonus 在融合阶段保护 rank 1；若 narrow 失守，bonus 撑不住所有回流噪声
+
+fusion dominance 可观测性（为未来 trace 回放铺观察点）：
+
+- `test_hybrid_retriever_records_dominance_attribution_per_candidate_on_hybrid_hits`
+  - 单层断言：`HybridHit.lexical_dominance_applied` / `vector_dominance_applied` 是**每候选**的 bool，不是全局标记
+  - 验证赢家被标记为 True、普通候选为 False、vector 侧在 floor 以下不会误标记
+- `test_chat_service_surfaces_fusion_dominance_attribution_in_debug_rrf_topk`
+  - 贯穿断言：`_fuse_hits` 设置的归因必须活过 `rrf_rank` 二次排序与 `_summarize_hybrid_hits` 投影，并落到 `response.debug_info.rrf_topk[i]` 的同名字段；由 `api/routes/chat.py` 的 `model_dump()` 自动流入 `retrieval_trace.jsonl`
+  - 反向防误标：即使是“无 bonus 时会赢、有 bonus 时被挤下去”的 noisy 竞争者，`lexical_dominance_applied` 也必须是 False，防止未来 refactor 把归因误套在所有候选上
+
+当前建议是在保留这些测试位的前提下，再补三类测试：
+
+1. 链路行为测试  
+2. 各领域清洗文档 fixture 测试  
+3. hard-case 回归测试  
 
 ---
 
-## 8. 当前建议的最小发布门槛
+## 6. 新增：各领域清洗文档进入测试资产
 
-在第二阶段继续落地、但尚未切默认链路之前，当前建议门槛为：
+你当前已经明确：`backend/tests` 新加入了**各领域清洗过的文档**。
 
-1. `backend/tests/test_chat_flow.py` 通过
-2. `backend/tests/test_document_flow.py` 通过
-3. `backend/tests/test_phase2_settings.py`、`test_phase2_knowledge_unit.py`、`test_phase2_indexing.py`、`test_phase2_retrieval.py`、`test_phase2_planner.py` 通过
-4. 若修改涉及 phase 2 Elasticsearch 过渡链路，则补一轮环境可用下的 elastic smoke
-5. 不允许因为 phase 2 新能力而破坏当前 local 默认链路
-6. 不允许因为 phase 2 字段或职责扩展而让 citation / debug_info / fallback 契约无声漂移
+这一步的意义不是“多了几份测试素材”，而是第二阶段测试边界发生了升级：
 
-### 8.1 当前建议的发布开关矩阵
-
-当前建议长期按三档理解：
-
-1. 默认全开档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-   - `ORIONSTACK_PLANNER_PROVIDER=local`
-2. 软回退档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. 硬回退档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-
-### 8.2 当前建议的发布前最小 smoke
-
-当前建议至少执行：
-
-```bash
-python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```text
+以前：测试主要围绕 FAQ mock / 最小知识单元 / 单个域样本
+现在：测试可以围绕多业务域清洗文档的真实输入形态，做跨域、跨问法、跨检索模式回归
 ```
 
-若当前准备长期使用默认全开档，还应额外做一轮环境可用下的手动 smoke：
+### 6.1 当前对这些清洗文档的定位
 
-1. 确认 Elasticsearch 连通，索引存在且可查询
-2. 手动请求 `请假`
-3. 手动请求 `病假材料`
-4. 手动请求 `请假进度怎么看`
-5. 核对返回：
-   - `route_result = faq_qa_elastic`
-   - `retrieved_chunks` 为 FAQ 风格 ID，而不是 `doc-...-chunk-*`
-   - `citation.source_locator` 为 `hr_faq_seed_v1#...`
-   - 不返回 FAQ seed JSON 残片
+这些文档当前最适合作为：
 
-### 8.2.1 2026-04-19 当前验证结论
+- fixture
+- 领域回归样本
+- 检索验证样本
+- clarification / fallback / no_evidence 验证样本
+- 新 hard-case 的对照基线
 
-按当前仓库的真实状态：
+不建议把这些清洗文档当成：
 
-1. 上述 pytest smoke 已通过
-2. 默认全开档下，`请假`、`病假材料`、`请假进度怎么看` 均可返回 FAQ 风格结果
-3. Hard Cases 闭环验证通过：
-   - `ask -> feedback(down) -> hard case -> trace replay` 已跑通
-   - `no_evidence` fallback 也会自动写入 hard case
-4. 软回退档验证通过
-5. 硬回退档验证通过
+- 运行时临时上传数据的替代品
+- 所有测试都直接读取的大杂烩数据池
+- 与线上 hard-case 混写的同一个数据源
 
-因此，当前测试口径应冻结为：
+### 6.2 各领域清洗文档应承担的测试职责
 
-- 默认全开档可作为长期运行方式
-- soft / hard fallback 仅保留为排障与环境降级手段
+新增的各领域清洗文档，建议承担以下职责：
 
-### 8.3 当前建议的最小回滚条件
+#### A. 领域命中验证
 
-满足任一情况，建议立即回滚：
+每个业务域至少验证：
 
-1. 上述 pytest 或手动 smoke 未通过
-2. Elasticsearch 连通或索引健康检查失败
-3. 灰度 query 返回重新退化为 `document_chunk` 残片
-4. `no_evidence` 或负反馈导致 hard cases 在灰度窗口内持续新增
-5. citation / fallback / debug_info 契约出现无预期漂移
+- 该域典型 query 可进入对应 domain hint 或保持中性但仍可正确命中
+- 不同域 query 不会轻易错命中到相邻业务域
 
-当前回滚顺序建议为：
+#### B. 领域内自然问法验证
 
-1. 先做软回退：
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - 保留 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - 保留 `ORIONSTACK_ENABLE_FAST_TRACK=true`
-2. 若问题仍在，再做硬回退：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
+每个业务域至少验证：
 
-按当前仓库真实状态，回退条件不再是“是否允许打开全开档”，而是：
+- 标准问法
+- 更口语化问法
+- 更短的泛问法
+- 同义改写问法
 
-1. 当前机器上的 ES / planner / hybrid 服务链是否暂时不可用
-2. 是否需要快速缩小排查范围
+#### C. 领域内弱命中 / no_evidence 验证
+
+每个业务域至少验证：
+
+- 不存在明确证据时，系统能 fallback 或进入 clarification
+- 不会把“有一点像”的文档强答成正确答案
+
+#### D. 领域回源字段验证
+
+每个业务域至少验证：
+
+- citation 中仍保留 `source_label / source_locator / snippet`
+- chunk / FAQ / knowledge unit 回源字段完整
+- 文档进入检索后不会丢失最小来源信息
 
 ---
 
-## 9. 当前明确不做的事
+## 7. 新增后的测试结构建议
 
-本文档当前明确不要求：
+### 7.1 保留现有 phase 2 测试位
 
-- 新增前端测试框架
-- 引入完整 benchmark 平台
-- 为每个 query 建大规模评测集
-- 把 smoke cases 扩展成重型测试矩阵
-- 在未落地 planner / hybrid / rerank 时伪造完整 phase 2 测试通过结论
+继续保留：
+
+- settings
+- knowledge_unit
+- retrieval
+- query_planner
+- indexing
+
+这些文件承担“系统基础行为最小保护带”。
+
+### 7.2 新增按职责划分的测试层
+
+建议在 `backend/tests` 中按职责新增三类测试：
+
+#### A. 行为层测试
+
+建议方向：
+
+- `test_chat_flow_phase2.py`
+- `test_chat_contract_phase2.py`
+- `test_feedback_hard_cases_phase2.py`
+
+主要覆盖：
+
+- ask -> response
+- ask -> feedback -> hard-case
+- debug_info / response_status / citations 契约
+
+#### B. 各领域文档 fixture 测试
+
+建议方向：
+
+- `test_domain_documents_retrieval.py`
+- `test_domain_documents_clarification.py`
+- `test_domain_documents_citation.py`
+
+主要覆盖：
+
+- 多业务域清洗文档进入知识单元后的检索与命中行为
+- 各域问法的命中、误命中、no_evidence、clarification
+- 回源字段与 evidence 表现
+
+#### C. hard-case 回归测试
+
+建议方向：
+
+- `test_phase2_hard_cases.py`
+- `test_phase2_regression_queries.py`
+
+主要覆盖：
+
+- 已知失败 query 不回归
+- 真实 down feedback 样本持续复现
+- 真实 no_evidence 样本持续复现
 
 ---
 
-## 10. 一句话收口
+## 8. 各领域清洗文档应如何接入测试
 
-**第二阶段最小测试策略的目标不是提前建设完整评测平台，而是先为已落地的 planner / hybrid / rerank / trace 过渡模块建立 smoke 与 regression 保护带，并为后续 query cache / API fallback / 更完整 hard cases 门槛预留清晰入口。**
+### 8.1 建议接入方式
+
+建议把这些文档作为**只读 fixture 资产**接入测试，而不是在测试中手写大段文本。
+
+建议流程：
+
+1. 在测试中读取指定领域清洗文档 fixture
+2. 统一走“文档 -> chunk -> knowledge unit”或“文档 -> 上传 -> 检索”路径
+3. 对同一份 fixture 复用多个 query 做回归
+4. 用固定断言验证命中、fallback、clarification、citation
+
+### 8.2 断言重点
+
+不建议断言：
+
+- 某个检索分数的绝对值必须完全相同
+- 某个内部候选列表顺序永远不变到小数级别
+
+建议断言：
+
+- 是否命中正确业务域
+- 是否进入正确响应类型
+- 顶部候选是否包含正确来源
+- `source_locator / snippet / citation_id` 是否存在
+- `rerank_accept / evidence_confidence` 是否落在预期方向
+- 是否出现错误的跨域强答
+
+---
+
+## 9. 当前最值得优先收口的 hard-case 簇
+
+基于当前已落地的 hard-case 数据与现有 HR 种子内容，以下样本应优先进入长期回归：
+
+### 9.1 请假泛问法簇
+
+- `请假`
+- `怎么请假`
+- `如何请假`
+- `请假怎么走`
+- `请假流程`
+
+目的：
+
+- 避免系统在“泛问法”与“具体问法”之间反复漂移
+- 避免把模糊 query 误答成某一个具体 FAQ
+
+### 9.2 年假 / 病假 / 审批进度簇
+
+围绕现有 HR FAQ 种子优先收：
+
+- `如何申请年假？`
+- `病假需要提交什么材料？`
+- `请假审批进度在哪里查看？`
+- `调休余额在哪里看？`
+
+目的：
+
+- 锁住 `domain_hint = hr` 后的 lexical_terms 扩展是否真正对检索起作用
+- 锁住 rerank / evidence 接收条件不反向把已有 seed 打成 no_evidence
+
+### 9.3 上传文档簇
+
+- `如何上传文档？`
+- `上传文档怎么做？`
+- `文档怎么上传`
+- `上传后为什么没建立索引`
+
+目的：
+
+- 这类样本已经出现过真实 down 反馈，应纳入长期 regression，而不是只做一次性修复
+
+### 9.4 各领域跨域误命中簇
+
+基于新增的多业务域清洗文档，应新增：
+
+- HR 问法误命中 Finance / Legal / IT
+- Finance 问法误命中 Ops / Sales
+- Product / IT 邻域问法误命中
+
+目的：
+
+- 新增多域 fixture 后，最容易出现的不是“完全查不到”，而是“查到隔壁域”
+
+---
+
+## 10. 当前建议的执行顺序
+
+### 第一步：先稳当前行为边界
+
+先补：
+
+- `chat_service`
+- `chat route`
+- `rule_parser`
+- `query_planner`
+- `reranker`
+- `feedback / retrieval_trace / hard_cases`
+
+### 第二步：把新增各领域清洗文档接成 fixture
+
+目标：
+
+- 让这些文档不只是测试素材，而是可重复、可组合的回归输入
+
+### 第三步：从真实 hard-case 往回补测试
+
+优先吸收：
+
+- 已有 `down` feedback
+- 已有 `no_evidence`
+- 已有跨域误判
+- 已有 clarification 边界样本
+
+### 第四步：最后再补环境类 smoke
+
+包括：
+
+- ES 连通
+- ES IK 中文分词插件可用
+- 建索引
+- 上传/解析/切块
+- 启动/健康检查
+
+其中 IK 分词 smoke 可直接通过 ES HTTP 接口验证：
+
+```bash
+curl http://localhost:9200/_cat/plugins
+curl -X POST "http://localhost:9200/_analyze" -H "Content-Type: application/json" -d "{\"analyzer\":\"ik_max_word\",\"text\":\"如何申请年假\"}"
+```
+
+两条命令的最小通过标准：
+
+- `_cat/plugins` 输出包含 `analysis-ik 8.17.0`
+- `_analyze` 输出能切出 `如何 / 申请 / 年假` 这类词元
+
+启用 IK 的最小前置条件：
+
+- `docker compose build elasticsearch` 已构建带 IK 的镜像
+- `ORIONSTACK_ELASTIC_USE_IK_ANALYZER=true` 已写入 `.env`
+- 老索引已 `DELETE` 后由 `ensure_index` 重建
+
+---
+
+## 11. 当前阶段结论
+
+第二阶段当前最合适的测试方向不是“把所有代码都写成重型单测”，而是：
+
+```text
+基础 phase 2 测试位继续保留
++ 行为边界 test-first
++ 各领域清洗文档 fixture 化
++ 真实 hard-case 持续回归
+```
+
+一句话总结：
+
+**`backend/tests` 新加入的各领域清洗文档，不应只被视为“更多测试文件”，而应正式升级为第二阶段的领域回归资产；`docs/2_4_test_strategy.md` 也应随之从“已有 phase 2 测试说明”升级为“行为测试 + 领域 fixture + hard-case 回归”的执行文档。**

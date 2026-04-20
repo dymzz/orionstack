@@ -48,11 +48,75 @@ scripts/dev-demo.py
 scripts/dev-frontend.py
 scripts/git-release.py
 scripts/README.md
+scripts/run-phase2-regression.py
 scripts/start-backend.py
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="scripts/run-phase2-regression.py">
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+
+
+PHASE2_TEST_FILES = [
+    "backend/tests/test_phase2_retrieval.py",
+    "backend/tests/test_chat_flow.py",
+    "backend/tests/test_phase2_trace.py",
+    "backend/tests/test_phase2_hard_cases.py",
+]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run the fixed Phase 2 regression suite"
+    )
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "pytest_args",
+        nargs="*",
+        help="extra arguments passed through to pytest",
+    )
+    args = parser.parse_args()
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    venv_python = os.path.join(repo_root, ".venv", "Scripts", "python.exe")
+
+    if os.path.isfile(venv_python):
+        python_command = venv_python
+    else:
+        python_command = shutil.which("python")
+        if not python_command:
+            print(
+                "[orionstack] Python not found. Activate the project environment or install Python first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    pytest_command = [python_command, "-m", "pytest", *PHASE2_TEST_FILES, *args.pytest_args]
+
+    print("[orionstack] phase 2 regression suite")
+    for test_file in PHASE2_TEST_FILES:
+        print(f"[orionstack]   - {test_file}")
+    print(f"[orionstack] python: {python_command}")
+    print(f"[orionstack] cmd   : {' '.join(pytest_command)}")
+
+    if args.check_only:
+        print("[orionstack] phase 2 regression check only passed.")
+        return
+
+    os.chdir(repo_root)
+    completed = subprocess.run(pytest_command)
+    raise SystemExit(completed.returncode)
+
+
+if __name__ == "__main__":
+    main()
+</file>
 
 <file path="scripts/clean-local-records.py">
 import argparse
@@ -806,31 +870,58 @@ python scripts/start-backend.py --check-only
 - 支持 `--workers` 参数：可启动多 worker 进程
 - 默认 `--app-mode prod`：关闭 Debug 信息与记录查看接口
 
+### `run-phase2-regression.py`
+
+用途：
+
+- 一键执行当前固定的 phase 2 专项回归
+- 覆盖检索主链、chat flow、trace、hard cases 四层
+
+固定测试集合：
+
+- `backend/tests/test_phase2_retrieval.py`
+- `backend/tests/test_chat_flow.py`
+- `backend/tests/test_phase2_trace.py`
+- `backend/tests/test_phase2_hard_cases.py`
+
+参数：
+
+- `--check-only`
+- 额外 `pytest` 参数会直接透传
+
+示例：
+
+```bash
+python scripts/run-phase2-regression.py
+python scripts/run-phase2-regression.py --check-only
+python scripts/run-phase2-regression.py -k clarification
+```
+
 ## 生产配置说明
 
 ### Phase 2 推荐启动矩阵
 
 当前 phase 2 检索链建议按三档使用：
 
-1. 默认稳定档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-2. Elasticsearch 过渡档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. Phase 2 当前灰度档：
+1. 默认全开档：
    - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
    - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
    - `ORIONSTACK_ENABLE_FAST_TRACK=true`
    - `ORIONSTACK_PLANNER_PROVIDER=local`
+2. 软回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. 硬回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
 
 建议理解为：
 
 - planner 高置信时：进入 `lexical + vector + RRF -> rerank + evidence`
 - planner 低置信时：回退到 `Fast Track + lexical-only`
-- 若线上需要快速止损，优先先把 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+- 当前长期默认建议直接运行全开档；软/硬回退只保留为排障手段
 
 ### 环境变量
 
@@ -846,28 +937,18 @@ python scripts/start-backend.py --check-only
 | `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 允许的前端来源，逗号分隔 |
 | `ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD` | `0.6` | 路由置信度阈值 |
 | `ORIONSTACK_RETRIEVAL_MIN_SCORE` | `2` | 检索最低分 |
-| `ORIONSTACK_SEARCH_BACKEND` | `local` | `local`：主线 1 默认链路；`elasticsearch`：phase 2 过渡链 |
-| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `false` | 打开后允许进入 planner -> hybrid -> rerank/evidence 灰度链 |
-| `ORIONSTACK_ENABLE_FAST_TRACK` | `false` | 打开后启用小 query 规则与 lexical 过渡优化 |
+| `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch`：默认全开档；`local`：硬回退到主线 1 默认链路 |
+| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 默认进入 planner -> hybrid -> rerank/evidence 服务链 |
+| `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 默认启用小 query 规则与 lexical 过渡优化 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 
 ### 推荐启动示例
 
 ```bash
-# 默认稳定档
-ORIONSTACK_SEARCH_BACKEND=local python scripts/dev-backend.py
-
-# Elasticsearch lexical-only 过渡档
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true python scripts/dev-backend.py
-
-# Phase 2 当前灰度档
+# 默认全开档
 ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
-```
 
-### 最小回退命令
-
-```bash
 # 软回退：回到 Elasticsearch lexical-only
 ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
 
@@ -883,7 +964,13 @@ ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK
 python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
 ```
 
-若本次准备启用 `ORIONSTACK_SEARCH_BACKEND=elasticsearch`，建议再手动验证：
+如果只是验证 phase 2 当前固定回归面，优先直接执行：
+
+```bash
+python scripts/run-phase2-regression.py
+```
+
+若当前准备长期使用默认全开档，建议再手动验证：
 
 - `请假`
 - `病假材料`

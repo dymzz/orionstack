@@ -30,7 +30,7 @@ class Reranker:
         reranked_hits: list[RerankHit] = []
         for hit in hits[:top_n]:
             evidence_result = self._evidence_extractor.extract(
-                query, hit.answer or hit.body_text
+                query, self._build_evidence_text(hit)
             )
             score = hit.score + evidence_result.evidence_confidence
             if hit.source_kind == "faq":
@@ -62,3 +62,11 @@ class Reranker:
             reverse=True,
         )
         return reranked_hits
+
+    @staticmethod
+    def _build_evidence_text(hit: HybridHit) -> str:
+        if hit.source_kind != "faq":
+            return hit.answer or hit.body_text
+
+        parts = [hit.question, hit.answer or hit.body_text]
+        return "\n".join(part for part in parts if part)

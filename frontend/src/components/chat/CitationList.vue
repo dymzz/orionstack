@@ -12,7 +12,7 @@
         </div>
         <p class="locator-label">{{ getLocatorLabel(citation) }}</p>
         <p class="locator">{{ citation.source_locator }}</p>
-        <p class="citation-snippet-label">引用片段</p>
+        <p class="citation-snippet-label">{{ getSnippetLabel(citation) }}</p>
         <p class="citation-snippet">{{ citation.snippet }}</p>
       </li>
     </ul>
@@ -38,5 +38,9 @@ function getCitationKindClass(citation: CitationItem) {
 
 function getLocatorLabel(citation: CitationItem) {
   return isFaqCitation(citation) ? 'FAQ 定位' : '文档定位'
+}
+
+function getSnippetLabel(citation: CitationItem) {
+  return isFaqCitation(citation) ? '引用 / 证据片段' : '引用片段'
 }
 </script>

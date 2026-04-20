@@ -3,6 +3,11 @@ from app.storage.repositories.knowledge_unit_repo import (
     map_chunk_to_knowledge_unit,
     map_faq_item_to_knowledge_unit,
 )
+from conftest import fixture_case
+
+
+LEAVE_APPLY = fixture_case("leave_apply")
+LEAVE_PROGRESS = fixture_case("leave_progress")
 
 
 class _StaticRepo:
@@ -99,7 +104,7 @@ def test_knowledge_unit_repository_lists_faq_and_chunk_units_in_single_view() ->
     assert units[0].source_kind == "faq"
     assert units[-1].source_kind == "document_chunk"
     assert "faq-001" in [unit.unit_id for unit in faq_units]
-    assert "hr-faq-001" in [unit.unit_id for unit in faq_units]
+    assert LEAVE_APPLY["id"] in [unit.unit_id for unit in faq_units]
     assert [unit.unit_id for unit in chunk_units] == ["doc-001-chunk-1"]
 
 
@@ -108,16 +113,16 @@ def test_knowledge_unit_repository_loads_hr_seed_markdown_faq_units() -> None:
 
     faq_units = repository.list_faq_units()
 
-    leave_unit = next(unit for unit in faq_units if unit.unit_id == "hr-faq-001")
-    progress_unit = next(unit for unit in faq_units if unit.unit_id == "hr-faq-003")
+    leave_unit = next(unit for unit in faq_units if unit.unit_id == LEAVE_APPLY["id"])
+    progress_unit = next(unit for unit in faq_units if unit.unit_id == LEAVE_PROGRESS["id"])
 
     assert leave_unit.source_kind == "faq"
-    assert leave_unit.question == "如何申请年假？"
-    assert leave_unit.answer.startswith("进入公司请假入口后选择年假")
-    assert leave_unit.source_label == "HR FAQ"
-    assert leave_unit.source_locator == "hr_faq_seed_v1#hr-faq-001"
+    assert leave_unit.question == LEAVE_APPLY["question"]
+    assert leave_unit.answer.startswith(LEAVE_APPLY["answer"][:8])
+    assert leave_unit.source_label == LEAVE_APPLY["source_label"]
+    assert leave_unit.source_locator == LEAVE_APPLY["source_locator"]
     assert leave_unit.business_domain == "hr"
     assert "请假" in leave_unit.keywords
 
-    assert progress_unit.source_locator == "hr_faq_seed_v1#hr-faq-003"
+    assert progress_unit.source_locator == LEAVE_PROGRESS["source_locator"]
     assert "审批" in progress_unit.keywords

@@ -1,13 +1,27 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.api.routes import chat as chat_route
 from app.api.routes import documents as documents_route
 from app.config.settings import Settings
 from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
 from app.services.chat_service import ChatService
+from conftest import fixture_case, fixture_faq_map, fixture_path_for_faq_id
 from fastapi.testclient import TestClient
 from main import app
+
+FIXTURE_DIRECT_ANSWER_IDS = tuple(
+    fixture_case(case_name)["id"]
+    for case_name in (
+        "leave_apply",
+        "sick_leave_materials",
+        "leave_progress",
+        "onboarding_day_one",
+        "employment_certificate",
+    )
+)
 
 
 def _configure_chat_record_storage(tmp_path: Path) -> None:
@@ -39,6 +53,7 @@ def test_chat_service_returns_ok_for_known_faq_query(tmp_path) -> None:
     assert response.trace_id == "trace-ok"
     assert response.answer
     assert len(response.citations) == 1
+    assert response.clarification is None
     assert response.citations[0].citation_id == "faq-001"
     assert response.citations[0].source_label
     assert response.citations[0].source_locator
@@ -338,13 +353,104 @@ def test_chat_route_persists_retrieval_trace_and_replays_by_trace_id(
     assert trace_record["normalized_query"] == "如何上传文档？"
     assert trace_record["intent"] == "faq_qa"
     assert trace_record["final_status"] == "ok"
-    assert trace_record["retrieved_chunks"] == ["hr-faq-001"]
-    assert trace_record["citations"][0]["citation_id"] == "hr-faq-001"
+    assert "retrieval_mode" in trace_record
+    assert trace_record["retrieval_mode"] is None
+    assert trace_record["lexical_topk"] == []
+    assert trace_record["vector_topk"] == []
+    assert trace_record["rrf_topk"] == []
+    assert trace_record["rerank_accept"] is None
+    assert trace_record["rerank_score"] is None
+    assert trace_record["evidence_confidence"] is None
+    assert trace_record["evidence_span_count"] is None
+    assert trace_record["reject_reason"] is None
+    assert trace_record["retrieved_chunks"] == [ask_response.citations[0].citation_id]
+    assert trace_record["citations"][0]["citation_id"] == ask_response.citations[0].citation_id
     assert trace_record["created_at"]
 
     replayed_trace = chat_route.get_retrieval_trace(ask_response.trace_id)
     assert replayed_trace["trace_id"] == ask_response.trace_id
-    assert replayed_trace["citations"][0]["source_locator"] == "hr_faq_seed_v1#hr-faq-001"
+    assert (
+        replayed_trace["citations"][0]["source_locator"]
+        == ask_response.citations[0].source_locator
+    )
+
+
+def test_chat_route_preserves_clarification_contract(monkeypatch, tmp_path) -> None:
+    _configure_chat_record_storage(tmp_path)
+
+    def return_clarification(payload, *, trace_id: str, debug_enabled: bool):
+        from app.schemas.response import (
+            ChatAskResponse,
+            ClarificationInfo,
+            ClarificationOption,
+            DebugInfo,
+        )
+
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer="当前问题还不够具体，请先确认更接近哪一类规则。",
+            citations=[],
+            clarification=ClarificationInfo(
+                clarification_required=True,
+                question="您想了解哪一种请假规则？",
+                options=[
+                    ClarificationOption(
+                        option_id="annual_leave",
+                        label="年假申请流程",
+                    ),
+                    ClarificationOption(
+                        option_id="sick_leave",
+                        label="病假材料要求",
+                    ),
+                ],
+                conflict_reason="short_generic_query",
+            ),
+            debug_info=DebugInfo(
+                normalized_query=payload.raw_query.strip(),
+                route_result="faq_qa_elastic",
+                router_used="query_planner_local",
+                retrieved_chunks=[],
+                route_confidence=None,
+                retrieval_score=None,
+                fallback_reason="conflict_requires_clarification",
+                retrieval_mode="clarification",
+                rerank_accept=True,
+                rerank_score=0.73,
+                evidence_confidence=0.5,
+                evidence_span_count=1,
+                reject_reason="multiple_close_faq_candidates",
+            ),
+        )
+
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+    monkeypatch.setattr(chat_route.service, "ask", return_clarification)
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="请假", debug=True))
+
+    assert response.response_status == "ok"
+    assert response.clarification is not None
+    assert response.clarification.clarification_required is True
+    assert response.clarification.question == "您想了解哪一种请假规则？"
+    assert [option.label for option in response.clarification.options] == [
+        "年假申请流程",
+        "病假材料要求",
+    ]
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "conflict_requires_clarification"
+    trace_lines = (
+        (tmp_path / "retrieval_traces.jsonl").read_text(encoding="utf-8").splitlines()
+    )
+    trace_record = json.loads(trace_lines[0])
+    assert trace_record["retrieval_mode"] == "clarification"
+    assert trace_record["lexical_topk"] == []
+    assert trace_record["vector_topk"] == []
+    assert trace_record["rrf_topk"] == []
+    assert trace_record["rerank_accept"] is True
+    assert trace_record["rerank_score"] == 0.73
+    assert trace_record["evidence_confidence"] == 0.5
+    assert trace_record["evidence_span_count"] == 1
+    assert trace_record["reject_reason"] == "multiple_close_faq_candidates"
 
 
 def test_chat_route_records_hard_case_for_negative_feedback(tmp_path) -> None:
@@ -358,10 +464,10 @@ def test_chat_route_records_hard_case_for_negative_feedback(tmp_path) -> None:
         ChatFeedbackRequest(
             trace_id=ask_response.trace_id,
             raw_query="如何上传文档？",
-            answer_text="请在文档页面点击上传按钮。",
+            answer_text=ask_response.answer,
             feedback_label="down",
             response_status="ok",
-            retrieved_chunk_ids=["faq-001"],
+            retrieved_chunk_ids=[ask_response.citations[0].citation_id],
             normalized_query="如何上传文档？",
             router_used="rule_parser",
             route_result="faq_qa",
@@ -376,7 +482,7 @@ def test_chat_route_records_hard_case_for_negative_feedback(tmp_path) -> None:
     assert hard_case["trace_id"] == ask_response.trace_id
     assert hard_case["user_feedback"] == "down"
     assert hard_case["raw_query"] == "如何上传文档？"
-    assert hard_case["top_candidates"][0]["citation_id"] == "hr-faq-001"
+    assert hard_case["top_candidates"][0]["citation_id"] == ask_response.citations[0].citation_id
     assert hard_case["evidence_spans"][0]["text"]
 
     listed = chat_route.list_hard_cases(limit=10)
@@ -405,6 +511,12 @@ def test_chat_route_records_hard_case_for_no_evidence_fallback(
                 route_confidence=None,
                 retrieval_score=None,
                 fallback_reason="no_evidence",
+                retrieval_mode="hybrid_rerank",
+                rerank_accept=False,
+                rerank_score=0.11,
+                evidence_confidence=0.05,
+                evidence_span_count=0,
+                reject_reason="evidence_below_threshold",
             ),
         )
 
@@ -426,6 +538,15 @@ def test_chat_route_records_hard_case_for_no_evidence_fallback(
     replayed_trace = chat_route.get_retrieval_trace(response.trace_id)
     assert replayed_trace["final_status"] == "fallback"
     assert replayed_trace["fallback_reason"] == "no_evidence"
+    assert replayed_trace["retrieval_mode"] == "hybrid_rerank"
+    assert replayed_trace["lexical_topk"] == []
+    assert replayed_trace["vector_topk"] == []
+    assert replayed_trace["rrf_topk"] == []
+    assert replayed_trace["rerank_accept"] is False
+    assert replayed_trace["rerank_score"] == 0.11
+    assert replayed_trace["evidence_confidence"] == 0.05
+    assert replayed_trace["evidence_span_count"] == 0
+    assert replayed_trace["reject_reason"] == "evidence_below_threshold"
 
 
 def test_chat_route_lists_recent_records_in_demo(tmp_path, monkeypatch) -> None:
@@ -617,10 +738,18 @@ def test_short_chinese_query_hits_document_chunk(tmp_path) -> None:
     assert len(response.citations) == 1
 
 
-def test_chat_route_returns_structured_answer_for_uploaded_hr_faq_seed(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "faq_id",
+    FIXTURE_DIRECT_ANSWER_IDS,
+)
+def test_chat_route_returns_structured_answers_for_uploaded_hr_faq_seed_queries(
+    tmp_path,
+    faq_id: str,
+) -> None:
+    faq_item = fixture_faq_map()[faq_id]
     _configure_shared_document_and_chat_storage(tmp_path)
 
-    fixture_path = Path(__file__).resolve().parent / "fixtures" / "domain_hr_faq_seed_v1.md"
+    fixture_path = fixture_path_for_faq_id(faq_id)
     client = TestClient(app)
     upload_response = client.post(
         "/api/documents/upload",
@@ -637,15 +766,15 @@ def test_chat_route_returns_structured_answer_for_uploaded_hr_faq_seed(tmp_path)
 
     ask_response = client.post(
         "/api/chat/ask",
-        json={"raw_query": "病假材料", "debug": True},
+        json={"raw_query": faq_item["question"], "debug": True},
     )
 
     assert ask_response.status_code == 200
     payload = ask_response.json()
     assert payload["response_status"] == "ok"
-    assert "病假通常需要提交医院证明或诊断材料" in payload["answer"]
+    assert faq_item["answer"] == payload["answer"]
     assert len(payload["citations"]) == 1
-    assert payload["citations"][0]["citation_id"] == "hr-faq-002"
-    assert payload["citations"][0]["source_label"] == "HR FAQ"
-    assert payload["citations"][0]["source_locator"] == "hr_faq_seed_v1#hr-faq-002"
-    assert payload["citations"][0]["snippet"]
+    assert payload["citations"][0]["citation_id"] == faq_item["id"]
+    assert payload["citations"][0]["source_label"] == faq_item["source_label"]
+    assert payload["citations"][0]["source_locator"] == faq_item["source_locator"]
+    assert faq_item["snippet"][:12] in payload["citations"][0]["snippet"]

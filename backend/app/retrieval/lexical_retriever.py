@@ -5,8 +5,6 @@ from typing import Any
 
 from elasticsearch import Elasticsearch
 
-from app.config.settings import settings
-
 
 @dataclass(frozen=True)
 class LexicalHit:
@@ -23,6 +21,13 @@ class LexicalHit:
     source_type: str
     access_scope: str
     lifecycle_status: str
+
+
+class RetrievalBackendError(RuntimeError):
+    def __init__(self, stage: str, cause: Exception) -> None:
+        self.stage = stage
+        self.cause_name = cause.__class__.__name__
+        super().__init__(f"{stage} backend search failed: {self.cause_name}")
 
 
 class LexicalRetriever:
@@ -86,8 +91,8 @@ class LexicalRetriever:
 
         try:
             result = self._es.search(index=self._index_name, body=body)
-        except Exception:
-            return []
+        except Exception as error:
+            raise RetrievalBackendError("lexical", error) from error
 
         hits: list[LexicalHit] = []
         for hit in result.get("hits", {}).get("hits", []):

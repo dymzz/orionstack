@@ -188,6 +188,33 @@ python scripts/start-backend.py --check-only
 - 支持 `--workers` 参数：可启动多 worker 进程
 - 默认 `--app-mode prod`：关闭 Debug 信息与记录查看接口
 
+### `run-phase2-regression.py`
+
+用途：
+
+- 一键执行当前固定的 phase 2 专项回归
+- 覆盖检索主链、chat flow、trace、hard cases 四层
+
+固定测试集合：
+
+- `backend/tests/test_phase2_retrieval.py`
+- `backend/tests/test_chat_flow.py`
+- `backend/tests/test_phase2_trace.py`
+- `backend/tests/test_phase2_hard_cases.py`
+
+参数：
+
+- `--check-only`
+- 额外 `pytest` 参数会直接透传
+
+示例：
+
+```bash
+python scripts/run-phase2-regression.py
+python scripts/run-phase2-regression.py --check-only
+python scripts/run-phase2-regression.py -k clarification
+```
+
 ## 生产配置说明
 
 ### Phase 2 推荐启动矩阵
@@ -253,6 +280,12 @@ ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK
 
 ```bash
 python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```
+
+如果只是验证 phase 2 当前固定回归面，优先直接执行：
+
+```bash
+python scripts/run-phase2-regression.py
 ```
 
 若当前准备长期使用默认全开档，建议再手动验证：

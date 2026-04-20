@@ -8,7 +8,13 @@ from app.retrieval.retriever import Retriever
 from app.routing.contracts import IntentDecision
 from app.routing.resolver import RouteResolver
 from app.schemas.request import ChatAskRequest
-from app.schemas.response import ChatAskResponse, DebugInfo
+from app.schemas.response import (
+    ChatAskResponse,
+    ClarificationInfo,
+    ClarificationOption,
+    DebugInfo,
+    RetrievalCandidateSummary,
+)
 from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.faq_repo import FAQRepository
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
@@ -16,26 +22,8 @@ from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 class ChatService:
     _ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP = 0.35
-    _SMALL_QUERY_RULES = (
-        {
-            "queries": ("请假", "怎么请假", "如何请假"),
-            "search_query": "请假 申请 审批 流程",
-            "lexical_terms": ("请假", "申请", "审批", "流程"),
-            "business_domain": "hr",
-        },
-        {
-            "queries": ("病假材料",),
-            "search_query": "病假 证明 材料 提交",
-            "lexical_terms": ("病假", "证明", "材料", "提交"),
-            "business_domain": "hr",
-        },
-        {
-            "queries": ("请假进度怎么看",),
-            "search_query": "请假 进度 审批 记录 查询",
-            "lexical_terms": ("请假", "进度", "审批", "记录", "查询"),
-            "business_domain": "hr",
-        },
-    )
+    _CLARIFICATION_MAX_RERANK_SCORE_GAP = 0.15
+    _ELASTIC_REQUEST_TIMEOUT_SECONDS = 2
     _REFUSAL_TERMS = {
         "unsafe_request": (
             "炸弹",
@@ -80,7 +68,12 @@ class ChatService:
         from app.retrieval.lexical_retriever import LexicalRetriever
         from elasticsearch import Elasticsearch
 
-        es = Elasticsearch(settings.elastic_url)
+        es = Elasticsearch(
+            settings.elastic_url,
+            request_timeout=self._ELASTIC_REQUEST_TIMEOUT_SECONDS,
+            retry_on_timeout=False,
+            max_retries=0,
+        )
         return LexicalRetriever(es, index_name=settings.elastic_index)
 
     def _create_hybrid_retriever(self):
@@ -89,7 +82,12 @@ class ChatService:
         from app.retrieval.vector_retriever import VectorRetriever
         from elasticsearch import Elasticsearch
 
-        es = Elasticsearch(settings.elastic_url)
+        es = Elasticsearch(
+            settings.elastic_url,
+            request_timeout=self._ELASTIC_REQUEST_TIMEOUT_SECONDS,
+            retry_on_timeout=False,
+            max_retries=0,
+        )
         lexical_retriever = LexicalRetriever(es, index_name=settings.elastic_index)
         vector_retriever = VectorRetriever(es, index_name=settings.elastic_index)
         return HybridRetriever(lexical_retriever, vector_retriever)
@@ -197,6 +195,12 @@ class ChatService:
         trace_id: str,
         debug_enabled: bool,
     ) -> ChatAskResponse:
+        from app.retrieval.lexical_retriever import RetrievalBackendError
+
+        retrieval_mode = "lexical_only"
+        lexical_topk = None
+        vector_topk = None
+        rrf_topk = None
         base_query = (
             normalized_query
             if planner_output is None
@@ -210,34 +214,54 @@ class ChatService:
         )
         business_domain = None if planner_output is None else planner_output.domain_hint
 
-        if settings.enable_fast_track:
-            small_query_rule = self._match_small_query_rule(normalized_query)
-            if small_query_rule is not None:
-                search_query = small_query_rule["search_query"]
-                lexical_terms = self._merge_lexical_terms(
-                    lexical_terms,
-                    [normalized_query, search_query, *small_query_rule["lexical_terms"]],
-                )
-                business_domain = small_query_rule["business_domain"]
-
         used_hybrid = planner_output is not None and self._hybrid_retriever is not None
-        if used_hybrid:
-            hits = self._hybrid_retriever.search(
-                lexical_query=search_query,
-                vector_query=base_query,
-                lexical_terms=lexical_terms,
-                business_domain=business_domain,
-                lifecycle_status="active",
-                size=5,
-            )
-        else:
-            hits = self._lexical_retriever.search(
-                search_query,
-                lexical_terms=lexical_terms,
-                min_score=0.1,
-                business_domain=business_domain,
-                lifecycle_status="active",
-                size=5,
+        try:
+            if used_hybrid:
+                retrieval_mode = "hybrid"
+                hits = self._hybrid_retriever.search(
+                    lexical_query=search_query,
+                    vector_query=base_query,
+                    lexical_terms=lexical_terms,
+                    business_domain=business_domain,
+                    lifecycle_status="active",
+                    size=5,
+                )
+                lexical_topk, vector_topk, rrf_topk = self._summarize_hybrid_hits(hits)
+            else:
+                hits = self._lexical_retriever.search(
+                    search_query,
+                    lexical_terms=lexical_terms,
+                    min_score=0.1,
+                    business_domain=business_domain,
+                    lifecycle_status="active",
+                    size=5,
+                )
+                lexical_topk = self._summarize_lexical_hits(hits)
+        except RetrievalBackendError as error:
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer="当前检索后端暂时不可用，请稍后重试。",
+                citations=[],
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="faq_qa_elastic",
+                    chunk_ids=[],
+                    router_used=router_used,
+                    route_confidence=None,
+                    retrieval_score=None,
+                    fallback_reason=f"{error.stage}_backend_error",
+                    planner_output=planner_output,
+                    retrieval_mode=retrieval_mode,
+                    lexical_topk=lexical_topk,
+                    vector_topk=vector_topk,
+                    rrf_topk=rrf_topk,
+                    **self._summarize_rerank_decision(
+                        None,
+                        reject_reason=error.cause_name,
+                    ),
+                ),
             )
 
         if not hits:
@@ -256,13 +280,44 @@ class ChatService:
                     retrieval_score=None,
                     fallback_reason="retrieval_no_hit",
                     planner_output=planner_output,
+                    retrieval_mode=retrieval_mode,
+                    lexical_topk=lexical_topk,
+                    vector_topk=vector_topk,
+                    rrf_topk=rrf_topk,
+                    **self._summarize_rerank_decision(None),
                 ),
             )
 
         evidence_spans = []
+        selected_reranked = None
         if used_hybrid and self._reranker is not None:
-            reranked = self._select_reranked_hit(search_query, hits)
+            retrieval_mode = "hybrid_rerank"
+            reranked_hits = self._reranker.rerank(search_query, hits, top_n=len(hits))
+            clarification_reranked_hits = reranked_hits
+            if normalized_query != search_query:
+                clarification_reranked_hits = self._reranker.rerank(
+                    normalized_query,
+                    hits,
+                    top_n=len(hits),
+                )
+            clarification_response = self._build_clarification_response(
+                normalized_query=normalized_query,
+                reranked_hits=clarification_reranked_hits,
+                router_used=router_used,
+                trace_id=trace_id,
+                debug_enabled=debug_enabled,
+                planner_output=planner_output,
+                lexical_topk=lexical_topk,
+                vector_topk=vector_topk,
+                rrf_topk=rrf_topk,
+                rerank_reject_reason="multiple_close_faq_candidates",
+            )
+            if clarification_response is not None:
+                return clarification_response
+
+            reranked = self._select_reranked_hit(reranked_hits)
             if reranked is None:
+                top_reranked = None if not reranked_hits else reranked_hits[0]
                 return ChatAskResponse(
                     response_status="fallback",
                     trace_id=trace_id,
@@ -278,24 +333,25 @@ class ChatService:
                         retrieval_score=None,
                         fallback_reason="no_evidence",
                         planner_output=planner_output,
+                        retrieval_mode=retrieval_mode,
+                        lexical_topk=lexical_topk,
+                        vector_topk=vector_topk,
+                        rrf_topk=rrf_topk,
+                        **self._summarize_rerank_decision(
+                            top_reranked,
+                            reject_reason="evidence_below_threshold",
+                        ),
                     ),
                 )
             best = reranked.hit
             evidence_spans = reranked.evidence_spans
+            selected_reranked = reranked
         else:
             best = self._select_elastic_hit(hits)
 
         answer = best.answer or best.body_text
         snippet = answer[:160] if not evidence_spans else evidence_spans[0].text
-        citation = map_citation(
-            {
-                "id": best.unit_id,
-                "answer": answer,
-                "source_label": best.source_label,
-                "source_locator": best.source_locator,
-                "snippet": snippet,
-            }
-        )
+        citation = self._build_hit_citation(best, snippet)
 
         return ChatAskResponse(
             response_status="ok",
@@ -311,6 +367,11 @@ class ChatService:
                 route_confidence=None,
                 retrieval_score=best.score,
                 planner_output=planner_output,
+                retrieval_mode=retrieval_mode,
+                lexical_topk=lexical_topk,
+                vector_topk=vector_topk,
+                rrf_topk=rrf_topk,
+                **self._summarize_rerank_decision(selected_reranked),
             ),
         )
 
@@ -336,8 +397,7 @@ class ChatService:
             return faq_candidate
         return best
 
-    def _select_reranked_hit(self, query: str, hits):
-        reranked_hits = self._reranker.rerank(query, hits, top_n=len(hits))
+    def _select_reranked_hit(self, reranked_hits):
         accepted_hits = [
             item
             for item in reranked_hits
@@ -362,24 +422,181 @@ class ChatService:
             return faq_candidate
         return best
 
-    @classmethod
-    def _match_small_query_rule(
-        cls, normalized_query: str
-    ) -> dict[str, str | tuple[str, ...]] | None:
-        for rule in cls._SMALL_QUERY_RULES:
-            if normalized_query in rule["queries"]:
-                return rule
-        return None
+    def _build_clarification_response(
+        self,
+        *,
+        normalized_query: str,
+        reranked_hits,
+        router_used: str,
+        trace_id: str,
+        debug_enabled: bool,
+        planner_output: PlannerOutput | None,
+        lexical_topk: list[RetrievalCandidateSummary] | None,
+        vector_topk: list[RetrievalCandidateSummary] | None,
+        rrf_topk: list[RetrievalCandidateSummary] | None,
+        rerank_reject_reason: str,
+    ) -> ChatAskResponse | None:
+        clarification_candidates = self._collect_clarification_candidates(reranked_hits)
+        if len(clarification_candidates) < 2:
+            return None
+
+        top_candidate = clarification_candidates[0]
+        second_candidate = clarification_candidates[1]
+        score_gap = top_candidate.rerank_score - second_candidate.rerank_score
+        if score_gap > self._CLARIFICATION_MAX_RERANK_SCORE_GAP:
+            return None
+
+        if top_candidate.hit.question == second_candidate.hit.question:
+            return None
+
+        citations = [
+            self._build_hit_citation(
+                candidate.hit,
+                candidate.evidence_spans[0].text
+                if candidate.evidence_spans
+                else (candidate.hit.answer or candidate.hit.body_text)[:160],
+            )
+            for candidate in clarification_candidates[:2]
+        ]
+        options = [
+            ClarificationOption(
+                option_id=candidate.hit.unit_id,
+                label=candidate.hit.question or candidate.hit.source_label,
+            )
+            for candidate in clarification_candidates[:2]
+        ]
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer="当前问题还不够具体，请先确认您想了解的具体规则方向。",
+            citations=citations,
+            clarification=ClarificationInfo(
+                clarification_required=True,
+                question="您更想了解以下哪一项？",
+                options=options,
+                conflict_reason="multiple_close_faq_candidates",
+            ),
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result="faq_qa_elastic",
+                chunk_ids=[candidate.hit.unit_id for candidate in clarification_candidates[:2]],
+                router_used=router_used,
+                route_confidence=None,
+                retrieval_score=top_candidate.hit.score,
+                fallback_reason="conflict_requires_clarification",
+                planner_output=planner_output,
+                retrieval_mode="clarification",
+                lexical_topk=lexical_topk,
+                vector_topk=vector_topk,
+                rrf_topk=rrf_topk,
+                **self._summarize_rerank_decision(
+                    top_candidate,
+                    reject_reason=rerank_reject_reason,
+                ),
+            ),
+        )
 
     @staticmethod
-    def _merge_lexical_terms(
-        base_terms: list[str], extra_terms: list[str]
-    ) -> list[str]:
-        merged = list(base_terms)
-        for term in extra_terms:
-            if term and term not in merged:
-                merged.append(term)
-        return merged
+    def _collect_clarification_candidates(reranked_hits):
+        return [
+            item
+            for item in reranked_hits
+            if item.accept
+            and item.hit.source_kind == "faq"
+            and item.evidence_spans
+            and (item.hit.answer or item.hit.body_text)
+        ]
+
+    @staticmethod
+    def _build_hit_citation(hit, snippet: str):
+        return map_citation(
+            {
+                "id": hit.unit_id,
+                "answer": hit.answer or hit.body_text,
+                "source_label": hit.source_label,
+                "source_locator": hit.source_locator,
+                "snippet": snippet,
+            }
+        )
+
+    @staticmethod
+    def _summarize_lexical_hits(
+        hits, *, limit: int = 3
+    ) -> list[RetrievalCandidateSummary]:
+        return [
+            RetrievalCandidateSummary(
+                unit_id=hit.unit_id,
+                score=float(hit.score),
+                source_kind=hit.source_kind,
+            )
+            for hit in hits[:limit]
+        ]
+
+    @classmethod
+    def _summarize_hybrid_hits(
+        cls, hits, *, limit: int = 3
+    ) -> tuple[
+        list[RetrievalCandidateSummary],
+        list[RetrievalCandidateSummary],
+        list[RetrievalCandidateSummary],
+    ]:
+        lexical_topk = [
+            RetrievalCandidateSummary(
+                unit_id=hit.unit_id,
+                score=float(hit.bm25_score or 0.0),
+                source_kind=hit.source_kind,
+            )
+            for hit in sorted(
+                (item for item in hits if item.lexical_rank is not None),
+                key=lambda item: item.lexical_rank or 0,
+            )[:limit]
+        ]
+        vector_topk = [
+            RetrievalCandidateSummary(
+                unit_id=hit.unit_id,
+                score=float(hit.vector_score or 0.0),
+                source_kind=hit.source_kind,
+            )
+            for hit in sorted(
+                (item for item in hits if item.vector_rank is not None),
+                key=lambda item: item.vector_rank or 0,
+            )[:limit]
+        ]
+        rrf_topk = [
+            RetrievalCandidateSummary(
+                unit_id=hit.unit_id,
+                score=float(hit.score),
+                source_kind=hit.source_kind,
+                lexical_dominance_applied=hit.lexical_dominance_applied,
+                vector_dominance_applied=hit.vector_dominance_applied,
+            )
+            for hit in sorted(hits, key=lambda item: item.rrf_rank)[:limit]
+        ]
+        return lexical_topk, vector_topk, rrf_topk
+
+    @staticmethod
+    def _summarize_rerank_decision(
+        reranked_hit,
+        *,
+        reject_reason: str | None = None,
+    ) -> dict[str, bool | float | int | str | None]:
+        if reranked_hit is None:
+            return {
+                "rerank_accept": None,
+                "rerank_score": None,
+                "evidence_confidence": None,
+                "evidence_span_count": None,
+                "reject_reason": reject_reason,
+            }
+
+        return {
+            "rerank_accept": reranked_hit.accept,
+            "rerank_score": float(reranked_hit.rerank_score),
+            "evidence_confidence": float(reranked_hit.evidence_confidence),
+            "evidence_span_count": len(reranked_hit.evidence_spans),
+            "reject_reason": reject_reason,
+        }
 
     def _search_local(
         self,
@@ -499,6 +716,15 @@ class ChatService:
         retrieval_score: float | None = None,
         fallback_reason: str | None = None,
         planner_output: PlannerOutput | None = None,
+        retrieval_mode: str | None = None,
+        lexical_topk: list[RetrievalCandidateSummary] | None = None,
+        vector_topk: list[RetrievalCandidateSummary] | None = None,
+        rrf_topk: list[RetrievalCandidateSummary] | None = None,
+        rerank_accept: bool | None = None,
+        rerank_score: float | None = None,
+        evidence_confidence: float | None = None,
+        evidence_span_count: int | None = None,
+        reject_reason: str | None = None,
     ) -> DebugInfo | None:
         if not enabled:
             return None
@@ -510,4 +736,18 @@ class ChatService:
             route_confidence=route_confidence,
             retrieval_score=retrieval_score,
             fallback_reason=fallback_reason,
+            domain_hint=None if planner_output is None else planner_output.domain_hint,
+            lexical_terms=None if planner_output is None else planner_output.lexical_terms,
+            planner_confidence=None
+            if planner_output is None
+            else planner_output.planner_confidence,
+            retrieval_mode=retrieval_mode,
+            lexical_topk=lexical_topk,
+            vector_topk=vector_topk,
+            rrf_topk=rrf_topk,
+            rerank_accept=rerank_accept,
+            rerank_score=rerank_score,
+            evidence_confidence=evidence_confidence,
+            evidence_span_count=evidence_span_count,
+            reject_reason=reject_reason,
         )

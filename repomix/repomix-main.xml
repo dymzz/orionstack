@@ -68,9 +68,22 @@ This section contains the contents of the repository's files.
 - Node.js 18+（仅开发和构建前端时需要，生产部署不需要）
 - Docker（Phase 2 检索增强时需要 Elasticsearch）
 
-## 快速启动（本地关键词检索）
+## 快速启动（默认全开档）
 
-不依赖 Elasticsearch，使用内置关键词检索：
+默认运行方式依赖 Elasticsearch，并进入：
+
+- `planner`
+- `fast track`
+- `hybrid retrieval`
+- `rerank + evidence`
+
+先启动 Elasticsearch：
+
+```bash
+docker compose up -d elasticsearch
+```
+
+再启动应用：
 
 ```bash
 python scripts/dev-demo.py
@@ -78,29 +91,31 @@ python scripts/dev-demo.py
 
 浏览器打开 `http://localhost:5173` 即可使用。
 
+如果只是临时排障或验证旧链路，再手动切到回退档。
+
 ## Phase 2 检索增强
 
-默认使用本地关键词检索（`ORIONSTACK_SEARCH_BACKEND=local`）。当前 phase 2 的真实链路分成三档：
+当前项目默认使用 phase 2 全开档，长期推荐按三档理解：
 
-1. 默认稳定档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-2. Elasticsearch 过渡档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. Phase 2 当前灰度档：
+1. 默认全开档：
    - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
    - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
    - `ORIONSTACK_ENABLE_FAST_TRACK=true`
    - `ORIONSTACK_PLANNER_PROVIDER=local`
+2. 软回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
+3. 硬回退档：
+   - `ORIONSTACK_SEARCH_BACKEND=local`
+   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
 
 说明：
 
 - planner 高置信时：进入 `lexical + vector + RRF -> rerank + evidence`
 - planner 低置信时：回退到 `Fast Track + lexical-only`
-- 若线上需要快速回退，优先先把 `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
+- 若当前机器上的 Elasticsearch 不可用，优先先做软回退；只有仍无法稳定使用时再做硬回退
 
 要启用 Elasticsearch 过渡检索：
 
@@ -120,27 +135,15 @@ ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
 ### 3. 切换检索后端
 
 ```bash
-# 本地关键词检索（默认）
-ORIONSTACK_SEARCH_BACKEND=local python scripts/dev-backend.py
-
-# Elasticsearch lexical-only 过渡链
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true python scripts/dev-backend.py
-
-# Phase 2 当前灰度链
+# 默认全开档
 ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
-```
 
-快速回退：
-
-```bash
 # 软回退：回到 Elasticsearch lexical-only
 ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
 
 # 硬回退：完整回到主线 1 默认链路
 ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
 ```
-
-旧链路可通过 `ORIONSTACK_SEARCH_BACKEND=local` 完整回退
 
 ### 4. 发布前最小 smoke
 
@@ -150,7 +153,13 @@ ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK
 python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
 ```
 
-若准备启用 phase 2 当前灰度档，建议再手动验证：
+如果只是验证当前 phase 2 专项回归面，可以直接执行：
+
+```bash
+python scripts/run-phase2-regression.py
+```
+
+若当前准备长期使用默认全开档，建议再手动验证：
 
 - `请假`
 - `病假材料`
@@ -202,11 +211,11 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_HOST` | `127.0.0.1` | 后端监听地址 |
 | `ORIONSTACK_PORT` | `8000` | 后端监听端口 |
 | `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 前端允许的来源，逗号分隔 |
-| `ORIONSTACK_SEARCH_BACKEND` | `local` | `local`：关键词检索；`elasticsearch`：ES lexical 检索 |
+| `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch`：默认全开档；`local`：硬回退到主线 1 默认链路 |
 | `ORIONSTACK_ELASTIC_URL` | `http://localhost:9200` | ES 连接地址 |
 | `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名称 |
-| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `false` | 打开后允许进入 planner -> hybrid -> rerank/evidence 灰度链 |
-| `ORIONSTACK_ENABLE_FAST_TRACK` | `false` | 打开后启用小 query 规则与 lexical 过渡优化 |
+| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 默认开启 planner -> hybrid -> rerank/evidence 服务链 |
+| `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 默认开启小 query 规则与 lexical 过渡优化 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 
@@ -304,6 +313,7 @@ orionstack/
 | `dev-frontend.py` | 启动前端开发服务 |
 | `dev-demo.py` | 一键启动前后端开发环境 |
 | `start-backend.py` | 生产模式启动后端（不带热重载） |
+| `run-phase2-regression.py` | 一键执行 phase 2 专项回归 |
 | `clean-local-records.py` | 清理本地记录文件 |
 | `git-release.py` | 交互式版本发布 |
 
@@ -324,7 +334,7 @@ orionstack/
 <file path="pyproject.toml">
 [project]
 name = "orionstack"
-version = "0.2.5"
+version = "0.2.6"
 description = "Minimal FAQ and document QA demo for OrionStack"
 readme = "README.md"
 requires-python = ">=3.14"

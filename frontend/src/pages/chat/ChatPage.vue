@@ -85,9 +85,12 @@
         :response-status="response.response_status"
         :trace-id="response.trace_id"
         :feedback-submitting="feedbackSubmitting"
+        :clarification-submitting="loading"
         :selected-feedback="selectedFeedback"
         :feedback-message="feedbackMessage"
+        :clarification="response.clarification"
         @feedback="handleFeedback"
+        @clarification-select="handleClarificationSelect"
       />
 
       <CitationList
@@ -135,9 +138,42 @@
             <dt>retrieval_score</dt>
             <dd>{{ formatOptionalNumber(response.debug_info.retrieval_score) }}</dd>
           </div>
+          <div class="debug-item">
+            <dt>planner_confidence</dt>
+            <dd>{{ formatOptionalNumber(response.debug_info.planner_confidence) }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>domain_hint</dt>
+            <dd>{{ formatOptionalText(response.debug_info.domain_hint) }}</dd>
+          </div>
           <div class="debug-item debug-item-wide">
             <dt>fallback_reason</dt>
             <dd>{{ formatOptionalText(response.debug_info.fallback_reason) }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>clarification_required</dt>
+            <dd>{{ response.clarification?.clarification_required ? '是' : '否' }}</dd>
+          </div>
+          <div
+            v-if="response.clarification?.clarification_required"
+            class="debug-item debug-item-wide"
+          >
+            <dt>clarification_question</dt>
+            <dd>{{ response.clarification.question }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>lexical_terms</dt>
+            <dd>
+              <ul
+                v-if="response.debug_info.lexical_terms && response.debug_info.lexical_terms.length > 0"
+                class="debug-list"
+              >
+                <li v-for="term in response.debug_info.lexical_terms" :key="term">
+                  <code>{{ term }}</code>
+                </li>
+              </ul>
+              <span v-else class="debug-empty">无</span>
+            </dd>
           </div>
           <div class="debug-item debug-item-wide">
             <dt>retrieved_chunks</dt>
@@ -223,6 +259,14 @@ async function handleSubmit(rawQuery: string) {
   } finally {
     loading.value = false
   }
+}
+
+async function handleClarificationSelect(optionLabel: string) {
+  if (loading.value) {
+    return
+  }
+
+  await handleSubmit(optionLabel)
 }
 
 async function handleDocumentUpload(file: File) {
@@ -377,7 +421,16 @@ function buildDebugContext() {
     `router_used: ${debugInfo.router_used}`,
     `route_confidence: ${formatOptionalNumber(debugInfo.route_confidence)}`,
     `retrieval_score: ${formatOptionalNumber(debugInfo.retrieval_score)}`,
+    `planner_confidence: ${formatOptionalNumber(debugInfo.planner_confidence)}`,
+    `domain_hint: ${formatOptionalText(debugInfo.domain_hint)}`,
     `fallback_reason: ${formatOptionalText(debugInfo.fallback_reason)}`,
+    `clarification_required: ${response.value.clarification?.clarification_required ? '是' : '否'}`,
+    `clarification_question: ${response.value.clarification?.question ?? '无'}`,
+    `lexical_terms: ${
+      debugInfo.lexical_terms && debugInfo.lexical_terms.length > 0
+        ? debugInfo.lexical_terms.join(', ')
+        : '无'
+    }`,
     `retrieved_chunks: ${debugInfo.retrieved_chunks.length > 0 ? debugInfo.retrieved_chunks.join(', ') : '无'}`,
   ].join('\n')
 }

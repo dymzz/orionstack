@@ -6,7 +6,7 @@ from typing import Any
 
 from elasticsearch import Elasticsearch
 
-from app.retrieval.lexical_retriever import LexicalHit
+from app.retrieval.lexical_retriever import LexicalHit, RetrievalBackendError
 
 _VECTOR_DIMENSION = 64
 
@@ -54,8 +54,8 @@ class VectorRetriever:
 
         try:
             result = self._es.search(index=self._index_name, body=body)
-        except Exception:
-            return []
+        except Exception as error:
+            raise RetrievalBackendError("vector", error) from error
 
         query_vector = _text_to_unit_vector(normalized)
         scored_hits: list[LexicalHit] = []

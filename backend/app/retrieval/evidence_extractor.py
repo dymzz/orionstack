@@ -3,6 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+_GENERIC_QUERY_TERMS = {
+    "什么",
+    "如何",
+    "怎么",
+    "为何",
+    "为啥",
+    "哪里",
+    "哪儿",
+    "哪个",
+    "哪种",
+    "多少",
+    "几个",
+    "谁",
+}
+
 
 @dataclass(frozen=True)
 class EvidenceSpan:
@@ -63,7 +78,7 @@ def _extract_query_terms(query: str) -> list[str]:
     terms: list[str] = []
     normalized = " ".join(query.split())
     for part in normalized.split(" "):
-        if part and part not in terms:
+        if part and part not in terms and part not in _GENERIC_QUERY_TERMS:
             terms.append(part)
 
     compact = normalized.replace(" ", "")
@@ -72,6 +87,6 @@ def _extract_query_terms(query: str) -> list[str]:
     if len(compact) > 1:
         for index in range(len(compact) - 1):
             token = compact[index : index + 2]
-            if token not in terms:
+            if token not in terms and token not in _GENERIC_QUERY_TERMS:
                 terms.append(token)
     return terms

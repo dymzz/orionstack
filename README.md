@@ -101,6 +101,12 @@ ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK
 python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
 ```
 
+如果只是验证当前 phase 2 专项回归面，可以直接执行：
+
+```bash
+python scripts/run-phase2-regression.py
+```
+
 若当前准备长期使用默认全开档，建议再手动验证：
 
 - `请假`
@@ -255,6 +261,7 @@ orionstack/
 | `dev-frontend.py` | 启动前端开发服务 |
 | `dev-demo.py` | 一键启动前后端开发环境 |
 | `start-backend.py` | 生产模式启动后端（不带热重载） |
+| `run-phase2-regression.py` | 一键执行 phase 2 专项回归 |
 | `clean-local-records.py` | 清理本地记录文件 |
 | `git-release.py` | 交互式版本发布 |
 

@@ -69,10 +69,30 @@ This section contains the contents of the repository's files.
 <template>
   <section class="card answer-card">
     <div class="meta-row">
-      <span class="badge">{{ responseStatus }}</span>
+      <span class="badge" :class="statusBadgeClass">{{ statusBadgeText }}</span>
       <span class="trace-id">trace_id: {{ traceId }}</span>
     </div>
-    <p class="answer-text">{{ answer }}</p>
+    <div v-if="clarification?.clarification_required" class="clarification-panel">
+      <p class="clarification-kicker">需要补充确认</p>
+      <p class="clarification-question">{{ clarification.question }}</p>
+      <p v-if="clarification.conflict_reason" class="clarification-reason">
+        触发原因：{{ clarification.conflict_reason }}
+      </p>
+      <p v-if="answer" class="answer-text clarification-answer">{{ answer }}</p>
+      <ul v-if="clarification.options.length > 0" class="clarification-option-list">
+        <li v-for="option in clarification.options" :key="option.option_id" class="clarification-option">
+          <button
+            class="ghost-button clarification-option-button"
+            type="button"
+            :disabled="clarificationSubmitting"
+            @click="$emit('clarification-select', option.label)"
+          >
+            {{ option.label }}
+          </button>
+        </li>
+      </ul>
+    </div>
+    <p v-else class="answer-text">{{ answer }}</p>
     <div class="feedback-row">
       <span class="feedback-label">这条回答是否有帮助？</span>
       <div class="feedback-actions">
@@ -99,20 +119,58 @@ This section contains the contents of the repository's files.
 </template>
 
 <script setup lang="ts">
-import type { FeedbackLabel } from '../../types/chat'
+import { computed } from 'vue'
+import type { ClarificationInfo, FeedbackLabel, ResponseStatus } from '../../types/chat'
 
 defineEmits<{
   (e: 'feedback', value: FeedbackLabel): void
+  (e: 'clarification-select', value: string): void
 }>()
 
-defineProps<{
+const props = defineProps<{
   answer: string
-  responseStatus: string
+  responseStatus: ResponseStatus
   traceId: string
   feedbackSubmitting: boolean
+  clarificationSubmitting: boolean
   selectedFeedback: FeedbackLabel | null
   feedbackMessage: string
+  clarification?: ClarificationInfo | null
 }>()
+
+const statusBadgeText = computed(() => {
+  if (props.clarification?.clarification_required) {
+    return '需要澄清'
+  }
+
+  switch (props.responseStatus) {
+    case 'ok':
+      return '正常回答'
+    case 'refused':
+      return '拒答'
+    case 'fallback':
+      return '需要更明确问题'
+    case 'system_error':
+      return '系统异常'
+  }
+})
+
+const statusBadgeClass = computed(() => {
+  if (props.clarification?.clarification_required) {
+    return 'badge-status-clarification'
+  }
+
+  switch (props.responseStatus) {
+    case 'ok':
+      return 'badge-status-ok'
+    case 'refused':
+      return 'badge-status-refused'
+    case 'fallback':
+      return 'badge-status-fallback'
+    case 'system_error':
+      return 'badge-status-system'
+  }
+})
 </script>
 </file>
 
@@ -166,7 +224,7 @@ function submit() {
         </div>
         <p class="locator-label">{{ getLocatorLabel(citation) }}</p>
         <p class="locator">{{ citation.source_locator }}</p>
-        <p class="citation-snippet-label">引用片段</p>
+        <p class="citation-snippet-label">{{ getSnippetLabel(citation) }}</p>
         <p class="citation-snippet">{{ citation.snippet }}</p>
       </li>
     </ul>
@@ -192,6 +250,10 @@ function getCitationKindClass(citation: CitationItem) {
 
 function getLocatorLabel(citation: CitationItem) {
   return isFaqCitation(citation) ? 'FAQ 定位' : '文档定位'
+}
+
+function getSnippetLabel(citation: CitationItem) {
+  return isFaqCitation(citation) ? '引用 / 证据片段' : '引用片段'
 }
 </script>
 </file>
@@ -592,9 +654,12 @@ export interface DocumentDeleteResponse {
         :response-status="response.response_status"
         :trace-id="response.trace_id"
         :feedback-submitting="feedbackSubmitting"
+        :clarification-submitting="loading"
         :selected-feedback="selectedFeedback"
         :feedback-message="feedbackMessage"
+        :clarification="response.clarification"
         @feedback="handleFeedback"
+        @clarification-select="handleClarificationSelect"
       />
 
       <CitationList
@@ -642,9 +707,42 @@ export interface DocumentDeleteResponse {
             <dt>retrieval_score</dt>
             <dd>{{ formatOptionalNumber(response.debug_info.retrieval_score) }}</dd>
           </div>
+          <div class="debug-item">
+            <dt>planner_confidence</dt>
+            <dd>{{ formatOptionalNumber(response.debug_info.planner_confidence) }}</dd>
+          </div>
+          <div class="debug-item">
+            <dt>domain_hint</dt>
+            <dd>{{ formatOptionalText(response.debug_info.domain_hint) }}</dd>
+          </div>
           <div class="debug-item debug-item-wide">
             <dt>fallback_reason</dt>
             <dd>{{ formatOptionalText(response.debug_info.fallback_reason) }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>clarification_required</dt>
+            <dd>{{ response.clarification?.clarification_required ? '是' : '否' }}</dd>
+          </div>
+          <div
+            v-if="response.clarification?.clarification_required"
+            class="debug-item debug-item-wide"
+          >
+            <dt>clarification_question</dt>
+            <dd>{{ response.clarification.question }}</dd>
+          </div>
+          <div class="debug-item debug-item-wide">
+            <dt>lexical_terms</dt>
+            <dd>
+              <ul
+                v-if="response.debug_info.lexical_terms && response.debug_info.lexical_terms.length > 0"
+                class="debug-list"
+              >
+                <li v-for="term in response.debug_info.lexical_terms" :key="term">
+                  <code>{{ term }}</code>
+                </li>
+              </ul>
+              <span v-else class="debug-empty">无</span>
+            </dd>
           </div>
           <div class="debug-item debug-item-wide">
             <dt>retrieved_chunks</dt>
@@ -730,6 +828,14 @@ async function handleSubmit(rawQuery: string) {
   } finally {
     loading.value = false
   }
+}
+
+async function handleClarificationSelect(optionLabel: string) {
+  if (loading.value) {
+    return
+  }
+
+  await handleSubmit(optionLabel)
 }
 
 async function handleDocumentUpload(file: File) {
@@ -884,7 +990,16 @@ function buildDebugContext() {
     `router_used: ${debugInfo.router_used}`,
     `route_confidence: ${formatOptionalNumber(debugInfo.route_confidence)}`,
     `retrieval_score: ${formatOptionalNumber(debugInfo.retrieval_score)}`,
+    `planner_confidence: ${formatOptionalNumber(debugInfo.planner_confidence)}`,
+    `domain_hint: ${formatOptionalText(debugInfo.domain_hint)}`,
     `fallback_reason: ${formatOptionalText(debugInfo.fallback_reason)}`,
+    `clarification_required: ${response.value.clarification?.clarification_required ? '是' : '否'}`,
+    `clarification_question: ${response.value.clarification?.question ?? '无'}`,
+    `lexical_terms: ${
+      debugInfo.lexical_terms && debugInfo.lexical_terms.length > 0
+        ? debugInfo.lexical_terms.join(', ')
+        : '无'
+    }`,
     `retrieved_chunks: ${debugInfo.retrieved_chunks.length > 0 ? debugInfo.retrieved_chunks.join(', ') : '无'}`,
   ].join('\n')
 }
@@ -987,12 +1102,25 @@ export interface ChatAskRequest {
 }
 
 export type FeedbackLabel = 'up' | 'down'
+export type ResponseStatus = 'ok' | 'refused' | 'fallback' | 'system_error'
 
 export interface CitationItem {
   citation_id: string
   source_label: string
   source_locator: string
   snippet: string
+}
+
+export interface ClarificationOption {
+  option_id: string
+  label: string
+}
+
+export interface ClarificationInfo {
+  clarification_required: boolean
+  question: string
+  options: ClarificationOption[]
+  conflict_reason?: string | null
 }
 
 export interface DebugInfo {
@@ -1002,21 +1130,26 @@ export interface DebugInfo {
   retrieved_chunks: string[]
   route_confidence?: number
   retrieval_score?: number
-  fallback_reason?: string
+  fallback_reason?: string | null
+  domain_hint?: string | null
+  lexical_terms?: string[] | null
+  semantic_expansions?: string[] | null
+  planner_confidence?: number | null
 }
 
 export interface ChatAskResponse {
-  response_status: 'ok' | 'refused' | 'fallback' | 'system_error'
+  response_status: ResponseStatus
   trace_id: string
   answer: string
   citations: CitationItem[]
+  clarification?: ClarificationInfo | null
   debug_info?: DebugInfo
 }
 
 export interface ChatRecordItem {
   trace_id: string
   raw_query: string
-  response_status: ChatAskResponse['response_status'] | string
+  response_status: ResponseStatus | string
   retrieved_chunk_ids: string[]
   created_at: string
   feedback_label?: FeedbackLabel | string | null
@@ -1030,7 +1163,7 @@ export interface FeedbackRecordItem {
   trace_id: string
   raw_query: string
   feedback_label: FeedbackLabel | string
-  response_status: ChatAskResponse['response_status'] | string
+  response_status: ResponseStatus | string
   created_at: string
 }
 
@@ -1043,7 +1176,7 @@ export interface ChatFeedbackRequest {
   raw_query: string
   answer_text: string
   feedback_label: FeedbackLabel
-  response_status: ChatAskResponse['response_status']
+  response_status: ResponseStatus
   retrieved_chunk_ids: string[]
   normalized_query?: string
   router_used?: string
@@ -1405,6 +1538,31 @@ textarea {
   text-transform: uppercase;
 }
 
+.badge-status-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-status-clarification {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.badge-status-refused {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-status-fallback {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-status-system {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .trace-id,
 .locator {
   color: #6b7280;
@@ -1414,6 +1572,69 @@ textarea {
 .answer-text {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.clarification-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.clarification-kicker {
+  margin: 0;
+  color: #6d28d9;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.clarification-question {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.clarification-reason {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.clarification-answer {
+  color: #374151;
+}
+
+.clarification-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clarification-option {
+  display: flex;
+}
+
+.clarification-option-button {
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #5b21b6;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.clarification-option-button:hover:not(:disabled) {
+  background: #ede9fe;
+}
+
+.clarification-option-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .feedback-row {

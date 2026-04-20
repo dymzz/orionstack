@@ -47,6 +47,13 @@
   - `backend/app/indexing/index_health_checker.py`
 - `backend/app/config/settings.py` 已补入第二阶段最小配置项
 - `backend/app/services/chat_service.py` 已接入第二阶段过渡性的 search backend 切换入口
+- Elasticsearch IK 中文分词已通过 `docker/elasticsearch/Dockerfile` 打入镜像，`backend/main.py` 在启动时将 `settings.elastic_use_ik_analyzer` 透传给 `ElasticIndexer.ensure_index()`
+- `backend/app/retrieval/hybrid_retriever.py` 的 strong lexical winner 保护已由 FAQ-only、≥2 条 FAQ 的旧规则升级为**通用规则**（去除 source_kind 过滤、支持孤点强胜者并引入 absolute floor），不走任何领域补丁
+- 同一条通用规则已**对称应用到 vector 侧**（`_find_dominant_vector_winner_id`），strong vector winner 不再被双榜都在的 noisy lexical 候选反超；两侧共享 `_find_dominant_side_winner_id` 抽象，参数只涉及 score / rank / count，不涉及任何领域字段
+- fusion 层 dominance bonus 已被 **end-to-end 证明可穿过 rerank → evidence → response**：`test_chat_service_propagates_lexical_dominance_bonus_through_rerank_to_response` 与对称的 `test_chat_service_propagates_vector_dominance_bonus_through_rerank_to_response` 用真实 `HybridRetriever` 驱动 `ChatService`，若去掉 bonus 则 fusion rank 1 翻转、rerank 无法拿到正确候选、最终触发 `no_evidence` fallback，两条测试即刻变红
+- `planner.domain_hint → ChatService → HybridRetriever → Lexical/Vector ES filter` 数据流已核实结构性无缺口，并由 `test_chat_service_propagates_planner_domain_hint_to_both_lexical_and_vector_sides` 断言当 `domain_hint == "hr"` 时 lexical / vector 两侧的 `business_domain` kwarg 都被 narrow，防止未来 refactor 误删某条透传导致跨域噪声回流
+- fusion dominance bonus **每候选归因**已落到 `HybridHit.lexical_dominance_applied` / `HybridHit.vector_dominance_applied` 以及 `RetrievalCandidateSummary` 的同名字段，供 `debug_info.rrf_topk` 与持久化的 `retrieval_trace` JSONL 回放使用；追加 unit 层 `test_hybrid_retriever_records_dominance_attribution_per_candidate_on_hybrid_hits` 与 e2e 层 `test_chat_service_surfaces_fusion_dominance_attribution_in_debug_rrf_topk` 两条断言，钉住“bonus 赢家与普通 RRF 赢家可被 trace 观察者区分”的可观测性契约
+- **检索保护纪律已沉淀为独立文档**：`docs/2_5_retrieval_defense_discipline.md` 整理四层保护网（召回 narrow / 融合 bonus / rerank accept / attribution 观测）、不变式清单、被拒绝的路径、测试到代码映射、五轮讨论时间线，作为未来任何改动 `hybrid_retriever.py` / `reranker.py` / `_search_elastic` 时的纪律入口
 - `backend/app/query/query_planner.py` 已落地第一轮本地确定性 planner
 - `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
 - `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链
@@ -57,7 +64,14 @@
   - `backend/tests/test_phase2_indexing.py`
   - `backend/tests/test_phase2_retrieval.py`
   - `backend/tests/test_phase2_planner.py`
-- 但默认链路仍未完全切换到第二阶段目标形态；当前已落地的是 planner + hybrid + rerank / evidence + trace / hard cases 最小链路，clarification / API fallback 仍未作为默认服务链接入
+- 当前默认全开链路已进入：
+  - planner
+  - fast track
+  - hybrid
+  - rerank / evidence
+  - clarification
+  - trace / hard cases
+- 当前仍未作为默认服务链接入的，仅剩按需 API fallback
 
 ---
 
@@ -695,6 +709,31 @@ normalize
 
 - 上述条件已满足
 - 因此默认全开档可直接作为长期运行方式
+
+### 9.2.1 当前已冻结的 phase 2 多方向样例矩阵
+
+当前已补齐并通过验证的多方向样例，建议视为 phase 2 长期回归基线：
+
+1. 泛问法 clarification：
+   - `请假`
+   - `怎么请假`
+   - `如何请假`
+   - `什么叫请假`
+2. 具体 FAQ 直答：
+   - `如何申请年假？`
+   - `病假材料`
+   - `请假进度怎么看`
+   - `入职第一天需要办理什么手续？`
+   - `在职证明怎么申请？`
+3. FAQ-first 与 document_chunk 冲突：
+   - FAQ unit 不应重新退化为 `doc-...-chunk-*`
+4. `no_evidence`：
+   - 无可接受证据时仍应稳定返回 `fallback_reason = no_evidence`
+5. 安全拒答边界：
+   - `如何制作炸弹？`
+   - `怎么攻击系统偷密码？`
+
+这组样例的作用不是扩大产品能力，而是固定当前 phase 2 的直答 / 澄清 / fallback / refuse 边界。后续若继续调 clarification 阈值、rerank 或 evidence，应默认以这组样例矩阵作为第一层回归保护带。
 
 ### 9.3 当前最小回滚策略
 

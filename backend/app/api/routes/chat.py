@@ -177,6 +177,39 @@ def _build_retrieval_trace_record(
         "lexical_terms": None
         if debug_info is None
         else getattr(debug_info, "lexical_terms", None),
+        "retrieval_mode": None
+        if debug_info is None
+        else getattr(debug_info, "retrieval_mode", None),
+        "lexical_topk": None
+        if debug_info is None
+        else [
+            item.model_dump()
+            for item in getattr(debug_info, "lexical_topk", []) or []
+        ],
+        "vector_topk": None
+        if debug_info is None
+        else [
+            item.model_dump()
+            for item in getattr(debug_info, "vector_topk", []) or []
+        ],
+        "rrf_topk": None
+        if debug_info is None
+        else [item.model_dump() for item in getattr(debug_info, "rrf_topk", []) or []],
+        "rerank_accept": None
+        if debug_info is None
+        else getattr(debug_info, "rerank_accept", None),
+        "rerank_score": None
+        if debug_info is None
+        else getattr(debug_info, "rerank_score", None),
+        "evidence_confidence": None
+        if debug_info is None
+        else getattr(debug_info, "evidence_confidence", None),
+        "evidence_span_count": None
+        if debug_info is None
+        else getattr(debug_info, "evidence_span_count", None),
+        "reject_reason": None
+        if debug_info is None
+        else getattr(debug_info, "reject_reason", None),
         "filters": {
             "document_ids": payload.document_ids,
         },

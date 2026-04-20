@@ -4,6 +4,10 @@ from app.routing.contracts import IntentDecision
 from app.schemas.request import ChatAskRequest
 from app.services import chat_service as chat_service_module
 from app.services.chat_service import ChatService
+from conftest import fixture_case
+
+
+LEAVE_APPLY = fixture_case("leave_apply")
 
 
 class _FakeLexicalRetriever:
@@ -32,32 +36,31 @@ def _build_faq_hit():
     from app.retrieval.lexical_retriever import LexicalHit
 
     return LexicalHit(
-        unit_id="hr-faq-001",
+        unit_id=LEAVE_APPLY["id"],
         source_kind="faq",
-        question="如何申请年假？",
-        answer="进入公司请假入口后选择年假，填写请假时间与原因并提交审批。",
-        body_text="进入公司请假入口后选择年假，填写请假时间与原因并提交审批。",
-        source_label="HR FAQ",
-        source_locator="hr_faq_seed_v1#hr-faq-001",
+        question=LEAVE_APPLY["question"],
+        answer=LEAVE_APPLY["answer"],
+        body_text=LEAVE_APPLY["answer"],
+        source_label=LEAVE_APPLY["source_label"],
+        source_locator=LEAVE_APPLY["source_locator"],
         score=3.2,
-        business_domain="hr",
-        document_type="faq",
-        source_type="manual_faq",
-        access_scope="internal",
-        lifecycle_status="active",
+        business_domain=LEAVE_APPLY["business_domain"],
+        document_type=LEAVE_APPLY["document_type"],
+        source_type=LEAVE_APPLY["source_type"],
+        access_scope=LEAVE_APPLY["access_scope"],
+        lifecycle_status=LEAVE_APPLY["lifecycle_status"],
     )
 
 
-def test_query_planner_outputs_minimal_hr_fields_for_leave_query() -> None:
+def test_query_planner_outputs_minimal_fields_for_non_empty_query() -> None:
     planner = QueryPlanner(provider="local", model="stub")
 
     output = planner.plan("请假")
 
     assert output.normalized_query == "请假"
-    assert output.domain_hint == "hr"
+    assert output.domain_hint is None
     assert output.lexical_terms[0] == "请假"
     assert "请假" in output.lexical_terms
-    assert "审批" in output.lexical_terms
     assert output.planner_confidence >= 0.15
 
 
@@ -67,9 +70,9 @@ def test_chat_service_uses_planner_outputs_for_elasticsearch_lexical_path(
     fake_retriever = _FakeLexicalRetriever([_build_faq_hit()])
     fake_planner = _FakePlanner(
         PlannerOutput(
-            normalized_query="请假 审批",
-            domain_hint="hr",
-            lexical_terms=["请假", "审批"],
+            normalized_query="请假",
+            domain_hint=None,
+            lexical_terms=["请假"],
             planner_confidence=0.88,
         )
     )
@@ -106,11 +109,22 @@ def test_chat_service_uses_planner_outputs_for_elasticsearch_lexical_path(
     assert response.debug_info is not None
     assert response.debug_info.route_result == "faq_qa_elastic"
     assert response.debug_info.router_used == "query_planner_local"
-    assert response.debug_info.retrieved_chunks == ["hr-faq-001"]
-    assert response.citations[0].source_locator == "hr_faq_seed_v1#hr-faq-001"
-    assert fake_retriever.calls[0]["query"] == "请假 审批"
-    assert fake_retriever.calls[0]["lexical_terms"] == ["请假", "审批"]
-    assert fake_retriever.calls[0]["business_domain"] == "hr"
+    assert response.debug_info.retrieved_chunks == [LEAVE_APPLY["id"]]
+    assert response.debug_info.retrieval_mode == "lexical_only"
+    assert response.debug_info.lexical_topk is not None
+    assert response.debug_info.lexical_topk[0].unit_id == LEAVE_APPLY["id"]
+    assert response.debug_info.lexical_topk[0].source_kind == "faq"
+    assert response.debug_info.vector_topk is None
+    assert response.debug_info.rrf_topk is None
+    assert response.debug_info.rerank_accept is None
+    assert response.debug_info.rerank_score is None
+    assert response.debug_info.evidence_confidence is None
+    assert response.debug_info.evidence_span_count is None
+    assert response.debug_info.reject_reason is None
+    assert response.citations[0].source_locator == LEAVE_APPLY["source_locator"]
+    assert fake_retriever.calls[0]["query"] == "请假"
+    assert fake_retriever.calls[0]["lexical_terms"] == ["请假"]
+    assert fake_retriever.calls[0]["business_domain"] is None
 
 
 def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
@@ -119,9 +133,9 @@ def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
     fake_retriever = _FakeLexicalRetriever([_build_faq_hit()])
     fake_planner = _FakePlanner(
         PlannerOutput(
-            normalized_query="请假 审批",
-            domain_hint="hr",
-            lexical_terms=["请假", "审批"],
+            normalized_query="请假",
+            domain_hint=None,
+            lexical_terms=["请假"],
             planner_confidence=0.05,
         )
     )
@@ -170,5 +184,15 @@ def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
     assert response.debug_info is not None
     assert response.debug_info.router_used == "rule_parser"
     assert response.debug_info.route_result == "faq_qa_elastic"
-    assert fake_retriever.calls[0]["query"] == "请假 申请 审批 流程"
-    assert fake_retriever.calls[0]["business_domain"] == "hr"
+    assert response.debug_info.retrieval_mode == "lexical_only"
+    assert response.debug_info.lexical_topk is not None
+    assert response.debug_info.lexical_topk[0].unit_id == LEAVE_APPLY["id"]
+    assert response.debug_info.vector_topk is None
+    assert response.debug_info.rrf_topk is None
+    assert response.debug_info.rerank_accept is None
+    assert response.debug_info.rerank_score is None
+    assert response.debug_info.evidence_confidence is None
+    assert response.debug_info.evidence_span_count is None
+    assert response.debug_info.reject_reason is None
+    assert fake_retriever.calls[0]["query"] == "请假"
+    assert fake_retriever.calls[0]["business_domain"] is None

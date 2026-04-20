@@ -346,6 +346,31 @@ textarea {
   text-transform: uppercase;
 }
 
+.badge-status-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-status-clarification {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.badge-status-refused {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-status-fallback {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-status-system {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .trace-id,
 .locator {
   color: #6b7280;
@@ -355,6 +380,69 @@ textarea {
 .answer-text {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.clarification-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.clarification-kicker {
+  margin: 0;
+  color: #6d28d9;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.clarification-question {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.clarification-reason {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.clarification-answer {
+  color: #374151;
+}
+
+.clarification-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clarification-option {
+  display: flex;
+}
+
+.clarification-option-button {
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #5b21b6;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.clarification-option-button:hover:not(:disabled) {
+  background: #ede9fe;
+}
+
+.clarification-option-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .feedback-row {

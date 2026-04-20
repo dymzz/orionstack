@@ -1,7 +1,9 @@
 version: "3.8"
 services:
   elasticsearch:
-    image: elasticsearch:8.17.0
+    build:
+      context: ./docker/elasticsearch
+    image: orionstack-elasticsearch:8.17.0-ik
     container_name: orionstack-es
     environment:
       - discovery.type=single-node

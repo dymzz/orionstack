@@ -125,41 +125,50 @@ class KnowledgeUnitRepository:
     ) -> None:
         self._faq_repo = faq_repo
         self._chunk_repo = chunk_repo
-        self._seed_dir = Path(__file__).resolve().parents[1] / "seed"
+        storage_root = Path(__file__).resolve().parents[1]
+        self._seed_dir = storage_root / "seed"
+        self._upload_dir = storage_root / "uploads"
 
     def list_all(self) -> list[KnowledgeUnit]:
         units: list[KnowledgeUnit] = []
         known_faq_ids: set[str] = set()
+
         if self._faq_repo is not None:
             for item in self._faq_repo.list_all():
                 unit = map_faq_item_to_knowledge_unit(item)
                 units.append(unit)
                 if unit.unit_id:
                     known_faq_ids.add(unit.unit_id)
-        for item in self._list_seed_faq_items():
+
+        for item in self._list_markdown_faq_items():
             unit = map_faq_item_to_knowledge_unit(item)
             if unit.unit_id and unit.unit_id not in known_faq_ids:
                 units.append(unit)
                 known_faq_ids.add(unit.unit_id)
+
         if self._chunk_repo is not None:
             for chunk in self._chunk_repo.list_all():
                 units.append(map_chunk_to_knowledge_unit(chunk))
+
         return units
 
     def list_faq_units(self) -> list[KnowledgeUnit]:
         units: list[KnowledgeUnit] = []
         known_faq_ids: set[str] = set()
+
         if self._faq_repo is not None:
             for item in self._faq_repo.list_all():
                 unit = map_faq_item_to_knowledge_unit(item)
                 units.append(unit)
                 if unit.unit_id:
                     known_faq_ids.add(unit.unit_id)
-        for item in self._list_seed_faq_items():
+
+        for item in self._list_markdown_faq_items():
             unit = map_faq_item_to_knowledge_unit(item)
             if unit.unit_id and unit.unit_id not in known_faq_ids:
                 units.append(unit)
                 known_faq_ids.add(unit.unit_id)
+
         return units
 
     def list_chunk_units(self) -> list[KnowledgeUnit]:
@@ -169,14 +178,16 @@ class KnowledgeUnitRepository:
             map_chunk_to_knowledge_unit(chunk) for chunk in self._chunk_repo.list_all()
         ]
 
-    def _list_seed_faq_items(self) -> list[dict[str, Any]]:
-        if not self._seed_dir.exists():
-            return []
+    def _list_markdown_faq_items(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
 
-        seed_items: list[dict[str, Any]] = []
-        for path in sorted(self._seed_dir.glob("*_faq_seed_*.md")):
-            seed_items.extend(_parse_seed_markdown_faq_items(path))
-        return seed_items
+        for base_dir in (self._seed_dir, self._upload_dir):
+            if not base_dir.exists():
+                continue
+            for path in sorted(base_dir.glob("*_faq_seed_*.md")):
+                items.extend(_parse_seed_markdown_faq_items(path))
+
+        return items
 
 
 def _parse_seed_markdown_faq_items(path: Path) -> list[dict[str, Any]]:
