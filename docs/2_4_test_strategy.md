@@ -478,6 +478,32 @@ fusion dominance 可观测性（为未来 trace 回放铺观察点）：
 
 - 新增多域 fixture 后，最容易出现的不是“完全查不到”，而是“查到隔壁域”
 
+已落地（文件 `backend/tests/test_phase2_cross_domain.py`，9 条断言，§9.4 在现有 fixture 数据上**已饱和**）：
+
+- **多域端到端 smoke**（4 条，参数化）：`test_chat_service_answers_typical_query_for_non_hr_domain_seed` 覆盖 `admin-faq-001 / finance-faq-001 / it-faq-001 / ops-faq-001` 四条代表性 FAQ，断言每条都能走完 ChatService 端到端并正确回源到自己的 `source_locator`
+- **HR × Finance 单向污染**（1 条）：`test_chat_service_picks_hr_leave_progress_over_finance_payment_progress_on_shared_structural_keywords`
+  - `hr-faq-003` "请假审批进度在哪里查看？" vs `finance-faq-004` "付款申请提交后在哪里查看进度？"
+  - 共享 `申请/提交/在哪里/查看/进度/审批记录` 等非领域词
+- **Admin × IT 权限对称污染对**（2 条）：
+  - `test_chat_service_picks_admin_door_access_over_it_system_permission_when_query_matches_admin`
+  - `test_chat_service_picks_it_system_permission_over_admin_door_access_when_query_matches_it`
+  - `admin-faq-003` "门禁权限怎么申请？" vs `it-faq-012` "如何申请系统权限开通？"
+  - answer 模板近乎完全平行："如需开通 X 权限，可通过 Y 入口提交申请...审批"
+- **Finance × Ops 申请审批对称污染对**（2 条）：
+  - `test_chat_service_picks_finance_loan_application_over_ops_production_change_when_query_matches_finance`
+  - `test_chat_service_picks_ops_production_change_over_finance_loan_application_when_query_matches_ops`
+  - `finance-faq-005` "借款申请怎么走？" vs `ops-faq-003` "生产变更需要怎么申请？"
+  - 共享 "按流程提交/发起申请...并提交审批" 结构
+
+三对污染测试共同证明的契约：**fusion 层被跨域候选污染时，rerank/evidence 层独立决策仍能回收正确答案；且这条性质是双向对称的**（`Admin×IT`、`Finance×Ops` 两对双向测试排除了 rerank 对任一方向的隐藏偏好）。
+
+剩余 §9.4 簇 —— **fixture data-gap，不是测试缺口**：
+
+- **HR × IT**：当前 fixtures 里 HR / IT 之间没有真正结构平行的问答对（HR 入职"账号开通" vs IT "账号密码重置" 只有弱关键词重合），如需补这条簇需要先在 seed 里增加 HR 账号管理类 FAQ
+- **Admin × 其他**："预订" 语义仅出现在 Admin `admin-faq-001`，当前 fixtures 里其他域无对应 FAQ
+
+同域多条 FAQ 的近义查询（`请假` 泛问法簇，见 §9.1）与此簇不重叠，属于另一条 backlog 延续。
+
 ---
 
 ## 10. 当前建议的执行顺序
