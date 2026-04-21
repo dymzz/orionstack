@@ -33,6 +33,7 @@ export interface DebugInfo {
   retrieved_chunks: string[]
   route_confidence?: number
   retrieval_score?: number
+  fusion_score?: number
   fallback_reason?: string | null
   domain_hint?: string | null
   lexical_terms?: string[] | null

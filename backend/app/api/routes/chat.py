@@ -170,6 +170,12 @@ def _build_retrieval_trace_record(
         if debug_info is None
         else debug_info.normalized_query,
         "intent": None if debug_info is None else debug_info.route_result,
+        "retrieval_score": None
+        if debug_info is None
+        else getattr(debug_info, "retrieval_score", None),
+        "fusion_score": None
+        if debug_info is None
+        else getattr(debug_info, "fusion_score", None),
         "domain_hint": None if debug_info is None else getattr(debug_info, "domain_hint", None),
         "semantic_expansions": None
         if debug_info is None

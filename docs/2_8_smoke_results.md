@@ -36,7 +36,7 @@
 | `domain_hint` | `§2.A/E` 列 | 2_6 §5.1 |
 | `lexical_terms` | `§2.B` 列 | 2_6 §5.2 |
 | `planner_confidence` | `§2.C` 列 | 2_6 §5.3 |
-| `retrieval_score` / `retrieved_chunks` | `§6` | 参考信息，不作契约判定 |
+| `fusion_score` / `retrieval_score` / `retrieved_chunks` | `§6` | 参考信息，不作契约判定 |
 
 ### 1.3 判定符号
 
@@ -160,8 +160,8 @@ JSON 文件已回写所有 failures 为 空 + 添加 `_post_correction_note`；�
 
 ### 4.4 非债债提醒：债在别的层
 
-- **C3 / C4 `生产变更` 语料缺口**：Qwen 正确归类为 `ops` 域，但我们的 FAQ 语料库只有 hr/it/finance/admin 四域，ops 域空缺。planner 分域正确 → retrieval 无命中 → clarification 或 no_evidence fallback。**属语料层事项**，不在本文件范围
-- **retrieval_score 在短查询上偏低**（A1=0.03、A2=0.05）：RRF 归一化副作用，属 `2_5 retrieval_defense_discipline.md` 管辖
+- **C3 / C4 `生产变更` 旧语料缺口已关闭**：这条曾是早期 local trace 下的真实问题，但当前仓库已存在 `backend/app/storage/seed/domain_ops_faq_seed_v1.md` 与 `ops-faq-003`。在当前云端 `qwen_api` + `ChatService` 全链路实测中，`生产变更` 与 `生产变更需要怎么申请` 均以 `domain_hint=ops` 进入 `hybrid_rerank`，`fallback_reason=None`，最终命中 `ops-faq-003`。因此当前优先级**不是**继续补 ops 语料，也不是再接 retrieval domain filter；这两项在现仓库里都已兑现。
+- **hybrid 路径的 `fusion_score` 常落在小数区间**（A1=0.03、A2=0.05）：这是 RRF / fusion 的正常量纲，属 `2_5 retrieval_defense_discipline.md` 管辖
 
 ### 4.5 本地 Qwen3-1.7B fallback 画像（2026-04-21）
 
@@ -219,8 +219,8 @@ provider 侧关键参数（见 `backend/app/query/providers/qwen_api_provider.py
 
 ## 5. 已知 caveat / 非 planner 问题
 
-- **retrieval_score 在短查询上偏低**（A1 = 0.03）：RRF 归一化 + 短查询 token 少导致的副作用，与 planner 质量无关；`it-faq-012` 命中是语义正确的
-- **retrieval_score 是否需要重新标定** 属 Phase 2 retrieval 层独立议题，`2_5 retrieval_defense_discipline.md` 管辖
+- **hybrid 路径的 raw RRF 分天然偏低**（A1 = 0.03）：它现在在代码与 trace 中显式记为 `fusion_score`，不是置信度；在 `RRF_RANK_CONSTANT = 60` 下，top1 若双榜 rank1 且无 bonus，分值天然约为 `1/61 + 1/61 = 0.032786`，若再叠加单侧 dominance bonus 则约为 `0.052786`。这解释了为什么短 query 与长 query 只要 rank 结构相近，都会落在 `0.03 ~ 0.05` 区间。`retrieval_score` 则保留给 local / lexical 原始检索分。与 planner 质量无关。
+- **`fusion_score` / `retrieval_score` 是否需要分别重新标定** 属 Phase 2 retrieval 层独立议题，`2_5 retrieval_defense_discipline.md` 管辖
 - **`ORIONSTACK_PLANNER_CACHE_ENABLED=false` 场景未验证**：默认 true，若后续要测无缓存行为需显式关闭
 
 ---
@@ -236,7 +236,7 @@ normalized_query:    系统权限
 route_result:        faq_qa_elastic
 router_used:         query_planner_qwen_api
 route_confidence:    无
-retrieval_score:     0.03
+fusion_score:        0.03
 planner_confidence:  0.85
 domain_hint:         it
 fallback_reason:     无
@@ -252,7 +252,7 @@ retrieved_chunks:    it-faq-012
 - ✅ **§5.3 confidence**：`0.85` 对 4 字具体查询合理（LocalRule 长度信号会给低分，关债）
 - ✅ **§5.4 normalization**：4 字输入无标点 / 空白 / 大小写，normalized 一致
 - ✅ **活体 HTTP 路径**：`fallback_reason=无` 确认首次真实 DashScope 调用成功、解析成功、schema 校验通过
-- ⚠️ `retrieval_score=0.03` 低但命中正确，记入 `§5 caveat`，不作 planner 判定
+- ⚠️ `fusion_score=0.03` 低但命中正确；这里暴露的是 raw RRF / fusion score，不是 retrieval confidence，记入 `§5 caveat`，不作 planner 判定
 
 **关债贡献**：本条单独就关掉了 `test_planner_contract.py` 中至少 3 条 xfail（具体对应哪几条待跑完 battery 后系统归并）
 
@@ -265,7 +265,7 @@ normalized_query:    门禁权限怎么申请
 route_result:        faq_qa_elastic
 router_used:         query_planner_qwen_api
 route_confidence:    无
-retrieval_score:     0.05
+fusion_score:        0.05
 planner_confidence:  0.85
 domain_hint:         admin
 fallback_reason:     无
@@ -281,7 +281,7 @@ retrieved_chunks:    admin-faq-003
 - ✅ **§5.3 confidence**：`0.85` 对具体问法合理，≥ 0.80 阈值要求
 - ✅ **§5.4 normalization**：输入全半角 ASCII 兼容 + 无冗余空白，无需变换，一致
 - ✅ **E2E 命中**：`admin-faq-003` 正好是 "门禁权限怎么申请？"，语义完全匹配
-- ⚠️ `retrieval_score=0.05` 仍处 RRF 归一化副作用区间（同 A1），与 planner 质量无关
+- ⚠️ `fusion_score=0.05` 仍处 raw RRF / fusion 的正常量纲区间（同 A1）；它来自 rank 结构而不是 query 长度，与 planner 质量无关
 
 **跨域意义**：A1 + A2 合起来构成 `it × admin` 对称污染对的 planner 层防御证据 —— 过去这对只能靠 `test_phase2_cross_domain.py` 里的 rerank/evidence 兜底（因为 LocalRule `domain_hint=None`），现在 planner 直接分出 `it` / `admin`，`HybridRetriever` 就能按 domain 先过滤，defence-in-depth 升级为 defence-at-entry
 

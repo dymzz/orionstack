@@ -60,6 +60,7 @@ def test_chat_service_returns_ok_for_known_faq_query(tmp_path) -> None:
     assert response.citations[0].snippet
     assert response.debug_info is not None
     assert response.debug_info.retrieval_score is not None
+    assert response.debug_info.fusion_score is None
 
 
 def test_chat_service_prefers_document_chunk_before_faq(tmp_path) -> None:
@@ -354,6 +355,8 @@ def test_chat_route_persists_retrieval_trace_and_replays_by_trace_id(
     assert trace_record["intent"] == "faq_qa"
     assert trace_record["final_status"] == "ok"
     assert "retrieval_mode" in trace_record
+    assert "retrieval_score" in trace_record
+    assert "fusion_score" in trace_record
     assert trace_record["retrieval_mode"] is None
     assert trace_record["lexical_topk"] == []
     assert trace_record["vector_topk"] == []
@@ -413,6 +416,7 @@ def test_chat_route_preserves_clarification_contract(monkeypatch, tmp_path) -> N
                 retrieved_chunks=[],
                 route_confidence=None,
                 retrieval_score=None,
+                fusion_score=0.032258,
                 fallback_reason="conflict_requires_clarification",
                 retrieval_mode="clarification",
                 rerank_accept=True,
@@ -443,6 +447,7 @@ def test_chat_route_preserves_clarification_contract(monkeypatch, tmp_path) -> N
     )
     trace_record = json.loads(trace_lines[0])
     assert trace_record["retrieval_mode"] == "clarification"
+    assert trace_record["fusion_score"] == 0.032258
     assert trace_record["lexical_topk"] == []
     assert trace_record["vector_topk"] == []
     assert trace_record["rrf_topk"] == []
@@ -510,6 +515,7 @@ def test_chat_route_records_hard_case_for_no_evidence_fallback(
                 retrieved_chunks=[],
                 route_confidence=None,
                 retrieval_score=None,
+                fusion_score=0.028,
                 fallback_reason="no_evidence",
                 retrieval_mode="hybrid_rerank",
                 rerank_accept=False,
@@ -539,6 +545,7 @@ def test_chat_route_records_hard_case_for_no_evidence_fallback(
     assert replayed_trace["final_status"] == "fallback"
     assert replayed_trace["fallback_reason"] == "no_evidence"
     assert replayed_trace["retrieval_mode"] == "hybrid_rerank"
+    assert replayed_trace["fusion_score"] == 0.028
     assert replayed_trace["lexical_topk"] == []
     assert replayed_trace["vector_topk"] == []
     assert replayed_trace["rrf_topk"] == []

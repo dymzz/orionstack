@@ -48,6 +48,8 @@ def test_retrieval_trace_persists_and_replays_ok_record(tmp_path) -> None:
     assert trace_record["retrieved_chunks"] == [ask_response.citations[0].citation_id]
     assert trace_record["citations"][0]["source_locator"] == ask_response.citations[0].source_locator
     assert "retrieval_mode" in trace_record
+    assert "retrieval_score" in trace_record
+    assert "fusion_score" in trace_record
     assert "lexical_topk" in trace_record
     assert "vector_topk" in trace_record
     assert "rrf_topk" in trace_record
@@ -90,7 +92,8 @@ def test_retrieval_trace_persists_clarification_contract(monkeypatch, tmp_path) 
                 router_used="query_planner_local",
                 retrieved_chunks=[LEAVE_APPLY["id"], LEAVE_PROGRESS["id"]],
                 route_confidence=None,
-                retrieval_score=0.03,
+                retrieval_score=None,
+                fusion_score=0.032258,
                 fallback_reason="conflict_requires_clarification",
                 retrieval_mode="clarification",
                 lexical_topk=[
@@ -133,6 +136,8 @@ def test_retrieval_trace_persists_clarification_contract(monkeypatch, tmp_path) 
     assert response.clarification is not None
     trace_record = chat_route.get_retrieval_trace(response.trace_id)
     assert trace_record["retrieval_mode"] == "clarification"
+    assert trace_record["retrieval_score"] is None
+    assert trace_record["fusion_score"] == 0.032258
     assert trace_record["fallback_reason"] == "conflict_requires_clarification"
     assert [item["unit_id"] for item in trace_record["lexical_topk"]] == [
         LEAVE_APPLY["id"],
@@ -166,6 +171,7 @@ def test_retrieval_trace_persists_no_evidence_contract(monkeypatch, tmp_path) ->
                 retrieved_chunks=[],
                 route_confidence=None,
                 retrieval_score=None,
+                fusion_score=0.028,
                 fallback_reason="no_evidence",
                 retrieval_mode="hybrid_rerank",
                 lexical_topk=[
@@ -200,6 +206,8 @@ def test_retrieval_trace_persists_no_evidence_contract(monkeypatch, tmp_path) ->
     assert trace_record["final_status"] == "fallback"
     assert trace_record["fallback_reason"] == "no_evidence"
     assert trace_record["retrieval_mode"] == "hybrid_rerank"
+    assert trace_record["retrieval_score"] is None
+    assert trace_record["fusion_score"] == 0.028
     assert [item["unit_id"] for item in trace_record["lexical_topk"]] == [SICK_LEAVE_MATERIALS["id"]]
     assert [item["unit_id"] for item in trace_record["vector_topk"]] == [SICK_LEAVE_MATERIALS["id"]]
     assert [item["unit_id"] for item in trace_record["rrf_topk"]] == [SICK_LEAVE_MATERIALS["id"]]

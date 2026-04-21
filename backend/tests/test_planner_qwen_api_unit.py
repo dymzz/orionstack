@@ -111,6 +111,20 @@ class TestSuccess:
         assert output.planner_confidence == 1.0
         assert isinstance(output.planner_confidence, float)
 
+    def test_lexical_terms_restore_ascii_casing_from_source_query(self) -> None:
+        payload = {
+            "normalized_query": "vpn无法连接怎么办",
+            "domain_hint": "it",
+            "lexical_terms": ["vpn连接", "vpn无法连接", "vpn"],
+            "planner_confidence": 0.94,
+        }
+        provider = _make_provider(_static_handler(_envelope(payload)))
+
+        output = provider.plan("VPN无法连接怎么办")
+
+        assert output.normalized_query == "vpn无法连接怎么办"
+        assert output.lexical_terms == ["VPN连接", "VPN无法连接", "VPN"]
+
     def test_all_five_domains_accepted(self) -> None:
         for domain in ("hr", "finance", "admin", "it", "ops"):
             payload = {**_VALID_PAYLOAD, "domain_hint": domain}

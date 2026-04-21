@@ -37,6 +37,7 @@ class DebugInfo(BaseModel):
     retrieved_chunks: list[str]
     route_confidence: float | None = None
     retrieval_score: float | None = None
+    fusion_score: float | None = None
     fallback_reason: str | None = None
     domain_hint: str | None = None
     lexical_terms: list[str] | None = None

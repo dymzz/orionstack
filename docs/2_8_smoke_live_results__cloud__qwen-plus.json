@@ -1,10 +1,10 @@
 {
+  "backend_tag": "cloud",
   "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
   "api_model": "qwen-plus",
   "total_cases": 19,
   "passed": 19,
   "failed": 0,
-  "_note": "Initial run had 4 failures (A3/B2/C3/C4) all due to overly strict test assertions, not Qwen quality issues. Assertions corrected in-place 2026-04-21 without re-running. See docs/2_8_smoke_results.md §4 for debt closure analysis.",
   "results": {
     "A1": {
       "query": "系统权限",
@@ -44,8 +44,7 @@
         "查看"
       ],
       "planner_confidence": 0.94,
-      "failures": [],
-      "_post_correction_note": "Original failure was a false positive: '请假审批' is covered as a substring of '请假审批进度'. Assertion corrected to substring-coverage semantics."
+      "failures": []
     },
     "A4": {
       "query": "报销流程",
@@ -77,7 +76,6 @@
       "normalized_query": "请假审批进度",
       "domain_hint": "hr",
       "lexical_terms": [
-        "请假审批进度",
         "请假审批",
         "审批进度",
         "请假"
@@ -88,16 +86,15 @@
     "B2": {
       "query": "VPN无法连接怎么办",
       "note": "",
-      "normalized_query": "VPN无法连接怎么办",
+      "normalized_query": "vpn无法连接怎么办",
       "domain_hint": "it",
       "lexical_terms": [
         "VPN连接",
         "VPN无法连接",
-        "网络连接问题"
+        "VPN"
       ],
-      "planner_confidence": 0.94,
-      "failures": [],
-      "_post_correction_note": "Original failure was a false positive: 'VPN' is covered as a substring of 'VPN连接' and 'VPN无法连接'. Assertion corrected to substring-coverage semantics."
+      "planner_confidence": 0.95,
+      "failures": []
     },
     "B3": {
       "query": "邮箱签名怎么修改",
@@ -153,19 +150,18 @@
     },
     "C3": {
       "query": "生产变更",
-      "note": "cross-domain vague — hard_cases negative sample",
+      "note": "ops-domain specific term (production change management). Originally in hard_cases as retrieval negative sample — but the retrieval failure was a corpus gap (no ops FAQ indexed), not a planner ambiguity. Planner correctly narrows to ops.",
       "normalized_query": "生产变更",
       "domain_hint": "ops",
       "lexical_terms": [
         "生产变更"
       ],
       "planner_confidence": 0.85,
-      "failures": [],
-      "_post_correction_note": "Original expectation max_confidence=0.50 was incorrect: '生产变更' is ops-domain specific terminology (production change management), not cross-domain vague. Qwen correctly narrowed to ops with 0.85. The hard_cases negative feedback was a retrieval-layer issue (no ops FAQ indexed), not planner."
+      "failures": []
     },
     "C4": {
       "query": "生产变更需要怎么申请",
-      "note": "hard_cases extended — expanded vague query",
+      "note": "expanded ops query; same rationale as C3",
       "normalized_query": "生产变更需要怎么申请",
       "domain_hint": "ops",
       "lexical_terms": [
@@ -174,8 +170,7 @@
         "生产变更申请"
       ],
       "planner_confidence": 0.85,
-      "failures": [],
-      "_post_correction_note": "Same rationale as C3: 'ops' classification is correct; original max_confidence expectation was based on wrong assumption about cross-domain vagueness."
+      "failures": []
     },
     "C5": {
       "query": "xxyyzz乱码输入asdfq",
@@ -205,8 +200,8 @@
       "normalized_query": "hr faq",
       "domain_hint": "hr",
       "lexical_terms": [
-        "hr",
-        "faq"
+        "HR",
+        "FAQ"
       ],
       "planner_confidence": 0.75,
       "failures": []
@@ -220,7 +215,7 @@
         "上传文档",
         "上传"
       ],
-      "planner_confidence": 0.4,
+      "planner_confidence": 0.55,
       "failures": []
     },
     "E1": {
@@ -234,7 +229,7 @@
         "权限开通",
         "申请"
       ],
-      "planner_confidence": 0.91,
+      "planner_confidence": 0.88,
       "failures": []
     },
     "E3": {

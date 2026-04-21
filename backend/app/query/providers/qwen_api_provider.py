@@ -30,6 +30,7 @@ from app.query.query_planner import PlannerOutput
 
 _DOMAIN_ENUM: frozenset[str] = frozenset({"hr", "finance", "admin", "it", "ops"})
 _LEXICAL_TERMS_MAX: int = 10
+_ASCII_TERM_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
 
 
 _SYSTEM_PROMPT: str = """\
@@ -96,7 +97,7 @@ class QwenApiProvider:
 
     def plan(self, normalized_query: str) -> PlannerOutput:
         envelope = self._call_api(normalized_query)
-        return self._parse_response(envelope)
+        return self._parse_response(envelope, source_query=normalized_query)
 
     # ------------------------------------------------------------------
     # HTTP call
@@ -158,7 +159,9 @@ class QwenApiProvider:
     # Parsing & schema validation
     # ------------------------------------------------------------------
 
-    def _parse_response(self, envelope: dict[str, Any]) -> PlannerOutput:
+    def _parse_response(
+        self, envelope: dict[str, Any], *, source_query: str
+    ) -> PlannerOutput:
         content = self._extract_content(envelope)
         payload = self._parse_content_json(content)
         self._validate_schema(payload)
@@ -167,7 +170,11 @@ class QwenApiProvider:
         # domain_hint may be omitted entirely by the LLM (treated as null per
         # schema); _validate_schema accepts a missing key or explicit null.
         domain_hint = payload.get("domain_hint")
-        lexical_terms = self._dedupe_and_truncate(payload["lexical_terms"])
+        lexical_terms = self._dedupe_and_truncate(
+            self._restore_ascii_casing_from_query(
+                payload["lexical_terms"], source_query=source_query
+            )
+        )
         confidence = float(payload["planner_confidence"])
 
         return PlannerOutput(
@@ -316,3 +323,31 @@ class QwenApiProvider:
             if len(result) >= _LEXICAL_TERMS_MAX:
                 break
         return result
+
+    @staticmethod
+    def _restore_ascii_casing_from_query(
+        terms: list[str], *, source_query: str
+    ) -> list[str]:
+        """Restore ASCII token casing from the user query on lexical_terms.
+
+        `normalized_query` is allowed to lowercase English, but `lexical_terms`
+        feed exact-match keyword queries in Elasticsearch. When the LLM emits a
+        lowercased acronym like `vpn`, we recover the original casing from the
+        query (`VPN`) so keyword boosts still line up with indexed terms.
+        """
+        query_tokens = _ASCII_TERM_RE.findall(source_query)
+        if not query_tokens:
+            return terms
+
+        restored_terms: list[str] = []
+        for term in terms:
+            restored = term
+            for query_token in sorted(query_tokens, key=len, reverse=True):
+                restored = re.sub(
+                    re.escape(query_token),
+                    query_token,
+                    restored,
+                    flags=re.IGNORECASE,
+                )
+            restored_terms.append(restored)
+        return restored_terms

@@ -140,3 +140,5 @@
 {"trace_id": "fa4472c31ed54a70ab635b54a7c3a09e", "raw_query": "如何安装办公软件", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-004"], "created_at": "2026-04-21T11:47:30.937722+00:00"}
 {"trace_id": "8a4a2ba1ced8471897a1eef725612bd8", "raw_query": "系统权限", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-012"], "created_at": "2026-04-21T11:48:10.358546+00:00"}
 {"trace_id": "649e047564b742d995f747561a73266a", "raw_query": "门禁权限怎么申请", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["admin-faq-003"], "created_at": "2026-04-21T11:56:04.249083+00:00"}
+{"trace_id": "f36353b61ed44199910272b1a8653a19", "raw_query": "vpn无法连接'", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-003"], "created_at": "2026-04-21T17:00:28.510949+00:00"}
+{"trace_id": "0ddcd236500548a6938f88cf6b7d3051", "raw_query": "Vpn无法连接", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-003"], "created_at": "2026-04-21T17:00:55.457044+00:00"}

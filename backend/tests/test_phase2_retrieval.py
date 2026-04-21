@@ -1281,7 +1281,8 @@ def test_chat_service_uses_query_planner_outputs_in_elasticsearch_path(
     assert response.debug_info.route_result == "faq_qa_elastic"
     assert response.debug_info.router_used == "query_planner_local"
     assert response.debug_info.retrieved_chunks == [LEAVE_APPLY_ID]
-    assert response.debug_info.retrieval_score == 0.03
+    assert response.debug_info.retrieval_score is None
+    assert response.debug_info.fusion_score == 0.03
     assert response.debug_info.retrieval_mode == "hybrid_rerank"
     assert response.debug_info.lexical_topk is not None
     assert [item.unit_id for item in response.debug_info.lexical_topk] == [
@@ -1369,7 +1370,8 @@ def test_chat_service_prefers_faq_evidence_over_document_chunk_in_hybrid_path(
     assert response.debug_info is not None
     assert response.debug_info.route_result == "faq_qa_elastic"
     assert response.debug_info.retrieved_chunks == [LEAVE_APPLY_ID]
-    assert response.debug_info.retrieval_score == 0.03
+    assert response.debug_info.retrieval_score is None
+    assert response.debug_info.fusion_score == 0.03
     assert response.debug_info.fallback_reason is None
     assert response.debug_info.retrieval_mode == "hybrid_rerank"
     assert response.clarification is None
@@ -1452,6 +1454,8 @@ def test_chat_service_returns_clarification_for_close_faq_candidates_in_hybrid_p
     assert response.debug_info.lexical_terms == _build_local_planner_output("请假").lexical_terms
     assert response.debug_info.planner_confidence == 0.88
     assert response.debug_info.retrieval_mode == "clarification"
+    assert response.debug_info.retrieval_score is None
+    assert response.debug_info.fusion_score == 0.032258
     assert response.debug_info.lexical_topk is not None
     assert [item.unit_id for item in response.debug_info.lexical_topk] == [
         LEAVE_APPLY_ID,
@@ -1950,6 +1954,7 @@ def test_chat_service_returns_fallback_when_hybrid_hits_have_no_evidence(
     assert response.debug_info.route_result == "faq_qa_elastic"
     assert response.debug_info.retrieved_chunks == []
     assert response.debug_info.retrieval_score is None
+    assert response.debug_info.fusion_score == _build_hybrid_no_evidence_hit().score
     assert response.debug_info.fallback_reason == "no_evidence"
     assert response.debug_info.retrieval_mode == "hybrid_rerank"
     assert response.debug_info.lexical_topk is not None
@@ -2399,6 +2404,7 @@ def test_chat_service_prefers_faq_hit_over_document_chunk_in_elasticsearch_path(
     assert response.debug_info.route_result == "faq_qa_elastic"
     assert response.debug_info.retrieved_chunks == [LEAVE_APPLY_ID]
     assert response.debug_info.retrieval_score == 2.0
+    assert response.debug_info.fusion_score is None
     assert response.debug_info.retrieval_mode == "lexical_only"
     assert response.debug_info.lexical_topk is not None
     assert [item.unit_id for item in response.debug_info.lexical_topk] == [
