@@ -1,6 +1,6 @@
 [project]
 name = "orionstack"
-version = "0.2.9"
+version = "0.3.1"
 description = "Minimal FAQ and document QA demo for OrionStack"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -13,6 +13,7 @@ dependencies = [
     "pypdf>=6.1.1",
     "pytest>=9.0.3",
     "python-docx>=1.2.0",
+    "python-dotenv>=1.0.0",
     "python-multipart>=0.0.26",
     "uvicorn>=0.44.0",
 ]

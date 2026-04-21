@@ -1,5 +1,24 @@
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+# Load a `.env` file from the repo root (if present) BEFORE any Settings
+# instance reads `os.environ`. This is how the project supports switching
+# planner providers by uncommenting blocks in `.env` (see `.env.example`).
+#
+# Precedence: real shell environment variables WIN over `.env` entries
+# (override=False). This preserves any value already exported in your shell,
+# so CI/production setups are unaffected. To let `.env` override a shell
+# value, unset the shell variable first.
+try:
+    from dotenv import load_dotenv as _load_dotenv  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - dotenv is a declared dependency
+    _load_dotenv = None
+
+if _load_dotenv is not None:
+    # settings.py → backend/app/config → backend/app → backend → repo root
+    _repo_root = Path(__file__).resolve().parents[3]
+    _load_dotenv(dotenv_path=_repo_root / ".env", override=False)
 
 
 def _resolve_app_mode() -> str:
@@ -97,6 +116,40 @@ class Settings:
     ollama_url: str = field(
         default_factory=lambda: _resolve_str(
             "ORIONSTACK_OLLAMA_URL", "http://localhost:11434"
+        )
+    )
+
+    # Phase 2 round 3.1: LLM planner provider config (inert until round 3.2
+    # introduces QwenApiProvider / LlamaCppProvider; see docs/2_8 §6)
+    qwen_api_base: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_QWEN_API_BASE",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+    )
+    qwen_api_model: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_QWEN_API_MODEL", "qwen-plus"
+        )
+    )
+    local_llm_base_url: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_LOCAL_LLM_BASE_URL", "http://localhost:8080/v1"
+        )
+    )
+    local_llm_model: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_LOCAL_LLM_MODEL", "gemma-3-1b-it"
+        )
+    )
+    planner_timeout_seconds: float = field(
+        default_factory=lambda: _resolve_float(
+            "ORIONSTACK_PLANNER_TIMEOUT_SECONDS", 30.0
+        )
+    )
+    planner_cache_enabled: bool = field(
+        default_factory=lambda: _resolve_bool(
+            "ORIONSTACK_PLANNER_CACHE_ENABLED", default=True
         )
     )
 

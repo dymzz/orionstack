@@ -67,6 +67,73 @@
   - §9.2 具体问法：`test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_path` 补 `调休余额在哪里看？` 作为第 5 个参数（backlog 四类 HR 具体问法全部有直接答案测试）
   - §9.3 上传文档簇不在同域近义这一轮范围内 —— 属于文档上传路由独立线
 - **§9 各轮工作沉淀为可复用方法论**：`docs/2_4_test_strategy.md §12` 新增 "内容层线的审计先行方法论"，覆盖四种缺口分类（cosmetic / real / data-gap / cross-direction）、审计四步骤、扩展 vs 新建判据，以及何时不适用 —— 防止未来接手人面对 backlog 簇时直接机械建测试而产生重复工作
+- **Planner 质量审查文档已落地**：`docs/2_6_planner_quality_review.md` 对 `backend/app/query/query_planner.py` 做了一次完整 gap review，揭示关键事实：**当前 planner 是字符串 n-gram 工具套 planner 外壳**，`domain_hint` 恒为 `None`，Phase 2 为 cross-domain narrow 写的保护层在生产路径从未被激活；文档列出 6 条质量债、影响面矩阵、5 组可测契约、3 条改造路径（local 规则 / LLM / hybrid，不开具体方案）、验证四步法。下一条聚焦线（planner 改造）以此为起点。
+- **Planner 升级计划已锁定**：`docs/2_7_planner_upgrade_plan.md` 锁死决策 —— 插入点=planner 层、执行模式=Hybrid（LocalRule 先，LLM 不自信时升级）、两 provider（`QwenApiProvider` 先 / `LlamaCppProvider` 后，模型 `Qwen3-4B-GGUF`）、纯手动切换、LLM 失败降级到 LocalRule、温度 0 + 缓存保证可重现；明确分三轮：**轮 1 决策锁定（完成）、轮 2 基础设施 + 契约测试先行（完成）、轮 3 LLM provider 接入（按用户指令延后）**
+- **轮 2 已执行**：
+  - `backend/app/query/query_planner.py` 重构为 provider pattern —— 新增 `PlannerProvider` Protocol 与 `LocalRuleProvider`（包装原 stub 逻辑），`QueryPlanner` 变为 thin shell；**外部签名保持一致**（`__init__(provider=..., model=...)` / `router_name` / `plan()`），所有 128 条既有测试全绿零改动
+  - `backend/tests/test_planner_contract.py` 新建，按 `2_6 §5` 五组契约写 13 条测试：4 条绿（真实 token 出现 / lexical 去重 / cross-domain 共享词不 narrow / 输出确定性）+ 9 条 `strict=True` `xfail`（对应 `2_6 §3.1/§3.2/§3.3/§3.4` 每条债），**xfail 数即可测量的 planner 质量债余量**，未来任一 LLM provider 若满足某条契约，strict xfail 会翻红强制移除 marker
+  - 全套：`132 passed, 9 xfailed, 0 failed`
+- **项目重心澄清**（2026-04-21）：**核心验证目标 = LLM 在中文 FAQ 场景下的 planner 能力**，LocalRule 仅作兜底安全网，**不做深化投入**。`2_6 §6` 与 `2_7 §1.2/§1.3/§6` 已同步重写以反映此定位：Path A（纯 local 规则升级）明确拒绝；Hybrid 的正确理解是 "LLM primary + LocalRule fallback"，而非 "rule first, upgrade to LLM"；`test_planner_contract.py` 的 9 条 xfail 是 **LLM 需要关闭的债**，不是 LocalRule 需要关闭的债
+- **轮 3 启动 + 3.1 执行完成**（2026-04-21）：用户批准"按推荐顺序 → Qwen API 先"，`2_7 §2 轮 3` 状态从"延后"切为"执行中"，同时修正模型事实（LlamaCppProvider 目标从 `Qwen/Qwen3-4B-GGUF` 更正为 `ggml-org/gemma-3-1b-it-GGUF`，本地服务为 llama.cpp llama-server 默认 8080 端口）。
+  - 新建 `docs/2_8_planner_llm_integration.md`：把轮 3 拆为 **3.1 基础设施 + prompt 设计 / 3.2 QwenApiProvider 实现 / 3.3 测试 / 3.4 真实 API smoke** 四个子轮，锁定 prompt 文本、few-shot 示例、JSON schema、异常分类（`PlannerTimeoutError` / `PlannerHttpError` / `PlannerParseError` / `PlannerSchemaError`）、降级路径、缓存设计（进程内 `dict`，key 为 `normalized_query`，失败结果也进缓存防雪崩）
+  - `backend/app/config/settings.py` 新增 6 个惰性字段（`qwen_api_base` / `qwen_api_model` / `local_llm_base_url` / `local_llm_model` / `planner_timeout_seconds` / `planner_cache_enabled`），默认值与 `2_8 §6` 规格一致；**不被任何业务代码消费**，仅等待 3.2 QwenApiProvider 上线时使用
+  - `DASHSCOPE_API_KEY` 不入 `settings.py`，走 `os.environ`（`2_7 §1.4` 硬约束）
+  - 验证：`132 passed, 9 xfailed, 0 failed`（零回归）
+- **轮 3.2 已执行**（2026-04-21）：QwenApiProvider 与 fallback/cache 基础设施落地，生产路径默认仍走 LocalRule，API 层零激活、零回归
+  - 新建 `backend/app/query/providers/` 子包：`__init__.py` 统一导出、`errors.py` 定义 4 类专属异常（`PlannerTimeoutError` / `PlannerHttpError` / `PlannerParseError` / `PlannerSchemaError`），共用基类 `PlannerProviderError`
+  - 新建 `backend/app/query/providers/qwen_api_provider.py`：固定 system prompt（2_8 §3.1 的 5 域枚举 + 4 条规则 + 4 个 few-shot）；`httpx` 调用 DashScope OpenAI-compatible `/chat/completions`；温度 0 + `response_format=json_object`；7 步解析流水（HTTP 状态 → body JSON → choices 定位 → content JSON → schema 校验 → 去重截断 → 构造 PlannerOutput）；支持 `http_client` 注入以便测试
+  - 重构 `backend/app/query/query_planner.py` `QueryPlanner`：
+    - 构造期 eager 实例化 primary provider + fallback（`LocalRuleProvider`）
+    - `_create_provider` 新增 `qwen_api` 分支，内部懒导入 `providers` 子包避免与 `query_planner.py` 的循环引用；API key 从 `DASHSCOPE_API_KEY` 或 `QWEN_API_KEY` 环境变量读取，两者皆空时在选 qwen_api 时 `ValueError`（触发点在选 provider 时就失败，不会到 plan 阶段）
+    - `plan()` 实现：cache 命中短路 → primary `plan()` try/except → 捕获任何 `PlannerProviderError` 子类时记录 `last_fallback_reason` 并调 LocalRule fallback → 最终结果（无论来自 LLM 或 fallback）入缓存
+    - 非 `PlannerProviderError` 的异常（如 `ValueError`、`TypeError`）直接向上传播，**不降级**（这些是 bug 而不是 LLM 故障）
+    - 新增 `last_fallback_reason` property，值为异常类名或 `None`
+  - 验证：`132 passed, 9 xfailed, 0 failed`（零回归）；QwenApiProvider 默认未激活（`settings.planner_provider="local"` 仍是默认）
+  - 微修：`QwenApiProvider._parse_response` 改用 `payload.get("domain_hint")` 以匹配 `_validate_schema` 的 `.get()` 语义，避免 LLM 省略 `domain_hint` 字段时抛未分类 `KeyError`（schema 允许 key 缺失等价于 null）
+- **轮 3.3 已执行**（2026-04-21）：74 条新测试全绿，把 QwenApiProvider 解析链路、QueryPlanner fallback 语义、缓存语义全部锁死
+  - `backend/tests/test_planner_qwen_api_unit.py`（35 tests）：
+    - TestSuccess（5）：合法响应解析、`domain_hint` 为 null / 缺 key / 整数 confidence 接受、5 个 domain 枚举全走通
+    - TestHttpErrors（4）：500 / 401 / 429 / ConnectError 全映射到 `PlannerHttpError`
+    - TestTimeout（1）：`httpx.TimeoutException` 映射到 `PlannerTimeoutError`
+    - TestParseErrors（6）：body 非 JSON、envelope 无 choices / 空 choices / choice 无 message、content 非 JSON、content 非 str
+    - TestSchemaErrors（12）：payload 非 object / `normalized_query` 缺失或错类型 / `domain_hint` 非枚举或错类型 / `lexical_terms` 非 list / 含非 str / 含空串 / `planner_confidence` 非数 / 超 [0,1] / bool 被拒
+    - TestNormalization（4）：去重 / strip 空白 / 截断至 10 / 跳过纯空白项
+    - TestConstruction（3）：空 api_key 拒绝、`name="qwen_api"` 稳定、`api_base` 尾斜杠容忍
+  - `backend/tests/test_planner_fallback.py`（13 tests）：
+    - `TestFallbackOnProviderErrors`：4 类专属异常 + 基类 `PlannerProviderError` 各自触发 LocalRule fallback，`last_fallback_reason` 正确记录异常类名
+    - `TestNonProviderErrorsPropagate`：`ValueError` / `TypeError` / `RuntimeError` 向上传播不降级
+    - `TestLastFallbackReasonLifecycle`：fresh planner 为 None、成功调用后为 None、跨调用重置、跨失败类型更新
+    - `TestFallbackOutputIsFromLocalRule`：fallback 输出与直接调 `LocalRuleProvider` 的结果**按值相等**（契约级等价）
+  - `backend/tests/test_planner_cache.py`（9 tests）：
+    - 启用缓存：同查询二次命中缓存（provider call_count 保持 1）、5 次同查询仅 1 次命中 provider、不同查询各自独立、缓存值按值一致
+    - 禁用缓存：每次都击中 provider
+    - **失败结果也进缓存**（防雪崩）：失败后二次调用不重试 primary、20 次同失败查询 primary 仅被调 1 次、不同失败查询各自独立
+    - 缓存隔离：跨 planner 实例不泄漏
+  - `backend/tests/test_planner_qwen_api_contract.py`（17 tests）：
+    - 作为"理想 LLM 响应规格"，给每组 `2_6 §5` 契约提供 mocked 响应样本，证明**解析链路**能把合格 LLM 产出映射为合格 PlannerOutput
+    - TestDomainHintContractMirror（3）：HR 独占 / Admin 独占 / 跨域共享词 null
+    - TestLexicalTermsContractMirror（3）：无字符碎片、上界 10、去重
+    - TestConfidenceContractMirror（3）：具体问法高、泛问中等区间、乱码低于 `route_confidence_threshold`
+    - TestNormalizationContractMirror（3 参数化）：全角标点 / 英文大小写 / 空白压缩
+    - TestDomainEnumCoverage（5 参数化）：5 个 domain 枚举全部 roundtrip
+  - 全套：`206 passed, 9 xfailed, 0 failed`（新增 74 tests 全绿，原 132 passed + 9 xfailed 一字未动）
+- **轮 3.4 启动**（2026-04-21）：用户手动切 `ORIONSTACK_PLANNER_PROVIDER=qwen_api` + 设 `DASHSCOPE_API_KEY`，跑第一条活体 smoke "系统权限"，Qwen 首次真实调用成功（`fallback_reason=无`）
+  - `router_used: query_planner_qwen_api` 确认 provider 切换生效
+  - trace：`normalized_query=系统权限 / domain_hint=it / lexical_terms=["系统权限","权限"] / planner_confidence=0.85 / retrieved_chunks=it-faq-012`
+  - 契约关债判定：`2_6 §5.1 / §5.2 / §5.3` 三条 LocalRule 上的 xfail 债被此条单测命中关闭（`domain_hint` 正确窄化至 `it`、`lexical_terms` 为真实复合词无字符碎片、`confidence` 对 4 字具体查询给到 0.85 而非长度信号的低分）
+  - 新建 `docs/2_8_smoke_results.md`：含 20 条 smoke battery 表（A/B/C/D/E 5 组覆盖 `2_6 §5` 5 组契约）+ A1 已填 + 明细 trace 记录区，作为 3.4 债关情况的证据地；后续每跑一条由用户粘 trace、助手填表
+  - `retrieval_score=0.03` 属 retrieval 层独立议题（短查询 + RRF 归一化副作用），不影响 planner 关债判定（命中 `it-faq-012` 语义正确）
+  - A2 "门禁权限怎么申请" 再一次全绿（4/4 契约），对称污染对 `it × admin` 在 planner 入口就分开 —— 从 rerank/evidence 兜底（defence-in-depth）升级为 planner 直接拒绝（defence-at-entry）
+  - 自动化改造：新建 `backend/tests/test_planner_qwen_api_live.py`，把 20 条 smoke battery 固化为 19 个自动化 live 测试（A5 跳过；E2 = A2 合并；E3 用 `_CallCountingProvider` 包装真实 provider 验证 `2_8 §5.2` 缓存契约）；每条 case 用 `SmokeCase` dataclass 声明期望（domain_hint / min-max confidence / normalized_query / must-contain / must-not-contain），断言失败会打印 Qwen 实际返回的完整 PlannerOutput 供人工复核；module 级 finalizer 把所有结果 dump 成 `docs/2_8_smoke_live_results__{tag}__{model}.json`（含通过率、每条 case 的 Qwen 输出、失败原因），文件名里的 tag/model 由 `ORIONSTACK_QWEN_API_BASE` 和 `ORIONSTACK_QWEN_API_MODEL` 自动派生，云端与本地跑的结果天然落盘到不同文件
+  - 添加 live 测试闸门：`backend/tests/conftest.py` 新增 `pytest_configure` 注册 `live` marker + `pytest_collection_modifyitems` 默认 skip 带 `live` marker 的测试；三种显式方式可 bypass —— `-m live` / 传入文件路径（路径含 `_live` 即豁免）/ 任何 `-m` 表达式含 `live`；默认 `pytest backend/tests/` 仍显示 `206 passed, 19 skipped, 9 xfailed` 零回归
+  - 执行方式：`pytest backend/tests/test_planner_qwen_api_live.py -v`（约 30-60 秒，消耗 ~19 次 DashScope API 调用）；跑完后 `docs/2_8_smoke_live_results__cloud__qwen-plus.json`（或对应本地 backend 的变体）可作为 `2_8_smoke_results.md §4 债关汇总` 的填表依据
+- **轮 3.4.2 本地 fallback 画像**（2026-04-21 晚）：探索 `llama-server` + `Qwen3-1.7B-Q4_K_M` 作为 DashScope 断网时的离线 fallback provider
+  - provider 修：(1) `max_tokens` 256 → 1024，给 reasoning 模型的 `<think>` + JSON 双段预算留头寸（Qwen3-1.7B 实测单次最大耗 537 tokens）；(2) 新增 `_sanitize_content` 防御性剥除 `<think>...</think>` + markdown fence + 未闭合 think 的清晰截断错误（当前 llama-server `--jinja` 已在服务端把 reasoning 分离到 `message.reasoning_content`，本逻辑对老版本 llama.cpp / DeepSeek-R1 / Kimi-K2 类模型仍是必要安全网）；(3) 新建 `scripts/probe_llama_server.py` 诊断工具（dump `content` / `reasoning_content` / `finish_reason` / `usage`），未来探索新本地模型直接用
+  - 本地 live smoke 从 6/19 绿跃升到 **15/19 绿**，新落盘 `docs/2_8_smoke_live_results__local__qwen3-1.7b-q4_k_m.json`
+  - 剩余 4 条失败（B1/B2/B3/D3）经 probe 验证为小模型能力天花板，**非 token / 非温度 / 非 prompt 工程问题**：B1 `请假审批进度`→null（应 hr，过度保守）、B2 `VPN...`→`["vpn",...]`（过度泛化规则 3 小写化）、B3 `邮箱签名...`→hr（应 it，语义边界粗）、D3 `如何上传文档？`→原样保留全角问号（单轮规范化不稳定，D1 同类规则正确）
+  - 选型结论（见 `docs/2_8_smoke_results.md §4.5`）：**Primary 仍是云 qwen-plus（9/9 契约绿）**；本地 Qwen3-1.7B 作为离线 fallback 画像入档，单 case 通过率 79%、契约组粒度 3/5 全绿、B1/B2/B3/D3 4 条已知小模型偏差；若将来要把本地质量拉回云级，换 Qwen3-4B / 8B-Instruct（本次未换模型）
+  - `pyproject.toml` 加 `python-dotenv>=1.0.0`，`backend/app/config/settings.py` 顶部 `load_dotenv(override=False)`（shell env 优先，`.env` 为备胎）；`.env.example` 重组为 A/B/C 三块可注释切换（DashScope 云 / 本地 llama-server / 纯规则 LocalRule）
+  - 单测新增 8 条覆盖 reasoning 模型 sanitize 路径（闭合 think / 多 think / 大小写 / markdown fence / think+fence 组合 / 未闭合 think 截断）；full suite `214 passed, 19 skipped, 9 xfailed`，零回归
 - `backend/app/query/query_planner.py` 已落地第一轮本地确定性 planner
 - `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
 - `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链

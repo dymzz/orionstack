@@ -107,6 +107,39 @@ def primary_seed_fixture_path() -> Path:
     return seed_fixture_paths()[0]
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    # Opt-in marker for tests that hit real external services (Qwen API, etc.).
+    # Default pytest runs skip these; to run them pass `-m live` or the explicit
+    # test file path (file-path mode bypasses the default skip).
+    config.addinivalue_line(
+        "markers",
+        "live: opt-in live-API smoke test; requires network + API key",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    # If the user explicitly asked for `-m live` (or a superset), respect it.
+    markexpr = getattr(config.option, "markexpr", "") or ""
+    if "live" in markexpr:
+        return
+
+    # If the user passed a path that explicitly targets a live test file, honor
+    # that too — running `pytest backend/tests/test_planner_qwen_api_live.py`
+    # should NOT be silently skipped.
+    explicit_args = [str(arg) for arg in config.args]
+    if any("_live" in arg for arg in explicit_args):
+        return
+
+    skip_live = pytest.mark.skip(
+        reason="live test skipped by default — pass `-m live` or the file path to run"
+    )
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
+
+
 @pytest.fixture
 def tmp_path(request: pytest.FixtureRequest) -> Path:
     name = "".join(
