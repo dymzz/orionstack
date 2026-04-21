@@ -28,7 +28,7 @@ from app.query.providers.errors import (
 from app.query.query_planner import PlannerOutput
 
 
-_DOMAIN_ENUM: frozenset[str] = frozenset({"hr", "finance", "admin", "it", "ops"})
+_DOMAIN_ENUM: frozenset[str] = frozenset({"hr", "finance", "admin", "it", "ops", "legal", "product", "sales"})
 _LEXICAL_TERMS_MAX: int = 10
 _ASCII_TERM_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
 
@@ -42,6 +42,9 @@ _SYSTEM_PROMPT: str = """\
 - admin: 行政、门禁、办公用品、会议室、差旅预订
 - it: 技术支持、账号、系统登录、权限、设备
 - ops: 运营、生产变更、值班、事件处理
+- legal: 法务、合同审批、印章、合规、保密协议
+- product: 产品、需求、版本、缺陷、发布
+- sales: 销售、报价、客户、商机、合同模板
 
 输出要求（严格 JSON，不要任何前后缀文字）：
 {

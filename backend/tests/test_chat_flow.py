@@ -353,6 +353,7 @@ def test_chat_route_persists_retrieval_trace_and_replays_by_trace_id(
     assert trace_record["raw_query"] == "如何上传文档？"
     assert trace_record["normalized_query"] == "如何上传文档？"
     assert trace_record["intent"] == "faq_qa"
+    assert trace_record["router_used"] == ask_response.debug_info.router_used
     assert trace_record["final_status"] == "ok"
     assert "retrieval_mode" in trace_record
     assert "retrieval_score" in trace_record
@@ -446,6 +447,7 @@ def test_chat_route_preserves_clarification_contract(monkeypatch, tmp_path) -> N
         (tmp_path / "retrieval_traces.jsonl").read_text(encoding="utf-8").splitlines()
     )
     trace_record = json.loads(trace_lines[0])
+    assert trace_record["router_used"] == "query_planner_local"
     assert trace_record["retrieval_mode"] == "clarification"
     assert trace_record["fusion_score"] == 0.032258
     assert trace_record["lexical_topk"] == []
@@ -543,6 +545,7 @@ def test_chat_route_records_hard_case_for_no_evidence_fallback(
 
     replayed_trace = chat_route.get_retrieval_trace(response.trace_id)
     assert replayed_trace["final_status"] == "fallback"
+    assert replayed_trace["router_used"] == "query_planner_local"
     assert replayed_trace["fallback_reason"] == "no_evidence"
     assert replayed_trace["retrieval_mode"] == "hybrid_rerank"
     assert replayed_trace["fusion_score"] == 0.028

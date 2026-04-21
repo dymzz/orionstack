@@ -30,7 +30,7 @@ import pytest
 from app.query.providers import QwenApiProvider
 
 
-_DOMAIN_ENUM = ("hr", "finance", "admin", "it", "ops")
+_DOMAIN_ENUM = ("hr", "finance", "admin", "it", "ops", "legal", "product", "sales")
 
 
 def _make_provider_returning(payload: dict) -> QwenApiProvider:
@@ -206,13 +206,13 @@ class TestNormalizationContractMirror:
 
 
 # ---------------------------------------------------------------------------
-# Schema enum coverage — parser accepts all 5 domain values
+# Schema enum coverage — parser accepts all domain values
 # ---------------------------------------------------------------------------
 
 
 class TestDomainEnumCoverage:
     @pytest.mark.parametrize("domain", _DOMAIN_ENUM)
-    def test_all_five_domains_roundtrip(self, domain: str) -> None:
+    def test_all_domains_roundtrip(self, domain: str) -> None:
         ideal = {
             "normalized_query": "x",
             "domain_hint": domain,

@@ -44,6 +44,7 @@ def test_retrieval_trace_persists_and_replays_ok_record(tmp_path) -> None:
     assert trace_record["raw_query"] == "如何上传文档？"
     assert trace_record["normalized_query"] == "如何上传文档？"
     assert trace_record["intent"] == "faq_qa"
+    assert trace_record["router_used"] == ask_response.debug_info.router_used
     assert trace_record["final_status"] == "ok"
     assert trace_record["retrieved_chunks"] == [ask_response.citations[0].citation_id]
     assert trace_record["citations"][0]["source_locator"] == ask_response.citations[0].source_locator
@@ -135,6 +136,7 @@ def test_retrieval_trace_persists_clarification_contract(monkeypatch, tmp_path) 
     assert response.response_status == "ok"
     assert response.clarification is not None
     trace_record = chat_route.get_retrieval_trace(response.trace_id)
+    assert trace_record["router_used"] == "query_planner_local"
     assert trace_record["retrieval_mode"] == "clarification"
     assert trace_record["retrieval_score"] is None
     assert trace_record["fusion_score"] == 0.032258
@@ -204,6 +206,7 @@ def test_retrieval_trace_persists_no_evidence_contract(monkeypatch, tmp_path) ->
     assert response.response_status == "fallback"
     trace_record = chat_route.get_retrieval_trace(response.trace_id)
     assert trace_record["final_status"] == "fallback"
+    assert trace_record["router_used"] == "query_planner_local"
     assert trace_record["fallback_reason"] == "no_evidence"
     assert trace_record["retrieval_mode"] == "hybrid_rerank"
     assert trace_record["retrieval_score"] is None

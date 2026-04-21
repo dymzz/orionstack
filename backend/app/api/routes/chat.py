@@ -170,6 +170,7 @@ def _build_retrieval_trace_record(
         if debug_info is None
         else debug_info.normalized_query,
         "intent": None if debug_info is None else debug_info.route_result,
+        "router_used": None if debug_info is None else debug_info.router_used,
         "retrieval_score": None
         if debug_info is None
         else getattr(debug_info, "retrieval_score", None),
@@ -265,6 +266,7 @@ def _build_hard_case_item(
         "trace_id": retrieval_trace.get("trace_id", ""),
         "raw_query": retrieval_trace.get("raw_query", ""),
         "normalized_query": retrieval_trace.get("normalized_query", ""),
+        "router_used": retrieval_trace.get("router_used"),
         "domain_hint": retrieval_trace.get("domain_hint"),
         "fallback_reason": retrieval_trace.get("fallback_reason"),
         "top_candidates": retrieval_trace.get("citations", []),

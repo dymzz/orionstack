@@ -62,6 +62,7 @@ def test_hard_case_is_created_from_negative_feedback(tmp_path) -> None:
     assert hard_case["trace_id"] == ask_response.trace_id
     assert hard_case["raw_query"] == "如何上传文档？"
     assert hard_case["normalized_query"] == "如何上传文档？"
+    assert hard_case["router_used"] == ask_response.debug_info.router_used
     assert hard_case["user_feedback"] == "down"
     assert hard_case["fallback_reason"] is None
     assert hard_case["top_candidates"][0]["citation_id"] == ask_response.citations[0].citation_id
@@ -114,6 +115,7 @@ def test_hard_case_is_created_from_no_evidence_response(monkeypatch, tmp_path) -
     assert hard_case["trace_id"] == response.trace_id
     assert hard_case["raw_query"] == "病假材料"
     assert hard_case["normalized_query"] == "病假材料"
+    assert hard_case["router_used"] == "query_planner_local"
     assert hard_case["fallback_reason"] == "no_evidence"
     assert hard_case["top_candidates"] == []
     assert hard_case["evidence_spans"] == []
@@ -192,6 +194,7 @@ def test_hard_case_feedback_upserts_existing_no_evidence_case(
     hard_case = hard_cases[0]
     assert hard_case["trace_id"] == ask_response.trace_id
     assert hard_case["raw_query"] == "请假进度怎么看"
+    assert hard_case["router_used"] == "query_planner_local"
     assert hard_case["fallback_reason"] == "no_evidence"
     assert hard_case["user_feedback"] == "down"
     assert hard_case["normalized_query"] == "请假进度怎么看"

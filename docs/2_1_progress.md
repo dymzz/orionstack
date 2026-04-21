@@ -141,6 +141,12 @@
 - `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
 - `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链
 - `backend/app/observability/retrieval_trace.py` 与 `backend/app/testing/hard_cases_repo.py` 已落地第一轮最小排查链路
+- `docs/2_9_next_line_decision.md` 已锁定 `2_8` 收口后的推进方式：**开新线，不开新阶段**。理由是当前仍在 Phase 2 目标链内做真实坏例审计与剩余事项收口，没有发生阶段级目标切换；推荐下一条线为 **云端主链真实坏例审计与闭环**，`按需 API fallback` 排第二优先级
+- `docs/2_10_cloud_bad_case_audit_kickoff.md` 已记录新线启动时的第一手现状与首个结论：现有 `hard_cases` 以历史样本为主，`retrieval_trace` 若不持久化 `router_used` 就无法可靠切出 cloud `qwen_api` 主链，因此新线第一子任务先补观测而不是先调 retrieval；当前 `router_used` 已进 trace 与 hard case
+- `2_10` 第一轮云端样本审计（12 条：旧 hard case + 高风险泛问法）已完成：`query_planner_qwen_api` 样本 `12/12 ok`，其中 7 条稳定直答、5 条进入预期 clarification，**尚未筛出需要立即修复的 cloud 主链 blocker**。当前结论不是“再调 retrieval 常量”，而是“继续积累更自然的 cloud 坏例，再做分层归因”
+- 为 `2_10` 下一轮补了最小工具位：`scripts/audit-cloud-bad-cases.py`。后续可以直接按 `router_used=query_planner_qwen_api` 汇总 trace / hard case 分布和候选坏例，不再靠人工逐条翻 `jsonl`
+- 又补了必要样本生成器：`scripts/generate-cloud-audit-samples.py`。首轮 seeded audit 共 28 条 cloud `qwen_api` 样本，`28/28 ok`、`11` 条进入 clarification、`0` 条进入 hard case / candidate bad trace；目前仍未筛出 blocker，但沉淀了两条 clarification watchlist：`报销单据怎么提交` 与 `什么叫HR`
+- `docs/2_11_clarification_boundary_audit.md` 已完成 clarification 通用边界第一轮审计：当前规则只看“两个 accepted FAQ 候选 + rerank score gap <= 0.15”，不直接看 `planner_confidence` / query specificity；结论是**当前没有足够证据支持立即改 clarification 通用规则**。`报销单据怎么提交` 与 `什么叫HR` / `HR是什么` 仅作为 watchlist 继续观察，先不改代码
 - Phase 2 已补齐第一轮最小单测保护：
   - `backend/tests/test_phase2_settings.py`
   - `backend/tests/test_phase2_knowledge_unit.py`
@@ -848,8 +854,94 @@ normalize
 
 ---
 
-## 10. 一句话收口
+## 10. Phase 2 正式关闭（2026-04-22）
 
-这份文件级最小改造清单 v1 的核心不是“把所有第二阶段能力一次性写完”，而是：
+### 10.1 关闭条件逐条核验
+
+| # | 验收条件 | 状态 |
+|---|---|---|
+| 1 | FAQ 与 document chunk 已能映射成统一 Knowledge Unit | **已满足** — `knowledge_unit_repo.py` 落地 |
+| 2 | Elastic lexical-only 可独立跑通 | **已满足** — `lexical_retriever.py` + `elastic_indexer.py` + IK 中文分词 |
+| 3 | 请假、病假材料、请假进度在灰度链路中不退化为 document_chunk 残片 | **已满足** — 8 域 84 条样本全验证 |
+| 4 | Retrieval Trace 可落盘 | **已满足** — `retrieval_trace.py` + `hard_cases_repo.py` |
+| 5 | 旧链路仍可通过配置回退 | **已满足** — 三档开关（全开 / 软回退 / 硬回退） |
+| 6 | phase2 新增文件职责清晰 | **已满足** — `2_2_file_responsibilities.md` 收口 |
+
+### 10.2 全链路落地清单
+
+| 能力 | 核心文件 | 状态 |
+|---|---|---|
+| 统一 Knowledge Unit | `knowledge_unit_repo.py` | 已落地 |
+| Elastic lexical 检索 | `lexical_retriever.py` + `elastic_indexer.py` | 已落地 |
+| Hybrid Retrieval（lexical + vector + RRF） | `hybrid_retriever.py` + `vector_retriever.py` | 已落地 |
+| Rerank + Evidence | `reranker.py` + `evidence_extractor.py` | 已落地 |
+| Clarification | `chat_service.py::_build_clarification_response()` | 已落地 |
+| Query Planner（LocalRule + QwenApi） | `query_planner.py` + `providers/qwen_api_provider.py` | 已落地 |
+| Trace / Hard Cases | `retrieval_trace.py` + `hard_cases_repo.py` | 已落地 |
+| 缓存 | 进程内 dict，按 `normalized_query` 缓存 | 已落地 |
+| 按需 API fallback | — | **显式延后**，不纳入 Phase 2 范围 |
+
+### 10.3 八域 FAQ 种子语料落地
+
+第一阶段知识库语料从 5 域 60 条扩展至 **8 域 96 条**（每域 12 条 FAQ）。
+
+| 域 | 种子文件 | FAQ 数 | 覆盖话题 |
+|---|---|---|---|
+| HR | `domain_hr_faq_seed_v1.md` | 12 | 年假/病假/考勤/入职/离职/在职证明/社保/工资条/福利/调休/试用期 |
+| IT | `domain_it_faq_seed_v1.md` | 12 | 密码/账号锁/VPN/办公软件/新电脑/报修/Wi-Fi/共享盘/邮箱/验证码/打印机/系统权限 |
+| Admin | `domain_admin_faq_seed_v1.md` | 12 | 会议室/访客/门禁/办公用品/工位/工牌/快递/停车位/报修/名片/前台/搬迁 |
+| Finance | `domain_finance_faq_seed_v1.md` | 12 | 报销/票据/差旅/付款进度/借款/发票抬头/退回处理/预算/工资条/个税/对公/备用金 |
+| Ops | `domain_ops_faq_seed_v1.md` | 12 | 告警/值班/生产变更/发布窗口/环境异常/工单/日志/服务状态/回滚/资源申请/备份/事故复盘 |
+| Legal | `domain_legal_faq_seed_v1.md` | 12 | 合同送审/用章/NDA/法务咨询/必须审批范围/审批周期/合规上报/印章遗失/保密协议续签/外部律师/知识产权/数据合规 |
+| Product | `domain_product_faq_seed_v1.md` | 12 | 需求提交/版本计划/功能反馈/功能定位/缺陷/需求评审/上线验收/发布说明/优先级/术语表/模块负责人/版本回滚 |
+| Sales | `domain_sales_faq_seed_v1.md` | 12 | 报价/合同审批/演示资料/商机/客户支持/CRM/报价流程/资料目录/拜访记录/合同模板/联系人清单/价格口径 |
+
+Planner 的 `_DOMAIN_ENUM` 与 `_SYSTEM_PROMPT` 已同步扩展至 8 域。
+
+### 10.4 云端主链审计样本
+
+审计样本从 28 条扩展至 **84 条**，覆盖 8 域多话题。
+
+| 域 | 样本数 | 话题覆盖 |
+|---|---|---|
+| HR | 15 | 病假/请假进度/考勤/入职/在职证明/调休 + 泛问法 clarification + boundary |
+| IT | 12 | 系统权限/VPN/办公软件/密码/账号/共享盘/验证码/打印机 + Wi-Fi boundary |
+| Admin | 7 | 门禁/会议室/访客/办公用品/工牌/停车位/设备报修 |
+| Finance | 8 | 报销/工资条/借款/发票/备用金 + 报销 clarification |
+| Ops | 7 | 生产变更/值班/告警/工单/备份恢复/事故复盘 |
+| Legal | 7 | 合同送审/用章/NDA/法务咨询/印章遗失/保密协议 + 合同 clarification |
+| Product | 7 | 需求/版本计划/缺陷/发布说明/回滚/术语表 + 需求 clarification |
+| Sales | 7 | 报价/演示资料/商机/CRM/合同模板/价格口径 + 报价 clarification |
+| 跨域 | 4 | 账号/密码/通用提交/文档上传 |
+
+执行结果：**84/84 ok，0 bad case，0 blocker**。
+
+### 10.5 测试基线
+
+- **218 passed, 19 skipped (live), 9 xfailed**（planner 质量债）
+- Cloud live smoke（qwen-plus）：**19/19 全绿**
+- Local fallback（Qwen3-1.7B）：15/19（4 条已知小模型天花板）
+- 跨域污染对称测试：HR×Finance / Admin×IT / Finance×Ops / HR×IT 全部双向通过
+- 同域近义查询簇：泛问法 6 条 + 具体问法 5 条全部锁死
+
+### 10.6 关闭结论
+
+Phase 2 目标链路已完整落地并通过验证：
+
+- planner → fast track → hybrid → rerank → evidence → clarification → trace
+- 8 域 96 条 FAQ 种子语料入库
+- 8 域 84 条审计样本全绿
+- 三档开关可回退
+- 唯一显式延后项：按需 API fallback
+
+**Phase 2 自本日起正式关闭。后续工作应作为新阶段或新线启动，不再在 Phase 2 框架内追加。**
+
+---
+
+## 11. 一句话收口
+
+这份文件级最小改造清单 v1 的核心不是"把所有第二阶段能力一次性写完"，而是：
 
 **把第二阶段系统设计拆成当前仓库里最小、可回退、可灰度、可执行的文件级落地范围。**
+
+Phase 2 已完成这一目标，正式关闭。
