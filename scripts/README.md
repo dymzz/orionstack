@@ -18,7 +18,7 @@ python scripts/<script_name>.py
 - 已安装 `npm`
 - 已安装 `git`
 - 建议在仓库根目录下准备 `.venv`
-- 抽取管线脚本需要 `DASHSCOPE_API_KEY` 环境变量（DashScope API Key）
+- 抽取管线脚本需要配置抽取 provider；当前配置优先读取 `ORIONSTACK_EXTRACTION_*`，旧的 `ORIONSTACK_QWEN_*` / `DASHSCOPE_API_KEY` 仍保留兼容
 
 ---
 
@@ -75,7 +75,7 @@ python scripts/start-backend.py --app-mode prod --workers 2
 
 #### `seed_action_links.py`
 
-种子 ActionLink 数据 — 为 Odoo 模块生成 7 条 action link（请假、考勤、员工管理、报销、发票、CRM、项目）。
+种子 ActionLink 数据 — 为当前 Odoo 示例模块生成 7 条 action link（请假、考勤、员工管理、报销、发票、CRM、项目）。
 
 ```bash
 python -m scripts.seed_action_links
@@ -111,7 +111,7 @@ python -m scripts.seed_test_source_record
 
 **核心脚本。** 可复用的文档 → 知识候选全自动管线。
 
-从任意文本文档（.txt / .md）出发，调用 Qwen API (qwen-plus) 抽取 FAQ / ActionLink / DynamicQuery 候选，审核后发布为可检索的知识单元。
+从任意文本文档（.txt / .md）出发，调用当前配置的抽取 provider 抽取 FAQ / ActionLink / DynamicQuery 候选，审核后发布为可检索的知识单元。当前仓库默认示例使用 DashScope `qwen-plus`。
 
 **完整管线流程：**
 
@@ -119,7 +119,7 @@ python -m scripts.seed_test_source_record
 任意文档 (.txt / .md)
        ↓ pipeline_cli import
   SourceRecord (raw_content)
-       ↓ pipeline_cli extract → Qwen API (qwen-plus)
+       ↓ pipeline_cli extract → 当前配置的抽取 provider
   ExtractionCandidate (pending)
        ↓ pipeline_cli review --approve
   ┌──────────────┬───────────────┬─────────────────┐
@@ -203,9 +203,14 @@ python -m scripts.pipeline_cli list --status approved
 
 | 变量 | 说明 |
 |---|---|
-| `DASHSCOPE_API_KEY` | DashScope API Key（必需），在 https://dashscope.aliyun.com 获取 |
-| `ORIONSTACK_QWEN_API_BASE` | API 地址，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `ORIONSTACK_QWEN_API_MODEL` | 模型名，默认 `qwen-plus` |
+| `ORIONSTACK_EXTRACTION_PROVIDER` | 当前抽取 provider 名称，默认 `openai_compatible` |
+| `ORIONSTACK_EXTRACTION_API_KEY` | 当前抽取 provider API Key 变量名（优先读取） |
+| `ORIONSTACK_EXTRACTION_API_BASE` | 当前抽取 provider 的 OpenAI-compatible API 地址 |
+| `ORIONSTACK_EXTRACTION_API_MODEL` | 当前抽取 provider 模型名 |
+| `ORIONSTACK_QWEN_API_KEY` | 兼容旧配置时的回退 API Key 变量名 |
+| `DASHSCOPE_API_KEY` | DashScope API Key（当前默认示例可回退读取），在 https://dashscope.aliyun.com 获取 |
+| `ORIONSTACK_QWEN_API_BASE` | 兼容旧配置时的回退 API 地址 |
+| `ORIONSTACK_QWEN_API_MODEL` | 兼容旧配置时的回退模型名 |
 
 **E2E 验证记录：**
 
@@ -294,12 +299,19 @@ python scripts/git-release.py --version 0.2.0 --skip-push
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `DASHSCOPE_API_KEY` | — | DashScope API Key（抽取管线必需） |
+| `ORIONSTACK_EXTRACTION_PROVIDER` | `openai_compatible` | 抽取 provider 名称；当前内置 `openai_compatible` / `qwen_api` / `llama_cpp` |
+| `ORIONSTACK_EXTRACTION_API_KEY` | — | 抽取 provider API Key（优先读取） |
+| `ORIONSTACK_EXTRACTION_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 抽取 provider OpenAI-compatible API 地址 |
+| `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 抽取 provider 模型名 |
+| `ORIONSTACK_QWEN_API_KEY` | — | 兼容旧配置时的回退 API Key |
+| `DASHSCOPE_API_KEY` | — | DashScope API Key（当前默认示例可回退读取） |
+| `ORIONSTACK_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 兼容旧配置时的回退 API 地址 |
+| `ORIONSTACK_QWEN_API_MODEL` | `qwen-plus` | 兼容旧配置时的回退模型名 |
 | `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | `odoo` | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | `2` | Odoo 用户 ID |
-| `ORIONSTACK_ODOO_PASSWORD` | `qq3938332` | Odoo 用户密码 |
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 适配器选择：`odoo` / `mock` |
+| `ORIONSTACK_ODOO_PASSWORD` | — | Odoo 用户密码，通过环境变量注入 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 当前实现适配器选择：`odoo` / `mock` |
 
 ---
 

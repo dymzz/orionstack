@@ -11,8 +11,8 @@ Verifies that:
 
 Tests inject fake providers via monkey-patching ``QueryPlanner._impl`` after
 construction. This is intentional: QueryPlanner's public constructor only
-accepts registered provider names ("local" / "qwen_api"); the _impl slot is
-the documented test hook.
+accepts registered provider names (for example ``local`` /
+``openai_compatible``); the _impl slot is the documented test hook.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class TestFallbackOnProviderErrors:
     )
     def test_provider_error_triggers_local_fallback(self, exc_class) -> None:
         planner = _fresh_planner()
-        planner._impl = _RaisingProvider(name="qwen_api", exc=exc_class("boom"))  # type: ignore[attr-defined]
+        planner._impl = _RaisingProvider(name="openai_compatible", exc=exc_class("boom"))  # type: ignore[attr-defined]
 
         output = planner.plan("请假审批")
 
@@ -98,7 +98,7 @@ class TestFallbackOnProviderErrors:
     def test_base_class_also_triggers_fallback(self) -> None:
         planner = _fresh_planner()
         planner._impl = _RaisingProvider(  # type: ignore[attr-defined]
-            name="qwen_api", exc=PlannerProviderError("generic")
+            name="openai_compatible", exc=PlannerProviderError("generic")
         )
 
         output = planner.plan("请假审批")
@@ -114,21 +114,21 @@ class TestFallbackOnProviderErrors:
 class TestNonProviderErrorsPropagate:
     def test_value_error_propagates(self) -> None:
         planner = _fresh_planner()
-        planner._impl = _RaisingProvider(name="qwen_api", exc=ValueError("bug"))  # type: ignore[attr-defined]
+        planner._impl = _RaisingProvider(name="openai_compatible", exc=ValueError("bug"))  # type: ignore[attr-defined]
 
         with pytest.raises(ValueError, match="bug"):
             planner.plan("query")
 
     def test_type_error_propagates(self) -> None:
         planner = _fresh_planner()
-        planner._impl = _RaisingProvider(name="qwen_api", exc=TypeError("oops"))  # type: ignore[attr-defined]
+        planner._impl = _RaisingProvider(name="openai_compatible", exc=TypeError("oops"))  # type: ignore[attr-defined]
 
         with pytest.raises(TypeError, match="oops"):
             planner.plan("query")
 
     def test_runtime_error_propagates(self) -> None:
         planner = _fresh_planner()
-        planner._impl = _RaisingProvider(name="qwen_api", exc=RuntimeError("x"))  # type: ignore[attr-defined]
+        planner._impl = _RaisingProvider(name="openai_compatible", exc=RuntimeError("x"))  # type: ignore[attr-defined]
 
         with pytest.raises(RuntimeError):
             planner.plan("query")
@@ -152,7 +152,7 @@ class TestLastFallbackReasonLifecycle:
             lexical_terms=["x"],
             planner_confidence=0.9,
         )
-        planner._impl = _SuccessProvider(name="qwen_api", output=canned)  # type: ignore[attr-defined]
+        planner._impl = _SuccessProvider(name="openai_compatible", output=canned)  # type: ignore[attr-defined]
 
         planner.plan("x")
         assert planner.last_fallback_reason is None
@@ -168,13 +168,13 @@ class TestLastFallbackReasonLifecycle:
 
         # First call: fallback triggered
         planner._impl = _RaisingProvider(  # type: ignore[attr-defined]
-            name="qwen_api", exc=PlannerTimeoutError("first")
+            name="openai_compatible", exc=PlannerTimeoutError("first")
         )
         planner.plan("first query")
         assert planner.last_fallback_reason == "PlannerTimeoutError"
 
         # Swap to success and call again — reason must reset
-        planner._impl = _SuccessProvider(name="qwen_api", output=canned)  # type: ignore[attr-defined]
+        planner._impl = _SuccessProvider(name="openai_compatible", output=canned)  # type: ignore[attr-defined]
         planner.plan("second query")
         assert planner.last_fallback_reason is None
 
@@ -183,14 +183,14 @@ class TestLastFallbackReasonLifecycle:
 
         # First: timeout
         planner._impl = _RaisingProvider(  # type: ignore[attr-defined]
-            name="qwen_api", exc=PlannerTimeoutError("t")
+            name="openai_compatible", exc=PlannerTimeoutError("t")
         )
         planner.plan("q1")
         assert planner.last_fallback_reason == "PlannerTimeoutError"
 
         # Second: http error — reason updates to new class name
         planner._impl = _RaisingProvider(  # type: ignore[attr-defined]
-            name="qwen_api", exc=PlannerHttpError("h")
+            name="openai_compatible", exc=PlannerHttpError("h")
         )
         planner.plan("q2")
         assert planner.last_fallback_reason == "PlannerHttpError"
@@ -211,7 +211,7 @@ class TestFallbackOutputIsFromLocalRule:
         # Planner with a failing provider → falls back to LocalRule
         planner = _fresh_planner()
         planner._impl = _RaisingProvider(  # type: ignore[attr-defined]
-            name="qwen_api", exc=PlannerHttpError("down")
+            name="openai_compatible", exc=PlannerHttpError("down")
         )
         fallback_output = planner.plan(query)
 

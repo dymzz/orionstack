@@ -1,6 +1,6 @@
 # OrionStack 第三阶段系统设计：SaaS 知识副本层 v1
 
-> 状态：**阶段设计基线（待按迭代实现）**
+> 状态：**阶段设计基线**
 > 目标方向：**在不直连原 SaaS API 的前提下，把导出数据变成带版本、带权限、带新鲜度、带追溯的知识副本层**
 > 使用场景：**多来源 SaaS 数据接入智能 FAQ 产品**
 > 与 `1_system_design.md` / `2_system_design.md` 的关系：
@@ -64,6 +64,9 @@
   - Rerank / Evidence
   - Clarification
   - Hard Cases / Trace
+- LLM 提取与外部系统接入都应走可替换接口
+  - 当前仓库默认示例：DashScope `qwen-plus` + `OdooAdapter`
+  - 架构目标：provider / adapter 可替换，不把单一厂商或单一系统写死为边界
 
 ### 2.2 核心定位
 
@@ -572,7 +575,7 @@ SystemAdapter (Protocol)            ← 抽象接口
   .fetch(resource_type, params)     ← 统一查询入口
       -> list[dict[str, Any]]       ← 标准化行数据
   │
-  ├── OdooAdapter                   ← Odoo XML-RPC 实现
+  ├── OdooAdapter                   ← 当前已实现的 Odoo XML-RPC 适配器
   │     model_fields_map 可配置     ← resource_type → (model, fields) 映射
   │
   ├── MockAdapter                   ← 测试用，fixtures 可注入
@@ -586,11 +589,11 @@ SystemAdapter (Protocol)            ← 抽象接口
 
 | 环境变量 | 可选值 | 说明 |
 |---|---|---|
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo`（默认）/ `mock` / 自定义 | 选择适配器实现 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo`（当前默认实现）/ `mock` / 自定义 | 选择适配器实现 |
 | `ORIONSTACK_ODOO_URL` | URL | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | string | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | int | Odoo 用户 ID |
-| `ORIONSTACK_ODOO_PASSWORD` | string | Odoo 用户密码 |
+| `ORIONSTACK_ODOO_PASSWORD` | string | Odoo 用户密码，需通过环境变量注入 |
 
 #### 如何新增适配器
 
@@ -635,7 +638,7 @@ _MODEL_FIELDS_MAP: dict[str, tuple[str, list[str]]] = {
 任意文档 (.txt / .md)
        ↓ pipeline_cli import
   SourceRecord (raw_content)
-       ↓ ExtractionService → Qwen API (qwen-plus)
+       ↓ ExtractionService → 当前配置的抽取 provider
   LLM 返回 JSON 候选
        ↓ parse_extraction_response()
   ExtractionCandidate (pending)
@@ -750,7 +753,7 @@ curl http://localhost:8000/api/extraction/candidates?status=pending
 ### 第四步：抽取候选自动化（已完成）
 
 - `pipeline_cli import` 导入任意文档为 SourceRecord
-- `ExtractionService` 调用 Qwen API (qwen-plus) 抽取候选
+- `ExtractionService` 调用当前配置的抽取 provider 抽取候选（仓库默认示例为 DashScope `qwen-plus`）
 - 支持 3 类候选：faq → KnowledgeUnit / action_link → ActionLink / dynamic_query → DynamicQuery
 - `pipeline_cli review` 人工审核，或 `--auto-approve` 自动发布
 - API 端点：`POST /api/extraction/extract` + `POST /api/extraction/review`

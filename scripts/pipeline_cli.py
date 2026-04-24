@@ -1,4 +1,4 @@
-"""Extract knowledge candidates from a document file via Qwen API.
+"""Extract knowledge candidates from a document file via the configured extraction provider.
 
 Usage:
     # Step 1: Import document into SourceRecord
@@ -85,7 +85,7 @@ def _extract_and_publish(args: argparse.Namespace) -> None:
         print(f"[error] source_record not found: {args.source_record_id}")
         sys.exit(1)
 
-    print(f"[extract] calling Qwen API on: {sr.title}")
+    print(f"[extract] calling extraction provider on: {sr.title}")
     candidate_types = args.candidate_types.split(",") if args.candidate_types else None
     service = ExtractionService()
     candidates = service.extract_from_record(sr, candidate_types=candidate_types)
@@ -178,7 +178,10 @@ def main() -> None:
     p_import.add_argument("--candidate-types", help="Comma-separated types: faq,action_link,dynamic_query (only used with --auto-approve)")
 
     # extract
-    p_extract = sub.add_parser("extract", help="Extract candidates from a SourceRecord via Qwen API")
+    p_extract = sub.add_parser(
+        "extract",
+        help="Extract candidates from a SourceRecord via the configured extraction provider",
+    )
     p_extract.add_argument("--source-record-id", required=True, help="SourceRecord ID to extract from")
     p_extract.add_argument("--candidate-types", help="Comma-separated types: faq,action_link,dynamic_query")
     p_extract.add_argument("--auto-approve", action="store_true", help="Auto-approve and publish all extracted candidates")

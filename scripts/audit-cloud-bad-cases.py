@@ -4,7 +4,14 @@ import os
 from collections import Counter
 
 
-DEFAULT_ROUTER_USED = "query_planner_qwen_api"
+DEFAULT_ROUTER_NAMES = (
+    "query_planner_openai_compatible",
+    "query_planner_qwen_api",
+)
+
+
+def _parse_router_names(raw: str) -> set[str]:
+    return {item.strip() for item in raw.split(",") if item.strip()}
 
 
 def _load_jsonl(path: str) -> list[dict]:
@@ -79,8 +86,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--router-used",
-        default=DEFAULT_ROUTER_USED,
-        help="only inspect traces from this router_used value",
+        default=",".join(DEFAULT_ROUTER_NAMES),
+        help="comma-separated router_used values to inspect",
     )
     parser.add_argument(
         "--limit",
@@ -90,6 +97,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    router_names = _parse_router_names(args.router_used)
     repo_root = _repo_root()
     traces = _load_jsonl(_trace_path(repo_root))
     hard_cases = _load_jsonl(_hard_case_path(repo_root))
@@ -101,17 +109,17 @@ def main() -> None:
 
     filtered_traces = [
         record for record in traces
-        if record.get("router_used") == args.router_used
+        if record.get("router_used") in router_names
     ]
     filtered_hard_cases = [
         record for record in hard_cases
-        if record.get("router_used") == args.router_used
+        if record.get("router_used") in router_names
     ]
 
     bad_traces = [record for record in filtered_traces if _is_bad_trace(record)]
 
     print("[orionstack] cloud bad-case audit")
-    print(f"[orionstack] router_used={args.router_used}")
+    print(f"[orionstack] router_used={sorted(router_names)}")
     print(f"[orionstack] traces={len(filtered_traces)} hard_cases={len(filtered_hard_cases)}")
     print(
         f"[orionstack] status={dict(Counter(record.get('final_status') for record in filtered_traces))}"

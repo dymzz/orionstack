@@ -30,7 +30,7 @@ class OdooAdapter:
         url: str = "http://localhost:8069",
         db: str = "odoo",
         uid: int = 2,
-        password: str = "qq3938332",
+        password: str = "",
         model_fields_map: dict[str, tuple[str, list[str]]] | None = None,
     ) -> None:
         self._url = url.rstrip("/")
@@ -59,6 +59,10 @@ class OdooAdapter:
         fields: list[str],
         limit: int = 10,
     ) -> list[dict[str, Any]]:
+        if not self._password:
+            raise RuntimeError(
+                "ORIONSTACK_ODOO_PASSWORD is required when using OdooAdapter"
+            )
         endpoint = f"{self._url}/xmlrpc/2/object"
         models = xmlrpc.client.ServerProxy(endpoint)
         return models.execute_kw(

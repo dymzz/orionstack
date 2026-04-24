@@ -95,4 +95,5 @@ class DynamicQueryRepo:
             scope_type=d.get("scope_type", "self"),
             status=d.get("status", "active"),
             description=d.get("description", ""),
+            detect_patterns=tuple(d.get("detect_patterns", [])),
         )

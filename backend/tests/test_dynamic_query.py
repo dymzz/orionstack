@@ -23,6 +23,7 @@ def _make_dq(**overrides) -> DynamicQuery:
         scope_type="self",
         status="active",
         description="请假状态",
+        detect_patterns=(r"请假.{0,4}(状态|进度|审批|情况|记录)", r"(我的|查).{0,4}请假"),
     )
     defaults.update(overrides)
     return DynamicQuery(**defaults)
@@ -40,6 +41,7 @@ class TestDynamicQueryModel:
         assert d["query_key"] == "leave_status"
         assert d["resource_type"] == "leave_status"
         assert d["action"] == "read"
+        assert len(d["detect_patterns"]) == 2
 
     def test_frozen_dataclass_rejects_mutation(self) -> None:
         dq = _make_dq()
@@ -194,28 +196,92 @@ class TestDynamicQueryService:
                 query_key="expense_status",
                 resource_type="expense_status",
                 description="报销状态",
+                detect_patterns=(
+                    r"(报销|费用).{0,4}(状态|进度|审批|情况|记录)",
+                    r"(我的|查).{0,4}(报销|费用)",
+                ),
+            )
+        )
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-attendance",
+                query_key="attendance_balance",
+                resource_type="attendance_balance",
+                description="考勤记录",
+                detect_patterns=(
+                    r"(考勤|打卡|工时).{0,4}(记录|统计|情况|明细)",
+                    r"(我的|查).{0,4}考勤",
+                ),
+            )
+        )
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-crm",
+                query_key="crm_pipeline",
+                resource_type="crm_pipeline",
+                description="CRM商机",
+                scope_type="org",
+                detect_patterns=(
+                    r"(CRM|商机|客户|销售).{0,4}(状态|进度|情况|列表)",
+                    r"(我的|查).{0,4}(商机|客户|销售管线)",
+                ),
             )
         )
         adapter = MockAdapter()
         return DynamicQueryService(adapter=adapter, repo=repo)
 
     def test_detect_leave_status(self, service: DynamicQueryService) -> None:
-        assert service.detect_query_key("请假状态") == "leave_status"
-        assert service.detect_query_key("我的请假进度") == "leave_status"
+        assert service.match_query_key("请假状态") == "leave_status"
+        assert service.match_query_key("我的请假进度") == "leave_status"
 
-    def test_detect_expense_status(self, service: DynamicQueryService) -> None:
-        assert service.detect_query_key("报销审批情况") == "expense_status"
-        assert service.detect_query_key("我的费用记录") == "expense_status"
+    def test_detect_expense_status_from_repo_patterns(
+        self, service: DynamicQueryService
+    ) -> None:
+        assert service.match_query_key("报销审批情况") == "expense_status"
+        assert service.match_query_key("我的费用记录") == "expense_status"
+
+    def test_detect_uses_custom_repo_patterns(self, tmp_path: Path) -> None:
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "repo-first")
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-travel",
+                query_key="travel_expense_status",
+                resource_type="travel_expense_form",
+                description="差旅报销状态",
+                detect_patterns=(r"差旅.{0,4}报销", r"报销单.{0,4}进度"),
+            )
+        )
+        service = DynamicQueryService(adapter=MockAdapter(), repo=repo)
+
+        assert service.match_query_key("差旅报销状态") == "travel_expense_status"
+        assert service.match_query_key("报销单进度") == "travel_expense_status"
+
+    def test_detect_does_not_match_without_repo_patterns(
+        self, tmp_path: Path
+    ) -> None:
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "no-patterns")
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-no-patterns",
+                query_key="expense_status",
+                resource_type="expense_status",
+                description="报销状态",
+                detect_patterns=(),
+            )
+        )
+        service = DynamicQueryService(adapter=MockAdapter(), repo=repo)
+
+        assert service.match_query_key("报销审批情况") is None
 
     def test_detect_attendance(self, service: DynamicQueryService) -> None:
-        assert service.detect_query_key("考勤记录") == "attendance_balance"
+        assert service.match_query_key("考勤记录") == "attendance_balance"
 
     def test_detect_crm(self, service: DynamicQueryService) -> None:
-        assert service.detect_query_key("CRM商机列表") == "crm_pipeline"
+        assert service.match_query_key("CRM商机列表") == "crm_pipeline"
 
     def test_detect_none_for_faq_query(self, service: DynamicQueryService) -> None:
-        assert service.detect_query_key("如何申请年假？") is None
-        assert service.detect_query_key("病假需要提交什么材料") is None
+        assert service.match_query_key("如何申请年假？") is None
+        assert service.match_query_key("病假需要提交什么材料") is None
 
     def test_is_allowed_for_active_query(self, service: DynamicQueryService) -> None:
         assert service.is_allowed("leave_status") is True
@@ -232,11 +298,11 @@ class TestDynamicQueryService:
     def test_execute_returns_none_for_unknown(self, service: DynamicQueryService) -> None:
         assert service.execute("unknown") is None
 
-    def test_execute_sanitizes_id_field(self, service: DynamicQueryService) -> None:
+    def test_execute_sanitizes_id_field(self, tmp_path: Path) -> None:
         adapter = MockAdapter(
             fixtures={"leave_status": [{"id": 99, "name": "test", "state": "validate"}]}
         )
-        repo = DynamicQueryRepo(storage_dir=Path("/tmp/test-dq-sanitize"))
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-sanitize")
         repo.create(_make_dq())
         svc = DynamicQueryService(adapter=adapter, repo=repo)
         result = svc.execute("leave_status")

@@ -16,15 +16,15 @@ OrionStack 是一个**企业知识助手 / 文档问答系统**。核心能力�
 4. 回答附带引用（citation）、操作入口（action link）、实时状态查询（dynamic query）
 5. 所有问答记录、反馈、trace、hard case 自动落盘
 
-**技术栈**：
+**技术栈 / 当前默认实现**：
 
 - 后端：Python 3.12+ / FastAPI / Uvicorn
 - 前端：Vue 3 + TypeScript + Vite + vue-router@4
 - 检索：Elasticsearch 8.x（IK 分词）
-- LLM：Qwen API（DashScope `qwen-plus`）
-- 外部系统：Odoo 19（XML-RPC，用于动态查询）
+- LLM：可替换的 OpenAI-compatible / 本地 provider（当前仓库默认示例为 DashScope `qwen-plus`）
+- 外部系统：通过 `SystemAdapter` 接入多系统（当前已实现 `OdooAdapter` / `MockAdapter`，Odoo 只是其一）
 - 存储：JSONL 文件（无数据库）
-- 容器：Docker Compose（Elasticsearch + Odoo）
+- 容器：Docker Compose（当前提供 Elasticsearch + Odoo 参考环境）
 
 ---
 
@@ -49,9 +49,17 @@ OrionStack 是一个**企业知识助手 / 文档问答系统**。核心能力�
 
 - Step 1：SourceRecord / ImportBatch / ExtractionCandidate 数据层 + freshness + tombstone
 - Step 2：ActionLink（"答 + 引 + 跳"体验）
-- Step 3：DynamicQuery（SystemAdapter Protocol + OdooAdapter）
-- Step 4：抽取管线自动化（LLM → 候选 → 审核 → 发布）
+- Step 3：DynamicQuery（SystemAdapter Protocol + 可插拔 adapter，当前已实现 OdooAdapter / MockAdapter）
+- Step 4：抽取管线自动化（可替换 LLM provider → 候选 → 审核 → 发布）
 - Step 5：Trace / Hard Case provenance + issue 自动分类
+
+### 2026-04-24 架构边界收口
+
+- `Qwen` / `DashScope` 已收敛为当前默认示例和兼容入口；主路径命名是 `openai_compatible`、`planner_api_*`、`extraction_api_*`
+- `Odoo` 已收敛为 `SystemAdapter` 的当前适配器之一；动态查询主路径不再依赖 Odoo 语义
+- DynamicQuery 识别规则来自 JSONL 数据的 `detect_patterns`，代码里不再维护业务 regex 表
+- ActionLink 的领域展示来自 JSONL 数据的 `business_domains`，代码里不再维护 domain → resource_type 映射
+- 旧的 `qwen_api` provider/router 名只作为兼容别名或历史 trace 名保留
 
 ---
 
@@ -70,7 +78,7 @@ orionstack/
 │   │   ├── config/settings.py          # 环境变量配置
 │   │   ├── extract/                    # 抽取层 (Phase 3)
 │   │   │   ├── prompt_templates.py     #   抽取 prompt + JSON 解析
-│   │   │   ├── extraction_service.py   #   Qwen API → 候选
+│   │   │   ├── extraction_service.py   #   当前配置的抽取 provider → 候选
 │   │   │   ├── candidate_reviewer.py   #   审核 → 发布（3 类型）
 │   │   │   └── llm_extractor.py        #   候选对象创建
 │   │   ├── guardrails/                 # 输入归一化
@@ -81,7 +89,7 @@ orionstack/
 │   │   ├── routing/                    # 路由决策
 │   │   ├── runtime/                    # 动态查询 (Phase 3)
 │   │   │   ├── system_adapter.py       #   Protocol 定义
-│   │   │   ├── odoo_adapter.py         #   Odoo XML-RPC 适配器
+│   │   │   ├── odoo_adapter.py         #   Odoo XML-RPC 适配器（当前实现之一）
 │   │   │   ├── mock_adapter.py         #   测试适配器
 │   │   │   ├── adapter_factory.py      #   适配器工厂
 │   │   │   ├── dynamic_query_service.py#   检测 → 判权 → 执行
@@ -107,7 +115,7 @@ orionstack/
 │   │   │   ├── freshness_checker.py    #   FreshnessResult
 │   │   │   └── tombstone_handler.py    #   逻辑删除传播
 │   │   └── testing/                    # 测试工具
-│   └── tests/                          # 321 测试（2 个 collection error）
+│   └── tests/                          # backend 回归测试
 ├── frontend/
 │   └── src/
 │       ├── App.vue                     # 壳：导航（问答 + 管理入口）
@@ -133,7 +141,7 @@ orionstack/
 │           └── admin.ts                #   管理类型
 ├── scripts/                            # 16 个脚本（见 scripts/README.md）
 ├── docs/                               # 设计 + 进度 + 字段文档
-├── docker-compose.yml                  # Elasticsearch + Odoo
+├── docker-compose.yml                  # Elasticsearch + Odoo 参考环境
 ├── .env.example                        # 环境变量参考
 └── HANDOFF.md                          # 本文件
 ```
@@ -146,7 +154,7 @@ orionstack/
 
 - Python 3.12+（建议 `.venv`）
 - Node.js 18+
-- Docker（Elasticsearch + Odoo）
+- Docker（Elasticsearch；如需验证当前 OdooAdapter 示例，可再启动 Odoo）
 
 ### 4.2 启动 Elasticsearch
 
@@ -154,7 +162,7 @@ orionstack/
 docker compose up -d elasticsearch
 ```
 
-### 4.3 启动 Odoo（动态查询需要）
+### 4.3 启动 Odoo（可选，用于验证当前 OdooAdapter 示例）
 
 ```bash
 docker compose up -d odoo
@@ -174,7 +182,7 @@ python scripts/dev-demo.py
 
 | 变量 | 用途 |
 |---|---|
-| `DASHSCOPE_API_KEY` | DashScope API Key（LLM 调用 + 抽取管线） |
+| `DASHSCOPE_API_KEY` | 当前 DashScope 示例所需的 API Key（Planner / 抽取管线） |
 
 可选但重要的：
 
@@ -184,11 +192,11 @@ python scripts/dev-demo.py
 | `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch` 或 `local` |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 是否启用 planner |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 是否启用 fast track |
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | `odoo` 或 `mock` |
-| `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | Odoo 地址 |
-| `ORIONSTACK_ODOO_DB` | `odoo` | Odoo 数据库 |
-| `ORIONSTACK_ODOO_UID` | `2` | Odoo 用户 ID |
-| `ORIONSTACK_ODOO_PASSWORD` | — | Odoo 密码 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 当前实现可选 `odoo` 或 `mock`，后续可扩展更多 adapter |
+| `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | 当前 OdooAdapter 示例地址 |
+| `ORIONSTACK_ODOO_DB` | `odoo` | 当前 OdooAdapter 示例数据库 |
+| `ORIONSTACK_ODOO_UID` | `2` | 当前 OdooAdapter 示例用户 ID |
+| `ORIONSTACK_ODOO_PASSWORD` | — | 仅在使用 OdooAdapter 时通过环境变量注入 |
 
 完整列表见 `.env.example`。
 
@@ -199,37 +207,27 @@ python scripts/dev-demo.py
 ### 5.1 运行全部测试
 
 ```bash
-python -m pytest backend/tests/ -v
+uv run python -m pytest backend/tests -q
 ```
 
-当前基线：**321 collected，2 个 collection error**（`test_chat_flow.py` 和 `test_document_flow.py` 因 `pypdf` 未安装报错，与 Phase 3 无关）。
+当前项目环境基线：**336 passed, 19 skipped, 9 xfailed**。
+
+裸 `python` 环境如果没有同步项目依赖，可能出现导入期缺包错误；交接和回归请以 `uv run ...` 为准。live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
 ### 5.2 Phase 3 专项测试
 
 ```bash
-# Step 1: 静态知识副本层
-python -m pytest backend/tests/test_phase3_*.py -v
+# Phase 3 基础链路：freshness / sync / trace / hard cases
+uv run python -m pytest backend/tests/test_phase3_*.py -q
 
-# Step 2: ActionLink
-python -m pytest backend/tests/test_phase3_action_link*.py -v
-
-# Step 3: DynamicQuery
-python -m pytest backend/tests/test_phase3_dynamic_query*.py -v
-
-# Step 4: 抽取管线
-python -m pytest backend/tests/test_phase3_extraction*.py -v
-
-# Step 5: Trace / Hard Cases
-python -m pytest backend/tests/test_phase3_trace_hard_cases.py -v
-
-# Freshness
-python -m pytest backend/tests/test_phase3_freshness.py -v
+# Phase 3 运行时组件：ActionLink / DynamicQuery / Extraction
+uv run python -m pytest backend/tests/test_action_link.py backend/tests/test_dynamic_query.py backend/tests/test_extraction.py -q
 ```
 
 ### 5.3 Phase 2 回归
 
 ```bash
-python scripts/run-phase2-regression.py
+uv run python scripts/run-phase2-regression.py
 ```
 
 ---
@@ -246,7 +244,7 @@ python scripts/run-phase2-regression.py
 
 ### 6.2 SystemAdapter Protocol
 
-动态查询不直连 Odoo，而是通过 `SystemAdapter` Protocol 解耦。新增外部系统只需：
+动态查询不直连单一系统，而是通过 `SystemAdapter` Protocol 解耦。Odoo 是当前已实现的一个适配器示例；新增外部系统只需：
 
 1. 在 `backend/app/runtime/` 新建适配器文件
 2. 实现 `name` 属性 + `fetch()` 方法
@@ -256,7 +254,7 @@ python scripts/run-phase2-regression.py
 ### 6.3 抽取管线
 
 ```
-文档 → SourceRecord → Qwen API → ExtractionCandidate → 人工审核 → 发布
+文档 → SourceRecord → 当前配置的抽取 provider → ExtractionCandidate → 人工审核 → 发布
                                                            ↓
                                               faq → KnowledgeUnit → ES
                                               action_link → ActionLinkRepo
@@ -324,8 +322,10 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 |---|---|---|
 | `freshness_default_hours` | 72 | 新导入知识默认 fresh 时长 |
 | `stale_default_hours` | 168 | 新导入知识默认 stale 阈值 |
-| `ORIONSTACK_QWEN_API_MODEL` | `qwen-plus` | LLM 模型 |
-| `ORIONSTACK_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | API 地址 |
+| `ORIONSTACK_PLANNER_API_MODEL` | `qwen-plus` | 当前默认 planner 示例模型 |
+| `ORIONSTACK_PLANNER_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 当前默认 planner OpenAI-compatible 示例地址 |
+| `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 当前默认抽取示例模型 |
+| `ORIONSTACK_EXTRACTION_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 当前默认抽取 OpenAI-compatible 示例地址 |
 | `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | 200 | 问答记录保留上限 |
 
@@ -361,7 +361,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 | 问题 | 状态 | 说明 |
 |---|---|---|
-| `pypdf` 未安装 | 已知，不影响 Phase 3 | `test_chat_flow.py` 和 `test_document_flow.py` collection 报错 |
+| 裸 `python` 环境可能缺依赖 | 已知环境问题 | 项目依赖已在 `pyproject.toml`；以 `uv run ...` 为测试基线 |
 | Odoo 19 字段差异 | 已处理 | `hr.leave` 用 `holiday_status_id`（不是 `holiday_type`） |
 | `_build_clarification_response` 缺参 | 已修复 | ActionLink 集成时暴露并修复 |
 | JSONL 存储 | 架构限制 | 无数据库，不适合高并发生产环境 |
@@ -383,19 +383,19 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ---
 
-## 12. Odoo 环境
+## 12. Odoo 参考环境
 
 | 项 | 值 |
 |---|---|
 | 地址 | `http://localhost:8069` |
 | 数据库 | `odoo` |
-| 用户 | `dyjane@live.cn` |
-| 密码 | `qq3938332` |
 | uid | `2` |
 | 版本 | Odoo 19 |
+
+认证信息不写入仓库，请通过本地 `.env` 或部署密钥系统注入 `ORIONSTACK_ODOO_PASSWORD` 等变量。
 
 ---
 
 ## 13. 一句话收口
 
-**Phase 1-3 全部完成，321 测试基线稳定（2 个预知 collection error），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 全部完成，项目环境回归基线稳定（`uv run python -m pytest backend/tests -q`：336 passed, 19 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**

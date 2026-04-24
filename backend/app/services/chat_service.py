@@ -369,7 +369,7 @@ class ChatService:
         answer = best.answer or best.body_text
         snippet = answer[:160] if not evidence_spans else evidence_spans[0].text
         citation = self._build_hit_citation(best, snippet)
-        action_links = self._find_action_links(business_domain)
+        action_links = self._find_action_links_for_domain(business_domain)
 
         freshness_result = self._check_hit_freshness(best)
         if freshness_result is not None and not freshness_result.is_fresh:
@@ -503,7 +503,7 @@ class ChatService:
             trace_id=trace_id,
             answer="当前问题还不够具体，请先确认您想了解的具体规则方向。",
             citations=citations,
-            action_links=self._find_action_links(business_domain),
+            action_links=self._find_action_links_for_domain(business_domain),
             clarification=ClarificationInfo(
                 clarification_required=True,
                 question="您更想了解以下哪一项？",
@@ -803,7 +803,7 @@ class ChatService:
         self, normalized_query: str, trace_id: str, debug_enabled: bool
     ) -> ChatAskResponse | None:
         svc = self._dynamic_query_service
-        query_key = svc.detect_query_key(normalized_query)
+        query_key = svc.match_query_key(normalized_query)
         if query_key is None:
             return None
         if not svc.is_allowed(query_key):
@@ -812,7 +812,7 @@ class ChatService:
         if result is None:
             return None
 
-        action_links = self._find_action_links_by_resource_type(result.resource_type)
+        action_links = self._find_action_links_for_resource_type(result.resource_type)
         answer = self._compose_dynamic_query_answer(result)
 
         return ChatAskResponse(
@@ -843,7 +843,9 @@ class ChatService:
         return f"已为您查询到 {count} 条{result.description}记录，详细数据见下方。"
 
     @classmethod
-    def _find_action_links_by_resource_type(cls, resource_type: str) -> list[ActionLinkItem]:
+    def _find_action_links_for_resource_type(
+        cls, resource_type: str
+    ) -> list[ActionLinkItem]:
         from app.storage.repositories.action_link_repo import ActionLinkRepo
 
         repo = ActionLinkRepo()
@@ -859,37 +861,30 @@ class ChatService:
             for link in links
         ]
 
-    _DOMAIN_TO_RESOURCE_TYPES: dict[str, list[str]] = {
-        "hr": ["leave_form", "attendance_record", "employee_profile"],
-        "finance": ["expense_form", "invoice_list"],
-        "sales": ["crm_pipeline"],
-        "product": ["project_board"],
-        "admin": ["employee_profile"],
-        "it": ["project_board"],
-    }
-
     @classmethod
-    def _find_action_links(cls, business_domain: str | None) -> list[ActionLinkItem]:
+    def _find_action_links_for_domain(
+        cls, business_domain: str | None
+    ) -> list[ActionLinkItem]:
         if business_domain is None:
-            return []
-        resource_types = cls._DOMAIN_TO_RESOURCE_TYPES.get(business_domain, [])
-        if not resource_types:
             return []
         from app.storage.repositories.action_link_repo import ActionLinkRepo
 
         repo = ActionLinkRepo()
         items: list[ActionLinkItem] = []
-        for rt in resource_types:
-            for link in repo.list_by_resource_type(rt):
-                items.append(
-                    ActionLinkItem(
-                        action_link_id=link.action_link_id,
-                        label=link.label,
-                        url=link.url,
-                        system_type=link.system_type,
-                        resource_type=link.resource_type,
-                    )
+        explicit_links = repo.list_by_domain(business_domain)
+        for link in explicit_links:
+            items.append(
+                ActionLinkItem(
+                    action_link_id=link.action_link_id,
+                    label=link.label,
+                    url=link.url,
+                    system_type=link.system_type,
+                    resource_type=link.resource_type,
                 )
+            )
+
+        if items:
+            return items
         return items
 
     @staticmethod

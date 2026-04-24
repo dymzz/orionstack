@@ -116,6 +116,7 @@
 - 实现 `SystemAdapter` Protocol，通过 XML-RPC 连接 Odoo
 - `model_fields_map` 将 `resource_type` 映射到 Odoo 模型 + 字段列表
 - 映射表通过构造参数可覆盖，适配不同 Odoo 实例
+- 作为当前已实现的外部系统适配器之一，为后续多系统适配提供参考
 
 不负责：
 
@@ -251,10 +252,10 @@
 
 职责：
 
-- 调用 Qwen API（DashScope `qwen-plus`），传入 prompt 模板生成的 messages
+- 调用当前配置的抽取 provider（当前仓库默认示例为 DashScope `qwen-plus`），传入 prompt 模板生成的 messages
 - 解析 LLM 返回的候选 JSON，通过 `llm_extractor` 创建 `ExtractionCandidate`
 - 将候选写入 `ExtractionCandidateRepo`
-- API key 读取 `ORIONSTACK_QWEN_API_KEY`，若为空则回退到 `DASHSCOPE_API_KEY`
+- 当前实现读取 `ORIONSTACK_QWEN_API_KEY`，若为空则回退到 `DASHSCOPE_API_KEY`
 
 不负责：
 
@@ -368,7 +369,7 @@
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
-| `/api/extraction/extract` | POST | 从 SourceRecord 抽取候选（调用 Qwen API） |
+| `/api/extraction/extract` | POST | 从 SourceRecord 抽取候选（调用当前配置的抽取 provider） |
 | `/api/extraction/review` | POST | 审核（approve/reject）+ 自动发布 |
 | `/api/extraction/candidates` | GET | 列出候选（按 status 过滤） |
 

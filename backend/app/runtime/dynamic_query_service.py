@@ -8,19 +8,6 @@ from app.schemas.response import DynamicQueryResultItem
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 
 
-_DYNAMIC_QUERY_PATTERNS: list[tuple[str, str]] = [
-    (r"请假.{0,4}(状态|进度|审批|情况|记录)", "leave_status"),
-    (r"(我的|查).{0,4}请假", "leave_status"),
-    (r"(年假|病假|事假|调休).{0,4}(余额|剩余|还有多少|剩多少|天数)", "leave_balance"),
-    (r"(报销|费用).{0,4}(状态|进度|审批|情况|记录)", "expense_status"),
-    (r"(我的|查).{0,4}(报销|费用)", "expense_status"),
-    (r"(考勤|打卡|工时).{0,4}(记录|统计|情况|明细)", "attendance_balance"),
-    (r"(我的|查).{0,4}考勤", "attendance_balance"),
-    (r"(CRM|商机|客户|销售).{0,4}(状态|进度|情况|列表)", "crm_pipeline"),
-    (r"(我的|查).{0,4}(商机|客户|销售管线)", "crm_pipeline"),
-]
-
-
 class DynamicQueryService:
     def __init__(
         self,
@@ -30,10 +17,11 @@ class DynamicQueryService:
         self._adapter = adapter
         self._repo = repo or DynamicQueryRepo()
 
-    def detect_query_key(self, query: str) -> str | None:
-        for pattern, query_key in _DYNAMIC_QUERY_PATTERNS:
-            if re.search(pattern, query):
-                return query_key
+    def match_query_key(self, query: str) -> str | None:
+        for dq in self._repo.list_active():
+            for pattern in dq.detect_patterns:
+                if re.search(pattern, query):
+                    return dq.query_key
         return None
 
     def is_allowed(self, query_key: str) -> bool:

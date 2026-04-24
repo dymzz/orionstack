@@ -73,7 +73,7 @@ def _publish_faq(
         "lifecycle_status": "active",
         "source_record_id": source_record.source_record_id,
     }
-    unit = map_faq_item_to_knowledge_unit(item, default_domain=source_record.source_system)
+    unit = map_faq_item_to_knowledge_unit(item, default_domain="")
     unit = replace(
         unit,
         tenant_id=candidate.tenant_id,
@@ -102,6 +102,10 @@ def _publish_action_link(
         access_scope=source_record.access_scope,
         status="active",
         published_at=now,
+        business_domains=tuple(
+            payload.get("business_domains")
+            or ([payload["business_domain"]] if payload.get("business_domain") else [])
+        ),
     )
     repo = action_link_repo or ActionLinkRepo()
     repo.upsert(link)
@@ -123,6 +127,7 @@ def _publish_dynamic_query(
         scope_type=payload.get("scope_type", "self"),
         status="active",
         description=payload.get("description", ""),
+        detect_patterns=tuple(payload.get("detect_patterns", [])),
     )
     repo = dynamic_query_repo or DynamicQueryRepo()
     repo.upsert(dq)

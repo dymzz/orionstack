@@ -14,6 +14,7 @@ class DynamicQuery:
     scope_type: str
     status: str
     description: str
+    detect_patterns: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -25,4 +26,5 @@ class DynamicQuery:
             "scope_type": self.scope_type,
             "status": self.status,
             "description": self.description,
+            "detect_patterns": list(self.detect_patterns),
         }

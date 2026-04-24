@@ -42,6 +42,19 @@ def _resolve_str(env_name: str, default: str) -> str:
     return os.getenv(env_name, default)
 
 
+def _resolve_first_present(*env_names: str, default: str) -> str:
+    """Return the first environment variable explicitly present in the shell.
+
+    This keeps compatibility aliases cheap while still letting a newer
+    variable name override an older one. Explicit empty strings are respected.
+    """
+
+    for env_name in env_names:
+        if env_name in os.environ:
+            return os.environ[env_name]
+    return default
+
+
 def _resolve_int(env_name: str, default: int) -> int:
     return int(os.getenv(env_name, str(default)))
 
@@ -119,17 +132,20 @@ class Settings:
         )
     )
 
-    # Phase 2 round 3.1: LLM planner provider config (inert until round 3.2
-    # introduces QwenApiProvider / LlamaCppProvider; see docs/2_8 §6)
-    qwen_api_base: str = field(
-        default_factory=lambda: _resolve_str(
+    # Planner HTTP-provider config. The generic env names are the preferred
+    # contract; Qwen-prefixed names remain compatibility aliases.
+    planner_api_base: str = field(
+        default_factory=lambda: _resolve_first_present(
+            "ORIONSTACK_PLANNER_API_BASE",
             "ORIONSTACK_QWEN_API_BASE",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            default="https://dashscope.aliyuncs.com/compatible-mode/v1",
         )
     )
-    qwen_api_model: str = field(
-        default_factory=lambda: _resolve_str(
-            "ORIONSTACK_QWEN_API_MODEL", "qwen-plus"
+    planner_api_model: str = field(
+        default_factory=lambda: _resolve_first_present(
+            "ORIONSTACK_PLANNER_API_MODEL",
+            "ORIONSTACK_QWEN_API_MODEL",
+            default="qwen-plus",
         )
     )
     local_llm_base_url: str = field(
@@ -171,6 +187,26 @@ class Settings:
         default_factory=lambda: _resolve_int("ORIONSTACK_STALE_DEFAULT_HOURS", 168)
     )
 
+    extraction_provider: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_EXTRACTION_PROVIDER", "openai_compatible"
+        )
+    )
+    extraction_api_base: str = field(
+        default_factory=lambda: _resolve_first_present(
+            "ORIONSTACK_EXTRACTION_API_BASE",
+            "ORIONSTACK_QWEN_API_BASE",
+            default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+    )
+    extraction_api_model: str = field(
+        default_factory=lambda: _resolve_first_present(
+            "ORIONSTACK_EXTRACTION_API_MODEL",
+            "ORIONSTACK_QWEN_API_MODEL",
+            default="qwen-plus",
+        )
+    )
+
     # Phase 3: dynamic query adapter
     dynamic_query_adapter: str = field(
         default_factory=lambda: _resolve_str("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", "odoo")
@@ -185,7 +221,7 @@ class Settings:
         default_factory=lambda: _resolve_int("ORIONSTACK_ODOO_UID", 2)
     )
     odoo_password: str = field(
-        default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_PASSWORD", "qq3938332")
+        default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_PASSWORD", "")
     )
 
     @property
@@ -195,6 +231,18 @@ class Settings:
     @property
     def chat_record_view_enabled(self) -> bool:
         return self.app_mode in {"demo", "dev"}
+
+    @property
+    def qwen_api_base(self) -> str:
+        """Compatibility alias for older planner-only smoke tests/scripts."""
+
+        return self.planner_api_base
+
+    @property
+    def qwen_api_model(self) -> str:
+        """Compatibility alias for older planner-only smoke tests/scripts."""
+
+        return self.planner_api_model
 
 
 settings = Settings()

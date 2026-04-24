@@ -13,6 +13,8 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
   odoo:
+    # Reference adapter environment for local validation.
+    # Set ORIONSTACK_ODOO_PASSWORD in your shell or local .env before starting.
     image: odoo:19.0
     container_name: odoo
     restart: unless-stopped
@@ -22,7 +24,7 @@ services:
       HOST: host.docker.internal
       PORT: 5432
       USER: odoo
-      PASSWORD: qq3938332
+      PASSWORD: ${ORIONSTACK_ODOO_PASSWORD}
     volumes:
       - odoo-data:/var/lib/odoo
 

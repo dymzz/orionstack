@@ -68,37 +68,37 @@
   - §9.3 上传文档簇不在同域近义这一轮范围内 —— 属于文档上传路由独立线
 - **§9 各轮工作沉淀为可复用方法论**：`docs/2_4_test_strategy.md §12` 新增 "内容层线的审计先行方法论"，覆盖四种缺口分类（cosmetic / real / data-gap / cross-direction）、审计四步骤、扩展 vs 新建判据，以及何时不适用 —— 防止未来接手人面对 backlog 簇时直接机械建测试而产生重复工作
 - **Planner 质量审查文档已落地**：`docs/2_6_planner_quality_review.md` 对 `backend/app/query/query_planner.py` 做了一次完整 gap review，揭示关键事实：**当前 planner 是字符串 n-gram 工具套 planner 外壳**，`domain_hint` 恒为 `None`，Phase 2 为 cross-domain narrow 写的保护层在生产路径从未被激活；文档列出 6 条质量债、影响面矩阵、5 组可测契约、3 条改造路径（local 规则 / LLM / hybrid，不开具体方案）、验证四步法。下一条聚焦线（planner 改造）以此为起点。
-- **Planner 升级计划已锁定**：`docs/2_7_planner_upgrade_plan.md` 锁死决策 —— 插入点=planner 层、执行模式=Hybrid（LocalRule 先，LLM 不自信时升级）、两 provider（`QwenApiProvider` 先 / `LlamaCppProvider` 后，模型 `Qwen3-4B-GGUF`）、纯手动切换、LLM 失败降级到 LocalRule、温度 0 + 缓存保证可重现；明确分三轮：**轮 1 决策锁定（完成）、轮 2 基础设施 + 契约测试先行（完成）、轮 3 LLM provider 接入（按用户指令延后）**
+- **Planner 升级计划已锁定**：`docs/2_7_planner_upgrade_plan.md` 锁死决策 —— 插入点=planner 层、执行模式=Hybrid（LLM primary + LocalRule fallback）、两 provider（`OpenAICompatiblePlannerProvider` 先 / `LlamaCppProvider` 后，首个验证后端为 DashScope/Qwen）、纯手动切换、LLM 失败降级到 LocalRule、温度 0 + 缓存保证可重现；明确分三轮：**轮 1 决策锁定（完成）、轮 2 基础设施 + 契约测试先行（完成）、轮 3 LLM provider 接入（按用户指令延后）**
 - **轮 2 已执行**：
   - `backend/app/query/query_planner.py` 重构为 provider pattern —— 新增 `PlannerProvider` Protocol 与 `LocalRuleProvider`（包装原 stub 逻辑），`QueryPlanner` 变为 thin shell；**外部签名保持一致**（`__init__(provider=..., model=...)` / `router_name` / `plan()`），所有 128 条既有测试全绿零改动
   - `backend/tests/test_planner_contract.py` 新建，按 `2_6 §5` 五组契约写 13 条测试：4 条绿（真实 token 出现 / lexical 去重 / cross-domain 共享词不 narrow / 输出确定性）+ 9 条 `strict=True` `xfail`（对应 `2_6 §3.1/§3.2/§3.3/§3.4` 每条债），**xfail 数即可测量的 planner 质量债余量**，未来任一 LLM provider 若满足某条契约，strict xfail 会翻红强制移除 marker
   - 全套：`132 passed, 9 xfailed, 0 failed`
 - **项目重心澄清**（2026-04-21）：**核心验证目标 = LLM 在中文 FAQ 场景下的 planner 能力**，LocalRule 仅作兜底安全网，**不做深化投入**。`2_6 §6` 与 `2_7 §1.2/§1.3/§6` 已同步重写以反映此定位：Path A（纯 local 规则升级）明确拒绝；Hybrid 的正确理解是 "LLM primary + LocalRule fallback"，而非 "rule first, upgrade to LLM"；`test_planner_contract.py` 的 9 条 xfail 是 **LLM 需要关闭的债**，不是 LocalRule 需要关闭的债
-- **轮 3 启动 + 3.1 执行完成**（2026-04-21）：用户批准"按推荐顺序 → Qwen API 先"，`2_7 §2 轮 3` 状态从"延后"切为"执行中"，同时修正模型事实（LlamaCppProvider 目标从 `Qwen/Qwen3-4B-GGUF` 更正为 `ggml-org/gemma-3-1b-it-GGUF`，本地服务为 llama.cpp llama-server 默认 8080 端口）。
-  - 新建 `docs/2_8_planner_llm_integration.md`：把轮 3 拆为 **3.1 基础设施 + prompt 设计 / 3.2 QwenApiProvider 实现 / 3.3 测试 / 3.4 真实 API smoke** 四个子轮，锁定 prompt 文本、few-shot 示例、JSON schema、异常分类（`PlannerTimeoutError` / `PlannerHttpError` / `PlannerParseError` / `PlannerSchemaError`）、降级路径、缓存设计（进程内 `dict`，key 为 `normalized_query`，失败结果也进缓存防雪崩）
-  - `backend/app/config/settings.py` 新增 6 个惰性字段（`qwen_api_base` / `qwen_api_model` / `local_llm_base_url` / `local_llm_model` / `planner_timeout_seconds` / `planner_cache_enabled`），默认值与 `2_8 §6` 规格一致；**不被任何业务代码消费**，仅等待 3.2 QwenApiProvider 上线时使用
-  - `DASHSCOPE_API_KEY` 不入 `settings.py`，走 `os.environ`（`2_7 §1.4` 硬约束）
+- **轮 3 启动 + 3.1 执行完成**（2026-04-21）：用户批准"按推荐顺序 → OpenAI-compatible 云端先"，`2_7 §2 轮 3` 状态从"延后"切为"执行中"，同时修正模型事实（LlamaCppProvider 目标从 `Qwen/Qwen3-4B-GGUF` 更正为 `ggml-org/gemma-3-1b-it-GGUF`，本地服务为 llama.cpp llama-server 默认 8080 端口）。
+  - 新建 `docs/2_8_planner_llm_integration.md`：把轮 3 拆为 **3.1 基础设施 + prompt 设计 / 3.2 OpenAI-compatible provider 实现 / 3.3 测试 / 3.4 真实 API smoke** 四个子轮，锁定 prompt 文本、few-shot 示例、JSON schema、异常分类（`PlannerTimeoutError` / `PlannerHttpError` / `PlannerParseError` / `PlannerSchemaError`）、降级路径、缓存设计（进程内 `dict`，key 为 `normalized_query`，失败结果也进缓存防雪崩）
+  - `backend/app/config/settings.py` 新增通用 planner API / 本地 LLM / 缓存 / 超时相关字段（`planner_api_base` / `planner_api_model` / `local_llm_base_url` / `local_llm_model` / `planner_timeout_seconds` / `planner_cache_enabled`），默认值与 `2_8 §6` 规格一致；**不被任何业务代码消费**，仅等待 3.2 provider 上线时使用
+  - API key 不入持久化配置，走 `os.environ`（`2_7 §1.4` 硬约束）
   - 验证：`132 passed, 9 xfailed, 0 failed`（零回归）
-- **轮 3.2 已执行**（2026-04-21）：QwenApiProvider 与 fallback/cache 基础设施落地，生产路径默认仍走 LocalRule，API 层零激活、零回归
+- **轮 3.2 已执行**（2026-04-21）：OpenAI-compatible provider 与 fallback/cache 基础设施落地，生产路径默认仍走 LocalRule，API 层零激活、零回归
   - 新建 `backend/app/query/providers/` 子包：`__init__.py` 统一导出、`errors.py` 定义 4 类专属异常（`PlannerTimeoutError` / `PlannerHttpError` / `PlannerParseError` / `PlannerSchemaError`），共用基类 `PlannerProviderError`
-  - 新建 `backend/app/query/providers/qwen_api_provider.py`：固定 system prompt（2_8 §3.1 的 5 域枚举 + 4 条规则 + 4 个 few-shot）；`httpx` 调用 DashScope OpenAI-compatible `/chat/completions`；温度 0 + `response_format=json_object`；7 步解析流水（HTTP 状态 → body JSON → choices 定位 → content JSON → schema 校验 → 去重截断 → 构造 PlannerOutput）；支持 `http_client` 注入以便测试
+  - 新建 `backend/app/query/providers/openai_compatible_provider.py`：固定 system prompt（2_8 §3.1 的领域枚举 + 4 条规则 + 4 个 few-shot）；`httpx` 调用 OpenAI-compatible `/chat/completions`；温度 0 + `response_format=json_object`；7 步解析流水（HTTP 状态 → body JSON → choices 定位 → content JSON → schema 校验 → 去重截断 → 构造 PlannerOutput）；支持 `http_client` 注入以便测试；`qwen_api_provider.py` 保留为兼容 wrapper
   - 重构 `backend/app/query/query_planner.py` `QueryPlanner`：
     - 构造期 eager 实例化 primary provider + fallback（`LocalRuleProvider`）
-    - `_create_provider` 新增 `qwen_api` 分支，内部懒导入 `providers` 子包避免与 `query_planner.py` 的循环引用；API key 从 `DASHSCOPE_API_KEY` 或 `QWEN_API_KEY` 环境变量读取，两者皆空时在选 qwen_api 时 `ValueError`（触发点在选 provider 时就失败，不会到 plan 阶段）
+    - `_build_provider` 新增 `openai_compatible` 分支并保留 `qwen_api` 兼容别名，内部懒导入 `providers` 子包避免与 `query_planner.py` 的循环引用；API key 优先从 `ORIONSTACK_PLANNER_API_KEY` / `ORIONSTACK_LLM_API_KEY` 读取，并兼容 `DASHSCOPE_API_KEY` / `QWEN_API_KEY`
     - `plan()` 实现：cache 命中短路 → primary `plan()` try/except → 捕获任何 `PlannerProviderError` 子类时记录 `last_fallback_reason` 并调 LocalRule fallback → 最终结果（无论来自 LLM 或 fallback）入缓存
     - 非 `PlannerProviderError` 的异常（如 `ValueError`、`TypeError`）直接向上传播，**不降级**（这些是 bug 而不是 LLM 故障）
     - 新增 `last_fallback_reason` property，值为异常类名或 `None`
-  - 验证：`132 passed, 9 xfailed, 0 failed`（零回归）；QwenApiProvider 默认未激活（`settings.planner_provider="local"` 仍是默认）
-  - 微修：`QwenApiProvider._parse_response` 改用 `payload.get("domain_hint")` 以匹配 `_validate_schema` 的 `.get()` 语义，避免 LLM 省略 `domain_hint` 字段时抛未分类 `KeyError`（schema 允许 key 缺失等价于 null）
-- **轮 3.3 已执行**（2026-04-21）：74 条新测试全绿，把 QwenApiProvider 解析链路、QueryPlanner fallback 语义、缓存语义全部锁死
-  - `backend/tests/test_planner_qwen_api_unit.py`（35 tests）：
+  - 验证：`132 passed, 9 xfailed, 0 failed`（零回归）；OpenAI-compatible provider 默认未激活（`settings.planner_provider="local"` 仍是默认）
+  - 微修：provider 解析逻辑改用 `payload.get("domain_hint")` 以匹配 `_validate_schema` 的 `.get()` 语义，避免 LLM 省略 `domain_hint` 字段时抛未分类 `KeyError`（schema 允许 key 缺失等价于 null）
+- **轮 3.3 已执行**（2026-04-21）：74 条新测试全绿，把 OpenAI-compatible provider 解析链路、QueryPlanner fallback 语义、缓存语义全部锁死
+  - `backend/tests/test_planner_openai_compatible_unit.py`（35 tests）：
     - TestSuccess（5）：合法响应解析、`domain_hint` 为 null / 缺 key / 整数 confidence 接受、5 个 domain 枚举全走通
     - TestHttpErrors（4）：500 / 401 / 429 / ConnectError 全映射到 `PlannerHttpError`
     - TestTimeout（1）：`httpx.TimeoutException` 映射到 `PlannerTimeoutError`
     - TestParseErrors（6）：body 非 JSON、envelope 无 choices / 空 choices / choice 无 message、content 非 JSON、content 非 str
     - TestSchemaErrors（12）：payload 非 object / `normalized_query` 缺失或错类型 / `domain_hint` 非枚举或错类型 / `lexical_terms` 非 list / 含非 str / 含空串 / `planner_confidence` 非数 / 超 [0,1] / bool 被拒
     - TestNormalization（4）：去重 / strip 空白 / 截断至 10 / 跳过纯空白项
-    - TestConstruction（3）：空 api_key 拒绝、`name="qwen_api"` 稳定、`api_base` 尾斜杠容忍
+    - TestConstruction（3）：空 api_key 拒绝、`name="openai_compatible"` 稳定、`api_base` 尾斜杠容忍
   - `backend/tests/test_planner_fallback.py`（13 tests）：
     - `TestFallbackOnProviderErrors`：4 类专属异常 + 基类 `PlannerProviderError` 各自触发 LocalRule fallback，`last_fallback_reason` 正确记录异常类名
     - `TestNonProviderErrorsPropagate`：`ValueError` / `TypeError` / `RuntimeError` 向上传播不降级
@@ -109,7 +109,7 @@
     - 禁用缓存：每次都击中 provider
     - **失败结果也进缓存**（防雪崩）：失败后二次调用不重试 primary、20 次同失败查询 primary 仅被调 1 次、不同失败查询各自独立
     - 缓存隔离：跨 planner 实例不泄漏
-  - `backend/tests/test_planner_qwen_api_contract.py`（17 tests）：
+  - `backend/tests/test_planner_openai_compatible_contract.py`（17 tests）：
     - 作为"理想 LLM 响应规格"，给每组 `2_6 §5` 契约提供 mocked 响应样本，证明**解析链路**能把合格 LLM 产出映射为合格 PlannerOutput
     - TestDomainHintContractMirror（3）：HR 独占 / Admin 独占 / 跨域共享词 null
     - TestLexicalTermsContractMirror（3）：无字符碎片、上界 10、去重
@@ -117,19 +117,19 @@
     - TestNormalizationContractMirror（3 参数化）：全角标点 / 英文大小写 / 空白压缩
     - TestDomainEnumCoverage（5 参数化）：5 个 domain 枚举全部 roundtrip
   - 全套：`206 passed, 9 xfailed, 0 failed`（新增 74 tests 全绿，原 132 passed + 9 xfailed 一字未动）
-- **轮 3.4 启动**（2026-04-21）：用户手动切 `ORIONSTACK_PLANNER_PROVIDER=qwen_api` + 设 `DASHSCOPE_API_KEY`，跑第一条活体 smoke "系统权限"，Qwen 首次真实调用成功（`fallback_reason=无`）
-  - `router_used: query_planner_qwen_api` 确认 provider 切换生效
+- **轮 3.4 启动**（2026-04-21）：用户手动切 `ORIONSTACK_PLANNER_PROVIDER=openai_compatible` + 设 planner API key，跑第一条活体 smoke "系统权限"，DashScope/Qwen 后端首次真实调用成功（`fallback_reason=无`）
+  - `router_used: query_planner_openai_compatible` 确认 provider 切换生效（历史 trace 中可能记录为兼容别名 `query_planner_qwen_api`）
   - trace：`normalized_query=系统权限 / domain_hint=it / lexical_terms=["系统权限","权限"] / planner_confidence=0.85 / retrieved_chunks=it-faq-012`
   - 契约关债判定：`2_6 §5.1 / §5.2 / §5.3` 三条 LocalRule 上的 xfail 债被此条单测命中关闭（`domain_hint` 正确窄化至 `it`、`lexical_terms` 为真实复合词无字符碎片、`confidence` 对 4 字具体查询给到 0.85 而非长度信号的低分）
   - 新建 `docs/2_8_smoke_results.md`：含 20 条 smoke battery 表（A/B/C/D/E 5 组覆盖 `2_6 §5` 5 组契约）+ A1 已填 + 明细 trace 记录区，作为 3.4 债关情况的证据地；后续每跑一条由用户粘 trace、助手填表
   - `fusion_score=0.03` 属 retrieval 层独立议题；当前 hybrid 路径暴露的是 raw RRF / fusion score，在 `RRF_RANK_CONSTANT=60` 下 top1 双榜 rank1 本就约为 `0.032786`，不应按“置信度”理解，也不影响 planner 关债判定（命中 `it-faq-012` 语义正确）
   - A2 "门禁权限怎么申请" 再一次全绿（4/4 契约），对称污染对 `it × admin` 在 planner 入口就分开 —— 从 rerank/evidence 兜底（defence-in-depth）升级为 planner 直接拒绝（defence-at-entry）
-  - 补充实查（当前云端链路）：`生产变更` 与 `生产变更需要怎么申请` 两条 query 在 `query_planner_qwen_api` 下均给出 `domain_hint=ops`，进入 `hybrid_rerank` 后以 `fallback_reason=None` 命中 `ops-faq-003`；说明 ops 语料与 retrieval domain filter 均已在现仓库兑现，`2_8 §4.4` 里旧的 "ops 域空缺" 判断已过期
+  - 补充实查（当前云端链路）：`生产变更` 与 `生产变更需要怎么申请` 两条 query 在 `query_planner_openai_compatible`（历史别名 `query_planner_qwen_api`）下均给出 `domain_hint=ops`，进入 `hybrid_rerank` 后以 `fallback_reason=None` 命中 `ops-faq-003`；说明 ops 语料与 retrieval domain filter 均已在现仓库兑现，`2_8 §4.4` 里旧的 "ops 域空缺" 判断已过期
   - 观测语义微调：`DebugInfo` / trace 已把 hybrid 路径的 raw RRF 分显式拆到 `fusion_score`；`retrieval_score` 现在只保留给 local / lexical 原始检索分，避免把 RRF 小数误读成“检索置信度”
-  - 通用兼容修：`QwenApiProvider` 新增对 `lexical_terms` 的 ASCII 大小写恢复。规则只作用于 `lexical_terms`，从用户 query 中恢复 `VPN` / `HR` / `FAQ` / `Wi-Fi` 这类 ASCII 词片段的原始大小写，不改 `normalized_query` 的规范化语义；动机是 `LexicalRetriever` 会把 `lexical_terms` 打到 ES `keywords` 精确 `term` 查询，若 LLM 把 `VPN` 降成 `vpn` 会丢掉 keyword boost。修复后 B2 `VPN无法连接怎么办` live 重新全绿，云端 smoke 恢复 `19/19 passed`
-  - 自动化改造：新建 `backend/tests/test_planner_qwen_api_live.py`，把 20 条 smoke battery 固化为 19 个自动化 live 测试（A5 跳过；E2 = A2 合并；E3 用 `_CallCountingProvider` 包装真实 provider 验证 `2_8 §5.2` 缓存契约）；每条 case 用 `SmokeCase` dataclass 声明期望（domain_hint / min-max confidence / normalized_query / must-contain / must-not-contain），断言失败会打印 Qwen 实际返回的完整 PlannerOutput 供人工复核；module 级 finalizer 把所有结果 dump 成 `docs/2_8_smoke_live_results__{tag}__{model}.json`（含通过率、每条 case 的 Qwen 输出、失败原因），文件名里的 tag/model 由 `ORIONSTACK_QWEN_API_BASE` 和 `ORIONSTACK_QWEN_API_MODEL` 自动派生，云端与本地跑的结果天然落盘到不同文件
+  - 通用兼容修：OpenAI-compatible provider 新增对 `lexical_terms` 的 ASCII 大小写恢复。规则只作用于 `lexical_terms`，从用户 query 中恢复 `VPN` / `HR` / `FAQ` / `Wi-Fi` 这类 ASCII 词片段的原始大小写，不改 `normalized_query` 的规范化语义；动机是 `LexicalRetriever` 会把 `lexical_terms` 打到 ES `keywords` 精确 `term` 查询，若 LLM 把 `VPN` 降成 `vpn` 会丢掉 keyword boost。修复后 B2 `VPN无法连接怎么办` live 重新全绿，云端 smoke 恢复 `19/19 passed`
+  - 自动化改造：新建 `backend/tests/test_planner_openai_compatible_live.py`，把 20 条 smoke battery 固化为 19 个自动化 live 测试（A5 跳过；E2 = A2 合并；E3 用 `_CallCountingProvider` 包装真实 provider 验证 `2_8 §5.2` 缓存契约）；每条 case 用 `SmokeCase` dataclass 声明期望（domain_hint / min-max confidence / normalized_query / must-contain / must-not-contain），断言失败会打印 provider 实际返回的完整 PlannerOutput 供人工复核；module 级 finalizer 把所有结果 dump 成 `docs/2_8_smoke_live_results__{tag}__{model}.json`（含通过率、每条 case 的 provider 输出、失败原因），文件名里的 tag/model 由 planner API 配置派生，云端与本地跑的结果天然落盘到不同文件
   - 添加 live 测试闸门：`backend/tests/conftest.py` 新增 `pytest_configure` 注册 `live` marker + `pytest_collection_modifyitems` 默认 skip 带 `live` marker 的测试；三种显式方式可 bypass —— `-m live` / 传入文件路径（路径含 `_live` 即豁免）/ 任何 `-m` 表达式含 `live`；默认 `pytest backend/tests/` 仍显示 `206 passed, 19 skipped, 9 xfailed` 零回归
-  - 执行方式：`pytest backend/tests/test_planner_qwen_api_live.py -v`（约 30-60 秒，消耗 ~19 次 DashScope API 调用）；跑完后 `docs/2_8_smoke_live_results__cloud__qwen-plus.json`（或对应本地 backend 的变体）可作为 `2_8_smoke_results.md §4 债关汇总` 的填表依据
+  - 执行方式：`pytest backend/tests/test_planner_openai_compatible_live.py -v`（约 30-60 秒，消耗 ~19 次 DashScope API 调用）；跑完后 `docs/2_8_smoke_live_results__cloud__qwen-plus.json`（或对应本地 backend 的变体）可作为 `2_8_smoke_results.md §4 债关汇总` 的填表依据
 - **轮 3.4.2 本地 fallback 画像**（2026-04-21 晚）：探索 `llama-server` + `Qwen3-1.7B-Q4_K_M` 作为 DashScope 断网时的离线 fallback provider
   - provider 修：(1) `max_tokens` 256 → 1024，给 reasoning 模型的 `<think>` + JSON 双段预算留头寸（Qwen3-1.7B 实测单次最大耗 537 tokens）；(2) 新增 `_sanitize_content` 防御性剥除 `<think>...</think>` + markdown fence + 未闭合 think 的清晰截断错误（当前 llama-server `--jinja` 已在服务端把 reasoning 分离到 `message.reasoning_content`，本逻辑对老版本 llama.cpp / DeepSeek-R1 / Kimi-K2 类模型仍是必要安全网）；(3) 新建 `scripts/probe_llama_server.py` 诊断工具（dump `content` / `reasoning_content` / `finish_reason` / `usage`），未来探索新本地模型直接用
   - 本地 live smoke 从 6/19 绿跃升到 **15/19 绿**，新落盘 `docs/2_8_smoke_live_results__local__qwen3-1.7b-q4_k_m.json`
@@ -143,9 +143,9 @@
 - `backend/app/observability/retrieval_trace.py` 与 `backend/app/testing/hard_cases_repo.py` 已落地第一轮最小排查链路
 - `docs/2_9_next_line_decision.md` 已锁定 `2_8` 收口后的推进方式：**开新线，不开新阶段**。理由是当前仍在 Phase 2 目标链内做真实坏例审计与剩余事项收口，没有发生阶段级目标切换；推荐下一条线为 **云端主链真实坏例审计与闭环**，`按需 API fallback` 排第二优先级
 - `docs/2_10_cloud_bad_case_audit_kickoff.md` 已记录新线启动时的第一手现状与首个结论：现有 `hard_cases` 以历史样本为主，`retrieval_trace` 若不持久化 `router_used` 就无法可靠切出 cloud `qwen_api` 主链，因此新线第一子任务先补观测而不是先调 retrieval；当前 `router_used` 已进 trace 与 hard case
-- `2_10` 第一轮云端样本审计（12 条：旧 hard case + 高风险泛问法）已完成：`query_planner_qwen_api` 样本 `12/12 ok`，其中 7 条稳定直答、5 条进入预期 clarification，**尚未筛出需要立即修复的 cloud 主链 blocker**。当前结论不是“再调 retrieval 常量”，而是“继续积累更自然的 cloud 坏例，再做分层归因”
-- 为 `2_10` 下一轮补了最小工具位：`scripts/audit-cloud-bad-cases.py`。后续可以直接按 `router_used=query_planner_qwen_api` 汇总 trace / hard case 分布和候选坏例，不再靠人工逐条翻 `jsonl`
-- 又补了必要样本生成器：`scripts/generate-cloud-audit-samples.py`。首轮 seeded audit 共 28 条 cloud `qwen_api` 样本，`28/28 ok`、`11` 条进入 clarification、`0` 条进入 hard case / candidate bad trace；目前仍未筛出 blocker，但沉淀了两条 clarification watchlist：`报销单据怎么提交` 与 `什么叫HR`
+- `2_10` 第一轮云端样本审计（12 条：旧 hard case + 高风险泛问法）已完成：`query_planner_openai_compatible`（兼容旧名 `query_planner_qwen_api`）样本 `12/12 ok`，其中 7 条稳定直答、5 条进入预期 clarification，**尚未筛出需要立即修复的 cloud 主链 blocker**。当前结论不是“再调 retrieval 常量”，而是“继续积累更自然的 cloud 坏例，再做分层归因”
+- 为 `2_10` 下一轮补了最小工具位：`scripts/audit-cloud-bad-cases.py`。后续可以直接按 `router_used=query_planner_openai_compatible`（兼容旧名 `query_planner_qwen_api`）汇总 trace / hard case 分布和候选坏例，不再靠人工逐条翻 `jsonl`
+- 又补了必要样本生成器：`scripts/generate-cloud-audit-samples.py`。首轮 seeded audit 共 28 条 cloud `openai_compatible` 样本，`28/28 ok`、`11` 条进入 clarification、`0` 条进入 hard case / candidate bad trace；目前仍未筛出 blocker，但沉淀了两条 clarification watchlist：`报销单据怎么提交` 与 `什么叫HR`
 - `docs/2_11_clarification_boundary_audit.md` 已完成 clarification 通用边界第一轮审计：当前规则只看“两个 accepted FAQ 候选 + rerank score gap <= 0.15”，不直接看 `planner_confidence` / query specificity；结论是**当前没有足够证据支持立即改 clarification 通用规则**。`报销单据怎么提交` 与 `什么叫HR` / `HR是什么` 仅作为 watchlist 继续观察，先不改代码
 - Phase 2 已补齐第一轮最小单测保护：
   - `backend/tests/test_phase2_settings.py`

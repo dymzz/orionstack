@@ -7,6 +7,7 @@
 > 前置收口：Phase 2 已关闭（见 `docs/2_1_progress.md §10`）
 > 目标：把外部 SaaS 导出数据安全、可控、可追溯地接入知识问答系统
 > 原则：**先静态知识副本层，再 action link，再动态查询，最后抽取自动化**
+> 边界：当前仓库示例使用 DashScope `qwen-plus` 与 `OdooAdapter`，但 Phase 3 目标是可替换 provider / adapter，不把 Qwen + Odoo 写成架构绑定
 
 ---
 
@@ -84,6 +85,7 @@
 - `DynamicQuery` 对象与 repo
 - 只接审批进度 / 余额等少量高价值状态
 - 运行时判权
+- 当前参考实现包含 `OdooAdapter` / `MockAdapter`，但适配器协议不绑定单一系统
 
 当前状态：
 
@@ -95,6 +97,7 @@
 - LLM 生成 FAQ / action link / dynamic query 候选
 - 人工审核
 - 发布
+- 当前仓库默认示例使用 DashScope `qwen-plus`，但抽取链路目标是可替换 provider
 
 当前状态：
 

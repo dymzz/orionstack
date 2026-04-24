@@ -1,4 +1,4 @@
-"""Unit tests for QwenApiProvider parse pipeline + error paths.
+"""Unit tests for the OpenAI-compatible planner provider parse pipeline.
 
 Covers docs/2_8_planner_llm_integration.md §4 (7-step parse pipeline) and
 §4.2 (exception taxonomy). All HTTP calls are mocked via httpx.MockTransport
@@ -21,7 +21,7 @@ import json
 import httpx
 import pytest
 
-from app.query.providers import QwenApiProvider
+from app.query.providers import OpenAICompatiblePlannerProvider, QwenApiProvider
 from app.query.providers.errors import (
     PlannerHttpError,
     PlannerParseError,
@@ -37,7 +37,7 @@ from app.query.query_planner import PlannerOutput
 
 
 def _envelope(payload: dict | str) -> dict:
-    """Wrap a payload dict (or raw content string) as a Qwen API response envelope."""
+    """Wrap a payload dict (or raw content string) as a chat-completions envelope."""
     content = json.dumps(payload) if isinstance(payload, dict) else payload
     return {"choices": [{"message": {"content": content}}]}
 
@@ -50,9 +50,11 @@ _VALID_PAYLOAD: dict = {
 }
 
 
-def _make_provider(handler, timeout: float = 1.0) -> QwenApiProvider:
+def _make_provider(
+    handler, timeout: float = 1.0
+) -> OpenAICompatiblePlannerProvider:
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return QwenApiProvider(
+    return OpenAICompatiblePlannerProvider(
         api_base="http://mock.test",
         api_model="qwen-test",
         api_key="mock-key",
@@ -299,7 +301,7 @@ class TestReasoningModelSanitization:
 
 
 class TestSchemaErrors:
-    def _provider_for(self, payload) -> QwenApiProvider:
+    def _provider_for(self, payload) -> OpenAICompatiblePlannerProvider:
         return _make_provider(_static_handler(_envelope(payload)))
 
     def test_payload_not_object_raises(self) -> None:
@@ -408,7 +410,7 @@ class TestNormalization:
 class TestConstruction:
     def test_empty_api_key_rejected(self) -> None:
         with pytest.raises(ValueError, match="api_key"):
-            QwenApiProvider(
+            OpenAICompatiblePlannerProvider(
                 api_base="http://mock",
                 api_model="qwen-test",
                 api_key="",
@@ -417,6 +419,19 @@ class TestConstruction:
 
     def test_name_attribute_is_stable(self) -> None:
         provider = _make_provider(_static_handler(_envelope(_VALID_PAYLOAD)))
+        assert provider.name == "openai_compatible"
+
+    def test_qwen_alias_keeps_compatibility_name(self) -> None:
+        client = httpx.Client(
+            transport=httpx.MockTransport(_static_handler(_envelope(_VALID_PAYLOAD)))
+        )
+        provider = QwenApiProvider(
+            api_base="http://mock.test",
+            api_model="qwen-test",
+            api_key="mock-key",
+            timeout_seconds=1.0,
+            http_client=client,
+        )
         assert provider.name == "qwen_api"
 
     def test_api_base_trailing_slash_trimmed(self) -> None:
@@ -426,7 +441,7 @@ class TestConstruction:
         client = httpx.Client(
             transport=httpx.MockTransport(_static_handler(_envelope(_VALID_PAYLOAD)))
         )
-        provider = QwenApiProvider(
+        provider = OpenAICompatiblePlannerProvider(
             api_base="http://mock.test/",
             api_model="qwen-test",
             api_key="mock-key",

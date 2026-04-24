@@ -16,6 +16,7 @@ from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.action_link_repo import ActionLinkRepo
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 from app.schemas.extraction import ExtractRequest, ExtractResponse, ReviewRequest, ReviewResponse
+from app.extract.providers.openai_compatible_provider import ExtractionProvider
 
 
 def _make_source_record(**overrides) -> SourceRecord:
@@ -173,15 +174,18 @@ class TestCandidateReviewer:
                 "label": "去请假系统",
                 "url": "http://localhost:8069/odoo/time-off",
                 "resource_type": "leave_form",
+                "business_domains": ["hr"],
             })
         )
         sr = _make_source_record()
         result = publish_candidate(candidate, sr, action_link_repo=al_repo)
         assert result is not None
         assert result.label == "去请假系统"
+        assert result.business_domains == ("hr",)
 
         links = al_repo.list_by_resource_type("leave_form")
         assert len(links) >= 1
+        assert links[0].business_domains == ("hr",)
 
     def test_publish_dynamic_query_candidate(self, tmp_path: Path) -> None:
         dq_repo = DynamicQueryRepo(storage_dir=tmp_path / "dqs")
@@ -193,15 +197,59 @@ class TestCandidateReviewer:
                 "resource_type": "leave_status",
                 "scope_type": "self",
                 "description": "假期余额查询",
+                "detect_patterns": [r"年假.{0,4}(余额|剩余)", r"剩余.{0,4}假期"],
             })
         )
         sr = _make_source_record()
         result = publish_candidate(candidate, sr, dynamic_query_repo=dq_repo)
         assert result is not None
         assert result.query_key == "leave_balance_test"
+        assert result.detect_patterns == (
+            r"年假.{0,4}(余额|剩余)",
+            r"剩余.{0,4}假期",
+        )
 
         dq = dq_repo.get_by_query_key("leave_balance_test")
         assert dq is not None
+        assert dq.detect_patterns == (
+            r"年假.{0,4}(余额|剩余)",
+            r"剩余.{0,4}假期",
+        )
+
+
+class _FakeExtractionProvider(ExtractionProvider):
+    name = "fake"
+
+    def complete(self, messages: list[dict[str, str]]) -> str:
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "candidate_type": "faq",
+                        "question": "如何请假？",
+                        "answer": "在系统中提交申请",
+                        "keywords": ["请假", "申请"],
+                        "business_domain": "hr",
+                    }
+                ]
+            }
+        )
+
+
+class TestExtractionService:
+    def test_extract_from_record_uses_injected_provider(self, tmp_path: Path) -> None:
+        from app.extract.extraction_service import ExtractionService
+
+        repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+        service = ExtractionService(candidate_repo=repo, provider=_FakeExtractionProvider())
+
+        sr = _make_source_record(source_system="manual_export")
+        candidates = service.extract_from_record(sr, candidate_types=["faq"])
+
+        assert len(candidates) == 1
+        assert candidates[0].extractor_model == "fake"
+        payload = json.loads(candidates[0].payload_json)
+        assert payload["question"] == "如何请假？"
 
 
 # ---------------------------------------------------------------------------

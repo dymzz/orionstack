@@ -17,6 +17,7 @@ class ActionLink:
     status: str
     published_at: str
     fresh_until: str | None = None
+    business_domains: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -31,4 +32,5 @@ class ActionLink:
             "status": self.status,
             "published_at": self.published_at,
             "fresh_until": self.fresh_until,
+            "business_domains": list(self.business_domains),
         }

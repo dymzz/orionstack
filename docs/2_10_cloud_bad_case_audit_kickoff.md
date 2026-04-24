@@ -2,13 +2,13 @@
 
 > 状态：**启动**  
 > 对应决策：`docs/2_9_next_line_decision.md`  
-> 目的：在 `2_8` planner 云端验证线收口后，开始对 **cloud `qwen_api` 主链** 的真实 bad case 做审计与闭环
+> 目的：在 `2_8` planner 云端验证线收口后，开始对 **cloud `openai_compatible` 主链** 的真实 bad case 做审计与闭环
 
 ---
 
 ## 1. 本线回答的问题
 
-> 在当前 `qwen-plus -> planner -> hybrid -> rerank/evidence -> clarification -> trace/hard_cases` 主链已经契约全绿后，真实运行里还剩哪些坏例？这些坏例分别属于哪一层？
+> 在当前 `OpenAI-compatible backend -> planner -> hybrid -> rerank/evidence -> clarification -> trace/hard_cases` 主链已经契约全绿后，真实运行里还剩哪些坏例？这些坏例分别属于哪一层？
 
 本线不回答：
 
@@ -30,8 +30,8 @@
 得到三个关键事实：
 
 1. `retrieval_traces.jsonl` 历史存量以 `2026-04-19 ~ 2026-04-20` 为主，`2026-04-21` 仅 8 条；它混合了 pre-cloud、本地 planner 和云端 planner 时期的数据，不能未经筛选直接拿来代表当前云端主链
-2. `hard_cases.jsonl` 当前仅 8 条，且大多是旧 trace 派生的 down-vote / `no_evidence` 记录，不能直接代表 cloud `qwen_api` 主链的当前坏例面
-3. 启动时 `retrieval_trace` **未持久化 `router_used`**；这意味着即便 trace 中已有 `domain_hint / retrieval_mode / rerank_score` 等字段，也无法直接从存量文件把 `query_planner_qwen_api` 与 `query_planner_local` / `rule_parser` 样本切开
+2. `hard_cases.jsonl` 当前仅 8 条，且大多是旧 trace 派生的 down-vote / `no_evidence` 记录，不能直接代表 cloud `openai_compatible` 主链的当前坏例面
+3. 启动时 `retrieval_trace` **未持久化 `router_used`**；这意味着即便 trace 中已有 `domain_hint / retrieval_mode / rerank_score` 等字段，也无法直接从存量文件把 `query_planner_openai_compatible`（历史兼容别名：`query_planner_qwen_api`）与 `query_planner_local` / `rule_parser` 样本切开
 
 ### 2.2 现有 `hard_cases` 的主要问题是“历史性”，不是“数量少”
 
@@ -59,7 +59,7 @@
 
 意义：
 
-- 后续可以直接按 `router_used == "query_planner_qwen_api"` 筛 cloud 主链样本
+- 后续可以直接按 `router_used == "query_planner_openai_compatible"` 筛 cloud 主链样本；旧数据兼容 `query_planner_qwen_api`
 - 不再需要靠 `domain_hint != None` 或时间段做不可靠代理筛选
 - `hard_cases` 也能区分它是云端主链坏例，还是旧本地路径残留
 
@@ -71,7 +71,7 @@
 
 ## 4. 第一轮样本审计（2026-04-22）
 
-在补齐 `router_used` 后，先用当前 cloud `qwen_api` 主链重跑了一批“旧 hard case + 高风险泛问法”样本，共 12 条：
+在补齐 `router_used` 后，先用当前 cloud `openai_compatible` 主链重跑了一批“旧 hard case + 高风险泛问法”样本，共 12 条：
 
 - `请假`
 - `如何上传文档？`
@@ -88,7 +88,7 @@
 
 ### 4.1 总览统计
 
-- `router_used == query_planner_qwen_api`：12 / 12
+- `router_used == query_planner_openai_compatible`（或历史别名 `query_planner_qwen_api`）：12 / 12
 - `final_status == ok`：12 / 12
 - `fallback_reason == conflict_requires_clarification`：5 / 12
 - `retrieval_mode == hybrid_rerank`：7 / 12
@@ -150,7 +150,7 @@
 
 职责：
 
-- 从 `retrieval_traces.jsonl` 与 `hard_cases.jsonl` 中只筛 `router_used == query_planner_qwen_api` 的样本
+- 从 `retrieval_traces.jsonl` 与 `hard_cases.jsonl` 中只筛 `router_used == query_planner_openai_compatible` 的样本，并兼容旧路由名 `query_planner_qwen_api`
 - 输出 cloud 主链的：
   - `final_status` 分布
   - `fallback_reason` 分布
@@ -178,7 +178,7 @@ uv run python scripts/audit-cloud-bad-cases.py
 
 首轮 seeded run 结果：
 
-- `router_used == query_planner_qwen_api`：28 / 28
+- `router_used == query_planner_openai_compatible`（或历史别名 `query_planner_qwen_api`）：28 / 28
 - `final_status == ok`：28 / 28
 - `fallback_reason == conflict_requires_clarification`：11 / 28
 - `hard_cases on same router`：0
@@ -199,8 +199,8 @@ uv run python scripts/audit-cloud-bad-cases.py
 
 在 `router_used` 已进 trace 之后，本线下一轮按以下顺序推进：
 
-1. 累积一批新的 cloud `qwen_api` trace
-2. 只筛 `router_used == query_planner_qwen_api` 的样本
+1. 累积一批新的 cloud `openai_compatible` trace
+2. 只筛 `router_used == query_planner_openai_compatible` 的样本，并兼容旧路由名 `query_planner_qwen_api`
 3. 继续运行：
    - `uv run python scripts/generate-cloud-audit-samples.py`
    - `uv run python scripts/audit-cloud-bad-cases.py`

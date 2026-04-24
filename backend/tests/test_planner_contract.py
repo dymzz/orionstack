@@ -3,19 +3,21 @@
 These tests exercise QueryPlanner with ``provider="local"`` and document the
 known intrinsic debt of LocalRuleProvider. LocalRule is a deterministic
 fallback; as of 2_8 its role changed from primary to last-resort fallback
-when the Qwen API path fails. These xfail markers remain because LocalRule's
+when the OpenAI-compatible planner path fails. These xfail markers remain because LocalRule's
 behavior itself has not changed — they are factually accurate.
 
 Debt-closure status (as of 2_8 轮 3.4 live smoke 2026-04-21):
-- **Primary provider (QwenApiProvider) closes all 9 contract debts**, verified by:
-  - ``test_planner_qwen_api_contract.py`` (17 mocked ideal-response tests, all green)
-  - ``test_planner_qwen_api_live.py`` (19 real DashScope tests, all green; raw
+- **Primary HTTP planner provider closes all 9 contract debts**, verified by:
+  - ``test_planner_openai_compatible_contract.py`` (17 mocked ideal-response
+    tests, all green)
+  - ``test_planner_openai_compatible_live.py`` (19 real DashScope tests, all green; raw
     outputs archived in ``docs/2_8_smoke_live_results__cloud__qwen-plus.json``.
     The file name derives from env at run time so cloud vs local backends
     produce distinct snapshots.)
 - LocalRule xfail markers STAY because LocalRule remains the fallback and
   still exhibits these behaviors. Removing them would cause failures the
-  moment LocalRule is exercised (e.g., when Qwen raises PlannerHttpError).
+  moment LocalRule is exercised (e.g., when the primary HTTP provider raises
+  PlannerHttpError).
 
 Contract test roadmap (LocalRule debt profile, unchanged):
 - §5.1 domain_hint          (3 tests, 2 xfail) — always returns None
@@ -25,7 +27,7 @@ Contract test roadmap (LocalRule debt profile, unchanged):
 - §5.5 stability            (1 test,  0 xfail) — deterministic by construction
 
 Total: 13 tests, 9 xfail, 4 green. **xfail count here measures LocalRule debt
-only**; Qwen primary-path quality is tracked in the two files named above.
+only**; primary-provider quality is tracked in the two files named above.
 See docs/2_7_planner_upgrade_plan.md §3.4 for the original layout rationale
 and docs/2_8_smoke_results.md §4 for the formal debt-closure summary.
 """

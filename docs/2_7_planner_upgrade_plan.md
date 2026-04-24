@@ -17,17 +17,17 @@
 
 > **项目定位澄清**（2026-04-21）：本项目的核心验证目标是**LLM 在 FAQ 场景下的 planner 能力**。LocalRule 不是质量竞争者，只是 LLM 失败时的兜底安全网。**不对 LocalRule 做任何深化投入**（见 `2_6 §6.1` 拒绝路径）。
 
-- **LLM Provider primary**：生产路径默认走选定的 LLM provider（`settings.planner_provider` 决定用 Qwen API 还是 llama.cpp）
+- **LLM Provider primary**：生产路径默认走选定的 LLM provider（`settings.planner_provider` 决定用 OpenAI-compatible HTTP provider 还是 llama.cpp）
 - **LocalRuleProvider fallback**：LLM 调用失败 / 超时 / 解析错误时自动降级；不依赖 LocalRule 的 confidence 做升级判断（其 confidence 只是长度信号，不可信）
 - **failure mode**：任何 LLM 异常都必须被 `QueryPlanner` 捕获并降级，**绝不能让异常传播到 `ChatService`**
-- **切换**：通过 `settings.planner_provider = "local" | "qwen_api" | "llama_cpp"` 手动切，不做自动切换
+- **切换**：通过 `settings.planner_provider = "local" | "openai_compatible" | "qwen_api" | "llama_cpp"` 手动切，不做自动切换；`qwen_api` 是兼容别名
 
 ### 1.3 Provider 角色与优先级
 
 | Provider | 角色 | name | 接入顺序 | 维护投入 |
 |---|---|---|---|---|
 | `LocalRuleProvider` | **兜底安全网**（LLM 失败降级目标） | `"local"` | 轮 2 完成（包装现有 stub） | **冻结**：不深化、不修复 `2_6 §3.x` 债 |
-| `QwenApiProvider` | **项目核心验证目标**（在线 LLM） | `"qwen_api"` | 轮 3 首发 | 持续投入，prompt 工程、解析稳定性 |
+| `OpenAICompatiblePlannerProvider` | **项目核心验证目标**（在线 LLM；首个实测后端为 DashScope/Qwen） | `"openai_compatible"` | 轮 3 首发 | 持续投入，prompt 工程、解析稳定性 |
 | `LlamaCppProvider` | **离线替代**（本地 GGUF 模型，当前运行 `ggml-org/gemma-3-1b-it-GGUF`）| `"llama_cpp"` | 轮 3 后续 | 与 Qwen API 并列，共享 prompt |
 
 LocalRule **只需要存在**，不需要变好。它的 9 条 xfail（`test_planner_contract.py`）是 LLM 需要关闭的债，**不是 LocalRule 需要关闭的债**。
@@ -37,7 +37,7 @@ LocalRule **只需要存在**，不需要变好。它的 9 条 xfail（`test_pla
 - **纯手动**，通过 `settings.planner_provider` 配置项切
 - **不做自动降级延迟验证**（本项目是验证环境，非生产）
 - 4B 模型即便 ~4000ms 也接受；延迟由用户自行判断是否可接受
-- API key 走 `os.environ`（`DASHSCOPE_API_KEY` / `QWEN_API_KEY`），不进 `settings.py`
+- API key 走 `os.environ`（优先 `ORIONSTACK_PLANNER_API_KEY` / `ORIONSTACK_LLM_API_KEY`，兼容 `DASHSCOPE_API_KEY` / `QWEN_API_KEY`），不进持久化配置
 
 ### 1.5 缓存策略
 
@@ -50,15 +50,14 @@ LocalRule **只需要存在**，不需要变好。它的 9 条 xfail（`test_pla
 配置示例：
 
 ```text
-ORIONSTACK_PLANNER_PROVIDER=local         # or "qwen_api" or "llama_cpp"
-ORIONSTACK_PLANNER_MODEL=gemma3:1b        # 保留字段，具体含义由 provider 解读
-ORIONSTACK_QWEN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
-ORIONSTACK_QWEN_API_MODEL=qwen-plus       # 轮 3 首发使用的 Qwen API 模型
+ORIONSTACK_PLANNER_PROVIDER=local         # or "openai_compatible" / "qwen_api" / "llama_cpp"
+ORIONSTACK_PLANNER_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
+ORIONSTACK_PLANNER_API_MODEL=qwen-plus    # 轮 3 首发使用的示例模型
 ORIONSTACK_LOCAL_LLM_BASE_URL=http://localhost:8080/v1    # llama.cpp llama-server OpenAI-compatible 端点（默认 8080）
 ORIONSTACK_LOCAL_LLM_MODEL=gemma-3-1b-it  # 轮 3 后续接入；当前 llama-server 加载 ggml-org/gemma-3-1b-it-GGUF
 ORIONSTACK_PLANNER_TIMEOUT_SECONDS=30     # LLM 调用超时，验证环境容忍较长延迟
 ORIONSTACK_PLANNER_CACHE_ENABLED=true     # normalized_query -> PlannerOutput 进程缓存
-DASHSCOPE_API_KEY=xxx                     # env-only, 不在 settings.py
+ORIONSTACK_PLANNER_API_KEY=xxx            # env-only, 不在持久化配置
 ```
 
 ## 2. 分轮边界
@@ -82,7 +81,7 @@ DASHSCOPE_API_KEY=xxx                     # env-only, 不在 settings.py
 
 **明确不做的**：
 
-- 不加 `QwenApiProvider` / `LlamaCppProvider` 任何实现
+- 不加 HTTP provider / `LlamaCppProvider` 任何实现
 - 不改 `settings.py` 新增字段
 - 不改 `ChatService` 调用 planner 的方式
 - 不写 `httpx` / `openai` / `llama-cpp-python` 等依赖
@@ -94,15 +93,15 @@ DASHSCOPE_API_KEY=xxx                     # env-only, 不在 settings.py
 
 ### 轮 3：LLM provider 接入 🔄 执行中（2026-04-21 启动）
 
-**触发**：用户明确批准"按推荐顺序 → Qwen API 先"。
+**触发**：用户明确批准"按推荐顺序 → OpenAI-compatible 云端先"；首个验证后端为 DashScope/Qwen。
 
 **范围**：
 
-- 先 `QwenApiProvider` 后 `LlamaCppProvider`
+- 先 `OpenAICompatiblePlannerProvider` 后 `LlamaCppProvider`
 - `QueryPlanner` 内捕获 LLM 异常并降级到 `LocalRuleProvider`（非 confidence-based，见 §1.2）
 - 接入后对 `test_planner_contract.py` 的 xfail 不直接 un-mark（那是 LocalRuleProvider 的契约），而是在 LLM provider 侧新增**平行契约测试**跑相同 5 组契约
 
-**详细分解**：由 `docs/2_8_planner_llm_integration.md` 承接，分 4 个子轮（3.1 基础设施 + prompt / 3.2 QwenApiProvider 实现 / 3.3 测试 / 3.4 真实 API smoke）。
+**详细分解**：由 `docs/2_8_planner_llm_integration.md` 承接，分 4 个子轮（3.1 基础设施 + prompt / 3.2 OpenAI-compatible provider 实现 / 3.3 测试 / 3.4 真实 API smoke）。
 
 ---
 

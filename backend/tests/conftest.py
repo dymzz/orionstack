@@ -126,8 +126,7 @@ def pytest_collection_modifyitems(
         return
 
     # If the user passed a path that explicitly targets a live test file, honor
-    # that too — running `pytest backend/tests/test_planner_qwen_api_live.py`
-    # should NOT be silently skipped.
+    # that too instead of silently skipping it.
     explicit_args = [str(arg) for arg in config.args]
     if any("_live" in arg for arg in explicit_args):
         return

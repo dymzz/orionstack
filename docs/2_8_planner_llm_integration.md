@@ -1,13 +1,13 @@
 # 2.8 Planner LLM 接入计划（轮 3 详细）
 
-> 承接 `docs/2_7_planner_upgrade_plan.md §2 轮 3`，把 "LLM provider 接入" 拆成 4 个可独立 review 的子轮。定位：**实现计划**。本文件**只覆盖 QwenApiProvider**；LlamaCppProvider 由后续独立文档承接。
+> 承接 `docs/2_7_planner_upgrade_plan.md §2 轮 3`，把 "LLM provider 接入" 拆成 4 个可独立 review 的子轮。定位：**实现计划**。当前实现以 `OpenAICompatiblePlannerProvider` 为主；DashScope/Qwen 是首个验证后端，`qwen_api` 仅保留为兼容别名。
 
 ---
 
 ## 1. 背景与硬约束回顾
 
 - 项目核心验证目标：LLM 在中文 FAQ 场景下的 planner 能力（`2_6 §6.2`）
-- 首发 provider：`QwenApiProvider`，用户已明确选择 Qwen API 先（2026-04-21）
+- 首发 provider：`OpenAICompatiblePlannerProvider`，用户已明确选择 OpenAI-compatible 云端先（2026-04-21；首个验证后端为 DashScope/Qwen）
 - 架构位置：`QueryPlanner` 通过 `PlannerProvider` Protocol 分发（`2_7 §3.1` 已就绪）
 - 硬约束：
   - LLM 异常**必须**在 `QueryPlanner` 层被捕获并降级到 `LocalRuleProvider`，**绝不**传播到 `ChatService`
@@ -21,32 +21,32 @@
 
 ### 轮 3.1：基础设施 + prompt 设计 🔄（本文件同步执行）
 
-- `settings.py` 新增 Qwen API / 缓存 / 超时相关字段（惰性，默认值不触发任何 LLM 调用）
+- `settings.py` 新增 planner API / 缓存 / 超时相关字段（惰性，默认值不触发任何 LLM 调用）
 - 本文件 §3 / §4 固定 prompt 文本与 JSON schema 约束
 - **完成标志**：pytest 全套仍 `132 passed, 9 xfailed, 0 failed`；新 settings 字段可从环境变量读取
 
-### 轮 3.2：QwenApiProvider 实现 ⏸
+### 轮 3.2：OpenAI-compatible provider 实现 ⏸
 
-- 新建 `backend/app/query/providers/` 包，落 `qwen_api_provider.py`
+- 新建 `backend/app/query/providers/` 包，落 `openai_compatible_provider.py`
 - 用 `httpx`（已在 pyproject）调 DashScope OpenAI-compatible 端点
-- `QueryPlanner._create_provider` 扩 `"qwen_api"` 分支
+- `QueryPlanner._build_provider` 扩 `"openai_compatible"` 分支，并保留 `"qwen_api"` 兼容别名
 - `QueryPlanner.plan()` 加 try/except + 进程缓存 + fallback 到 `LocalRuleProvider`
-- **完成标志**：全套仍全绿（QwenApiProvider 默认不被激活，`planner_provider = "local"` 不变）
+- **完成标志**：全套仍全绿（OpenAI-compatible provider 默认不被激活，`planner_provider = "local"` 不变）
 
 ### 轮 3.3：测试 ⏸
 
-- `test_planner_qwen_api_unit.py`：mock httpx 响应，覆盖成功路径 + 5 类错误路径
-- `test_planner_qwen_api_contract.py`：用 mocked "理想 LLM 响应" 跑 `2_6 §5` 五组契约，验证**解析层**能映射到合格 PlannerOutput（不是验证 LLM 本身）
+- `test_planner_openai_compatible_unit.py`：mock httpx 响应，覆盖成功路径 + 5 类错误路径
+- `test_planner_openai_compatible_contract.py`：用 mocked "理想 LLM 响应" 跑 `2_6 §5` 五组契约，验证**解析层**能映射到合格 PlannerOutput（不是验证 LLM 本身）
 - `test_planner_fallback.py`：验证任意 LLM 错误 → LocalRuleProvider 输出 + trace `fallback_reason`
 - `test_planner_cache.py`：验证同 query 第二次调用不触发 httpx
 - **完成标志**：全套 `(132 + N) passed, 9 xfailed, 0 failed`；`QueryPlanner` 的实际行为被不同路径的单测锁死
 
 ### 轮 3.4：真实 API smoke + hard_cases 回放 ⏸
 
-- 用户提供 `DASHSCOPE_API_KEY`，手动把 `ORIONSTACK_PLANNER_PROVIDER=qwen_api` 跑本地 smoke
+- 用户提供 planner API key，手动把 `ORIONSTACK_PLANNER_PROVIDER=openai_compatible` 跑本地 smoke
 - 选 `hard_cases.jsonl` 现有 8+ 条查询 + §3.1 prompt 的代表性边界查询共约 20 条，逐条记录 `(domain_hint, lexical_terms, planner_confidence)` before/after
 - 人工 review：看 9 条 xfail 契约有几条实际被 Qwen 关掉
-- **完成标志**：产出一份 `docs/2_8_smoke_results.md` 或等价记录，明示"Qwen 在此场景下能/不能满足哪些契约"
+- **完成标志**：产出一份 `docs/2_8_smoke_results.md` 或等价记录，明示"当前 provider/backend 在此场景下能/不能满足哪些契约"
 
 ---
 
@@ -116,7 +116,7 @@
 
 ### 4.1 JSON schema（内部校验）
 
-解析步骤（`QwenApiProvider` 内部执行）：
+解析步骤（`OpenAICompatiblePlannerProvider` 内部执行）：
 
 1. **HTTP 成功检查**：status_code 200；其他 → `PlannerHttpError`
 2. **响应 body JSON 解析**：`json.loads(resp.text)`；失败 → `PlannerParseError`
@@ -185,14 +185,14 @@ ChatService.ask(query)
 
 | 字段 | 默认值 | env var | 用途 |
 |---|---|---|---|
-| `qwen_api_base` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `ORIONSTACK_QWEN_API_BASE` | Qwen OpenAI-compatible 端点 |
-| `qwen_api_model` | `qwen-plus` | `ORIONSTACK_QWEN_API_MODEL` | 模型 id |
+| `planner_api_base` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `ORIONSTACK_PLANNER_API_BASE` | OpenAI-compatible planner 端点 |
+| `planner_api_model` | `qwen-plus` | `ORIONSTACK_PLANNER_API_MODEL` | 模型 id |
 | `local_llm_base_url` | `http://localhost:8080/v1` | `ORIONSTACK_LOCAL_LLM_BASE_URL` | llama.cpp llama-server 端点（轮 3 后续使用） |
 | `local_llm_model` | `gemma-3-1b-it` | `ORIONSTACK_LOCAL_LLM_MODEL` | 本地模型 id |
 | `planner_timeout_seconds` | `30` | `ORIONSTACK_PLANNER_TIMEOUT_SECONDS` | LLM 调用超时 |
 | `planner_cache_enabled` | `True` | `ORIONSTACK_PLANNER_CACHE_ENABLED` | 是否启用进程缓存 |
 
-**API key 不进 settings**：`DASHSCOPE_API_KEY`（DashScope）直接由 `QwenApiProvider` 从 `os.environ` 读取。
+**API key 不进持久化配置**：优先读取 `ORIONSTACK_PLANNER_API_KEY` / `ORIONSTACK_LLM_API_KEY`，兼容 `DASHSCOPE_API_KEY` / `QWEN_API_KEY`。
 
 ---
 
@@ -206,15 +206,15 @@ ChatService.ask(query)
 
 ### 7.2 契约镜像（轮 3.3）
 
-- 新建 `test_planner_qwen_api_contract.py`
-- 不 mock `QwenApiProvider`，而是 mock 它内部的 httpx 响应
+- 新建 `test_planner_openai_compatible_contract.py`
+- 不 mock provider 本身，而是 mock 它内部的 httpx 响应
 - 构造 9 份"理想 LLM 响应"JSON，验证每份都能被解析为满足对应 xfail 契约的 `PlannerOutput`
 - **这测的是解析代码的完备性，不是 LLM 的输出质量**
 
 ### 7.3 活体 smoke（轮 3.4，手动）
 
-- 需要 `DASHSCOPE_API_KEY`
-- 手动触发：`ORIONSTACK_PLANNER_PROVIDER=qwen_api uv run python -m backend.app.main`
+- 需要 `ORIONSTACK_PLANNER_API_KEY` / `ORIONSTACK_LLM_API_KEY`，或兼容 key（如 `DASHSCOPE_API_KEY`）
+- 手动触发：`ORIONSTACK_PLANNER_PROVIDER=openai_compatible uv run python -m backend.app.main`
 - 输入 ~20 条查询跑一遍，导出 trace → `docs/2_8_smoke_results.md`
 - **这是对 "LLM 在本场景有效" 的唯一真实信号**
 
@@ -226,7 +226,7 @@ ChatService.ask(query)
 - **Prompt 精调迭代**：本文件锁 v1 prompt，若 3.4 smoke 发现质量不足，起 prompt v2 的 ADR
 - **`PlannerOutput` schema 扩展**：硬禁
 - **答案生成侧 LLM**：长期禁（`2_7 §6`）
-- **全链路 e2e 测试**：`ChatService` + `QwenApiProvider` + 真实 ES，不在本轮
+- **全链路 e2e 测试**：`ChatService` + OpenAI-compatible provider + 真实 ES，不在本轮
 
 ---
 

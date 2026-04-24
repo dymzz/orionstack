@@ -16,9 +16,9 @@ class PlannerProvider(Protocol):
     """Provider contract for planner implementations.
 
     See docs/2_7_planner_upgrade_plan.md §3.1 for the rationale and roadmap.
-    Future providers (QwenApiProvider / LlamaCppProvider) will implement this
-    same surface; QueryPlanner is a thin shell that dispatches to the selected
-    provider without caring about its internals.
+    Provider implementations can target any supported backend so long as they
+    satisfy this surface. QueryPlanner stays intentionally thin and dispatches
+    by provider name without caring about transport details.
     """
 
     name: str
@@ -80,7 +80,7 @@ class QueryPlanner:
     def __init__(self, *, provider: str = "local", model: str = "") -> None:
         self._provider_name = provider
         self._model = model
-        self._impl: PlannerProvider = self._create_provider(provider, model)
+        self._impl: PlannerProvider = self._build_provider(provider, model)
         self._fallback: PlannerProvider = LocalRuleProvider()
         self._cache: dict[str, PlannerOutput] = {}
         self._cache_enabled: bool = self._read_cache_setting()
@@ -92,36 +92,13 @@ class QueryPlanner:
 
         return _settings.planner_cache_enabled
 
-    def _create_provider(self, name: str, model: str) -> PlannerProvider:
+    def _build_provider(self, name: str, model: str) -> PlannerProvider:
         if name == "local":
             return LocalRuleProvider()
-        if name == "qwen_api":
-            return self._create_qwen_api_provider()
-        raise ValueError(f"unknown planner provider: {name!r}")
-
-    def _create_qwen_api_provider(self) -> PlannerProvider:
-        # Lazy imports: avoid loading httpx / provider modules unless the
-        # qwen_api provider is actually selected.
-        import os
-
         from app.config.settings import settings as _settings
-        from app.query.providers import QwenApiProvider
+        from app.query.providers import build_planner_provider
 
-        api_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
-        if not api_key:
-            api_key = os.environ.get("QWEN_API_KEY", "").strip()
-        if not api_key:
-            raise ValueError(
-                "DASHSCOPE_API_KEY (or QWEN_API_KEY) environment variable is "
-                "required when planner_provider='qwen_api'"
-            )
-
-        return QwenApiProvider(
-            api_base=_settings.qwen_api_base,
-            api_model=_settings.qwen_api_model,
-            api_key=api_key,
-            timeout_seconds=_settings.planner_timeout_seconds,
-        )
+        return build_planner_provider(name, _settings)
 
     @property
     def router_name(self) -> str:

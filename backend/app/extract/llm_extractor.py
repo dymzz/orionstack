@@ -13,7 +13,7 @@ def extract_candidates(
     source_record: SourceRecord,
     candidate_type: str,
     payloads: list[dict[str, Any]],
-    extractor_model: str = "qwen-plus",
+    extractor_model: str = "openai_compatible",
     prompt_version: str = "v1",
     tenant_id: str = "default",
 ) -> list[ExtractionCandidate]:

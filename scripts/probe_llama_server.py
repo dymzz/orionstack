@@ -1,9 +1,9 @@
 """Probe local llama-server to see the raw content it returns.
 
-Replicates the exact request QwenApiProvider sends (system prompt, temperature,
-max_tokens, response_format) and prints the un-sanitized content so we can see
-what the parser is actually receiving. Uses Settings() so it reads the same
-.env / environment that the backend would.
+Replicates the exact request the OpenAI-compatible planner provider sends
+(system prompt, temperature, max_tokens, response_format) and prints the
+un-sanitized content so we can see what the parser is actually receiving.
+Uses Settings() so it reads the same .env / environment that the backend would.
 
 Usage:
     uv run python scripts/probe_llama_server.py
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 import httpx  # noqa: E402
 
 from app.config.settings import Settings  # noqa: E402
-from app.query.providers.qwen_api_provider import _SYSTEM_PROMPT  # noqa: E402
+from app.query.providers.openai_compatible_provider import _SYSTEM_PROMPT  # noqa: E402
 
 
 QUERIES = [
@@ -32,10 +32,10 @@ QUERIES = [
 
 def main() -> None:
     s = Settings()
-    base = s.qwen_api_base.rstrip("/")
+    base = s.planner_api_base.rstrip("/")
     url = f"{base}/chat/completions"
     print(f"api_base = {base}")
-    print(f"api_model = {s.qwen_api_model}")
+    print(f"api_model = {s.planner_api_model}")
     print()
 
     for q in QUERIES:
@@ -43,7 +43,7 @@ def main() -> None:
         print(f"QUERY: {q}")
         print("=" * 72)
         payload = {
-            "model": s.qwen_api_model,
+            "model": s.planner_api_model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": f"查询：{q}"},

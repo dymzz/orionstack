@@ -1,31 +1,33 @@
-"""Live smoke test against real DashScope Qwen API.
+"""Live smoke test against a real OpenAI-compatible planner endpoint.
 
 Runs the 20-query smoke battery from docs/2_8_smoke_results.md §2 against a
-real Qwen endpoint and asserts per-contract expectations derived from
+real planner endpoint and asserts per-contract expectations derived from
 docs/2_6_planner_quality_review.md §5.
 
 Scope:
-- Only tests the **planner layer** (QwenApiProvider.plan()). Does NOT touch
+- Only tests the **planner layer** (OpenAICompatiblePlannerProvider.plan()).
+  Does NOT touch
   Elasticsearch, ChatService, or FastAPI. Retrieval is a separate concern.
-- This is the sole real-signal test for "Qwen in this FAQ scenario meets
-  planner contracts" — docs/2_8 §7.3 activity smoke.
+- This is the sole real-signal test for "the primary planner provider in this
+  FAQ scenario meets planner contracts" — docs/2_8 §7.3 activity smoke.
 
 Execution:
-- Requires `DASHSCOPE_API_KEY` (or `QWEN_API_KEY`) environment variable.
+- Requires `ORIONSTACK_PLANNER_API_KEY` / `ORIONSTACK_LLM_API_KEY`, or a
+  compatibility key such as `DASHSCOPE_API_KEY` / `QWEN_API_KEY`.
 - Without it, the entire module is skipped — safe to include in default
   pytest runs.
 - Makes ~19 real API calls (~30-60s total depending on network). Not
   suitable for CI loops; run explicitly:
 
-      uv run python -m pytest backend/tests/test_planner_qwen_api_live.py -v
+      uv run python -m pytest backend/tests/test_planner_openai_compatible_live.py -v
 
 Output:
 - Per-case PASS/FAIL in pytest log with detailed assertion messages on
-  failure (showing Qwen's actual PlannerOutput).
+  failure (showing the provider's actual PlannerOutput).
 - Module finalizer writes a JSON snapshot of all results to
   `docs/2_8_smoke_live_results__{tag}__{model}.json`, where `tag` is
-  `cloud` / `local` / `other` derived from ``ORIONSTACK_QWEN_API_BASE``
-  and `model` is the sanitized ``ORIONSTACK_QWEN_API_MODEL``. This lets
+  `cloud` / `local` / `other` derived from ``ORIONSTACK_PLANNER_API_BASE``
+  and `model` is the sanitized ``ORIONSTACK_PLANNER_API_MODEL``. This lets
   cloud (DashScope qwen-plus) and local (llama-server Qwen3-*) runs
   coexist as separate snapshots for side-by-side comparison. The baseline
   cloud result is checked in at
@@ -51,15 +53,20 @@ pytestmark = pytest.mark.live
 # Module-level skip if no API key
 # ---------------------------------------------------------------------------
 
-_API_KEY = os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("QWEN_API_KEY")
+_API_KEY = (
+    os.environ.get("ORIONSTACK_PLANNER_API_KEY")
+    or os.environ.get("ORIONSTACK_LLM_API_KEY")
+    or os.environ.get("DASHSCOPE_API_KEY")
+    or os.environ.get("QWEN_API_KEY")
+)
 if not _API_KEY:
     pytest.skip(
-        "DASHSCOPE_API_KEY / QWEN_API_KEY not set; skipping live Qwen smoke.",
+        "planner API key not set; skipping live planner smoke.",
         allow_module_level=True,
     )
 
 from app.config.settings import Settings  # noqa: E402
-from app.query.providers import QwenApiProvider  # noqa: E402
+from app.query.providers import OpenAICompatiblePlannerProvider  # noqa: E402
 from app.query.providers.errors import PlannerProviderError  # noqa: E402
 from app.query.query_planner import PlannerOutput, QueryPlanner  # noqa: E402
 
@@ -240,12 +247,12 @@ _RESULTS: dict[str, dict[str, Any]] = {}
 
 
 @pytest.fixture(scope="module")
-def qwen_provider() -> QwenApiProvider:
-    """Construct a real QwenApiProvider from current Settings + env."""
+def planner_provider() -> OpenAICompatiblePlannerProvider:
+    """Construct a real planner provider from current Settings + env."""
     s = Settings()
-    return QwenApiProvider(
-        api_base=s.qwen_api_base,
-        api_model=s.qwen_api_model,
+    return OpenAICompatiblePlannerProvider(
+        api_base=s.planner_api_base,
+        api_model=s.planner_api_model,
         api_key=_API_KEY,
         timeout_seconds=s.planner_timeout_seconds,
     )
@@ -292,17 +299,23 @@ def _results_dumper():
     repo_root = here.parents[2]  # backend/tests/<file> → repo root
     settings = Settings()
     out_path = _results_output_path(
-        repo_root, settings.qwen_api_base, settings.qwen_api_model
+        repo_root, settings.planner_api_base, settings.planner_api_model
     )
     payload = {
-        "backend_tag": _derive_backend_tag(settings.qwen_api_base),
-        "api_base": settings.qwen_api_base,
-        "api_model": settings.qwen_api_model,
+        "backend_tag": _derive_backend_tag(settings.planner_api_base),
+        "api_base": settings.planner_api_base,
+        "api_model": settings.planner_api_model,
         "total_cases": len(_RESULTS),
         "passed": sum(1 for r in _RESULTS.values() if not r.get("failures")),
         "failed": sum(1 for r in _RESULTS.values() if r.get("failures")),
         "results": _RESULTS,
     }
+    # A network-denied live run can fail before producing any real provider
+    # signal. Keep the checked-in clean baseline intact in that case and write
+    # a separate diagnostic snapshot instead.
+    if any("error" in result for result in _RESULTS.values()) and out_path.exists():
+        out_path = out_path.with_name(f"{out_path.stem}__failed{out_path.suffix}")
+
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -375,11 +388,13 @@ def _check_case(case: SmokeCase, output: PlannerOutput) -> list[str]:
 
 
 @pytest.mark.parametrize("case", BATTERY, ids=lambda c: c.case_id)
-def test_smoke_case(qwen_provider: QwenApiProvider, case: SmokeCase) -> None:
+def test_smoke_case(
+    planner_provider: OpenAICompatiblePlannerProvider, case: SmokeCase
+) -> None:
     try:
-        output = qwen_provider.plan(case.query)
+        output = planner_provider.plan(case.query)
     except PlannerProviderError as exc:
-        # Record the failure and fail loudly — Qwen hard failures matter.
+        # Record the failure and fail loudly — planner hard failures matter.
         _RESULTS[case.case_id] = {
             "query": case.query,
             "note": case.note,
@@ -415,16 +430,16 @@ def test_smoke_case(qwen_provider: QwenApiProvider, case: SmokeCase) -> None:
 
 
 # ---------------------------------------------------------------------------
-# E3 cache stability — two identical calls go to Qwen only once
+# E3 cache stability — two identical calls hit the provider only once
 # ---------------------------------------------------------------------------
 
 
 class _CallCountingProvider:
-    """Wraps a real QwenApiProvider, counting plan() invocations."""
+    """Wraps a real planner provider, counting plan() invocations."""
 
-    name = "qwen_api"
+    name = "openai_compatible"
 
-    def __init__(self, inner: QwenApiProvider) -> None:
+    def __init__(self, inner: OpenAICompatiblePlannerProvider) -> None:
         self._inner = inner
         self.call_count = 0
 
@@ -433,10 +448,12 @@ class _CallCountingProvider:
         return self._inner.plan(normalized_query)
 
 
-def test_e3_cache_suppresses_second_identical_call(qwen_provider: QwenApiProvider) -> None:
+def test_e3_cache_suppresses_second_identical_call(
+    planner_provider: OpenAICompatiblePlannerProvider,
+) -> None:
     """2_8 §5.2 cache contract: two identical queries in the same process
     hit the provider exactly once."""
-    counting = _CallCountingProvider(qwen_provider)
+    counting = _CallCountingProvider(planner_provider)
     planner = QueryPlanner(provider="local", model="stub")
     planner._impl = counting  # type: ignore[attr-defined]
     planner._cache = {}  # type: ignore[attr-defined]

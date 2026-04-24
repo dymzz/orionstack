@@ -33,8 +33,17 @@ class ActionLinkRepo:
     def list_by_source_record(self, source_record_id: str) -> list[ActionLink]:
         return [l for l in self._iter_all() if l.source_record_id == source_record_id and l.status == "active"]
 
+    def list_by_domain(self, domain: str) -> list[ActionLink]:
+        # `business_domains` is the primary routing hint for showing action
+        # links alongside FAQ/dynamic-query results.
+        return [
+            l
+            for l in self._iter_all()
+            if domain in l.business_domains and l.status == "active"
+        ]
+
     def upsert(self, link: ActionLink) -> None:
-        existing = self._find_by_system_and_resource(link.system_type, link.resource_type)
+        existing = self.get(link.action_link_id)
         if existing is not None:
             self._remove(existing.action_link_id)
         self._append(link)
@@ -47,12 +56,6 @@ class ActionLinkRepo:
                 from dataclasses import replace
                 l = replace(l, status=status)
             self._append(l)
-
-    def _find_by_system_and_resource(self, system_type: str, resource_type: str) -> ActionLink | None:
-        for l in self._iter_all():
-            if l.system_type == system_type and l.resource_type == resource_type:
-                return l
-        return None
 
     def _remove(self, action_link_id: str) -> None:
         links = [l for l in self._iter_all() if l.action_link_id != action_link_id]
@@ -90,4 +93,5 @@ class ActionLinkRepo:
             status=d.get("status", "active"),
             published_at=d.get("published_at", ""),
             fresh_until=d.get("fresh_until"),
+            business_domains=tuple(d.get("business_domains", [])),
         )

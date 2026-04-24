@@ -1,11 +1,11 @@
 # 2_8 Planner LLM Integration — 3.4 活体 Smoke 记录
 
 > **状态**：**完成** —
-> · 云基线 **19/19 全绿**（`docs/2_8_smoke_live_results__cloud__qwen-plus.json`），qwen-plus 关掉 `2_6 §5` 的 9/9 契约债
+> · 云基线 **19/19 全绿**（`docs/2_8_smoke_live_results__cloud__qwen-plus.json`），DashScope qwen-plus 作为 OpenAI-compatible 后端关掉 `2_6 §5` 的 9/9 契约债
 > · 本地 fallback 画像 **15/19 绿**（`docs/2_8_smoke_live_results__local__qwen3-1.7b-q4_k_m.json`），Qwen3-1.7B 关 5/9 契约债 + 4 条小模型特有偏差，见 `§4.5`
-> **Provider under test**：`qwen_api`（OpenAI-compatible），双后端：DashScope `qwen-plus`（生产 primary） + 本地 `llama-server` + `Qwen3-1.7B-Q4_K_M`（离线 fallback）
+> **Provider under test**：`openai_compatible`，双后端：DashScope `qwen-plus`（示例云端 primary） + 本地 `llama-server` + `Qwen3-1.7B-Q4_K_M`（离线 fallback）
 > **Scope**：`docs/2_8_planner_llm_integration.md §7.3`
-> **目的**：回答 "Qwen 在本项目中文 FAQ 场景下，能关掉 `2_6 §5` 的哪几条 planner 契约债"
+> **目的**：回答 "当前 OpenAI-compatible provider/backend 在本项目中文 FAQ 场景下，能关掉 `2_6 §5` 的哪几条 planner 契约债"
 > **不回答**：LLM 延迟（用户手动容忍）、retrieval 分值绝对值（独立层）、答案文本正确性（长期禁 LLM 参与答案生成，见 `2_7 §6`）
 
 ---
@@ -16,8 +16,8 @@
 
 1. 设定环境变量：
    ```powershell
-   $env:DASHSCOPE_API_KEY="<user-provided>"
-   $env:ORIONSTACK_PLANNER_PROVIDER="qwen_api"
+   $env:ORIONSTACK_PLANNER_API_KEY="<user-provided>"
+   $env:ORIONSTACK_PLANNER_PROVIDER="openai_compatible"
    uv run python -m backend.app.main
    ```
 2. 逐条通过 chat API 发送 `§2` battery 的查询。
@@ -30,8 +30,8 @@
 
 | trace 字段 | 本文档列 | 契约对应 |
 |---|---|---|
-| `router_used` | — | 必须 = `query_planner_qwen_api`（否则该行作废） |
-| `fallback_reason` | — | 应为 "无"；非无则该行记为 fallback 事件，不计 Qwen 契约债 |
+| `router_used` | — | 必须 = `query_planner_openai_compatible`（历史 trace 可能是兼容别名 `query_planner_qwen_api`，否则该行作废） |
+| `fallback_reason` | — | 应为 "无"；非无则该行记为 fallback 事件，不计 provider 契约债 |
 | `normalized_query` | `§2.D` 列 | 2_6 §5.4 |
 | `domain_hint` | `§2.A/E` 列 | 2_6 §5.1 |
 | `lexical_terms` | `§2.B` 列 | 2_6 §5.2 |
@@ -98,9 +98,9 @@
 
 ## 3. 执行进度
 
-全部 19 条 case + E3 缓存稳定性通过自动化 `test_planner_qwen_api_live.py` 批量跑完（2026-04-21），原始 JSON 落盘在 `docs/2_8_smoke_live_results__cloud__qwen-plus.json`。
+全部 19 条 case + E3 缓存稳定性通过自动化 `test_planner_openai_compatible_live.py` 批量跑完（2026-04-21），原始 JSON 落盘在 `docs/2_8_smoke_live_results__cloud__qwen-plus.json`。
 
-文件名按 `2_8_smoke_live_results__{tag}__{model}.json` 命名：`tag` 根据 `ORIONSTACK_QWEN_API_BASE` 取 `cloud` / `local` / `other`，`model` 是 `ORIONSTACK_QWEN_API_MODEL` 的小写转义结果。这样云 qwen-plus 和本地 Qwen3-1.7B 跑完之后会落盘到两个不同文件，便于对比。
+文件名按 `2_8_smoke_live_results__{tag}__{model}.json` 命名：`tag` 根据 `ORIONSTACK_PLANNER_API_BASE` 取 `cloud` / `local` / `other`，`model` 是 `ORIONSTACK_PLANNER_API_MODEL` 的小写转义结果。这样云 qwen-plus 和本地 Qwen3-1.7B 跑完之后会落盘到两个不同文件，便于对比。
 
 - [x] A1-A5（domain_hint 窄化 / null）
 - [x] B1-B4（lexical_terms 真实词）
@@ -108,11 +108,11 @@
 - [x] D1-D3（normalization）
 - [x] E1 + E3 （对称污染 + 缓存稳定；E2 与 A2 合并）
 
-进度：**19/19 绿**（100%），**Qwen 全程健康**（19 次调用 `fallback_reason` 全部为 无）。
+进度：**19/19 绿**（100%），**provider 全程健康**（19 次调用 `fallback_reason` 全部为 无）。
 
 首次批量跑出现 4 条 "失败"（A3 / B2 / C3 / C4），经人工分析全部为 **测试断言错误**，不是 Qwen 质量问题：
 
-- **A3 / B2**：`must_contain_terms` 写的是字面相等检查；实际 Qwen 返回了**更丰富的复合词**（如 `请假审批进度` 包含 `请假审批`、`VPN连接` 包含 `VPN`）。语义上完全满足契约，只是断言方式太严。已修为**子串覆盖语义**（见 `test_planner_qwen_api_live.py::_check_case` 修改）。
+- **A3 / B2**：`must_contain_terms` 写的是字面相等检查；实际 provider 返回了**更丰富的复合词**（如 `请假审批进度` 包含 `请假审批`、`VPN连接` 包含 `VPN`）。语义上完全满足契约，只是断言方式太严。已修为**子串覆盖语义**（见 `test_planner_openai_compatible_live.py::_check_case` 修改）。
 - **C3 / C4**：原以为“生产变更”是跨域泛问（期望 `max_confidence=0.50`），但 Qwen 将其正确识别为 **ops 域专有术语**（production change management）+ 0.85。原 `hard_cases.jsonl` 的负反馈是检索层问题（无 ops 域 FAQ 索引），非 planner 问题。已修为 `expected_domain=ops` + `min_confidence=0.60`。
 
 JSON 文件已回写所有 failures 为 空 + 添加 `_post_correction_note`；测试文件已更新断言代码。未重跑 API（省配额），然后续测试可自然验证。
@@ -128,7 +128,7 @@ JSON 文件已回写所有 failures 为 空 + 添加 `_post_correction_note`；�
 | 契约组 | `test_planner_contract.py` 中的 xfail 数 | Qwen 关债 | 证据 | 建议动作 |
 |---|---|---|---|---|
 | §5.1 domain_hint | 2 条 xfail（`hr_exclusive`, `admin_exclusive`） | **2/2** | A3 `hr` / A2 `admin` / A4 `finance` / A5 `null` / C3/C4 `ops` | 见下方架构说明——xfail 保留 |
-| §5.2 lexical_terms | 2 条 xfail（`no_char_fragments`, `bounded_<=10`） | **2/2** | B1-B4 零碎片，全员 ≤ 5 terms（+ QwenApiProvider 内置 10 截断） | 同上 |
+| §5.2 lexical_terms | 2 条 xfail（`no_char_fragments`, `bounded_<=10`） | **2/2** | B1-B4 零碎片，全员 ≤ 5 terms（+ OpenAI-compatible provider 内置 10 截断） | 同上 |
 | §5.3 confidence | 2 条 xfail（`specific>pan`, `nonsense<threshold`） | **2/2** | C1=0.92 > C2=0.38；C5=0.08 远低 `route_confidence_threshold` | 同上 |
 | §5.4 normalization | 3 条 xfail（`fullwidth_punct`, `english_case`, `internal_whitespace`） | **3/3** | D1 全角→ASCII、D2 大小写+多空白压缩、间接根据 D2 推定中文间空白也被压缩 | 同上 |
 | §5.5 稳定性 | 0 xfail（LocalRule 本就确定性）| — | E3 `call_count=1`，`outputs_equal=true` | — |
@@ -140,7 +140,7 @@ JSON 文件已回写所有 failures 为 空 + 添加 `_post_correction_note`；�
 初版计划写的是 “关的契约 → 移除 xfail marker”。这个思路在升级后的架构下 **不成立**：
 
 - `test_planner_contract.py` 的 fixture 用 `QueryPlanner(provider="local")` 跑测试 —— 它测的是 **LocalRuleProvider 的行为**
-- 我们**没有修改 LocalRule**，只是新增了 QwenApiProvider 作为 primary，LocalRule 降级为 fallback
+- 我们**没有修改 LocalRule**，只是新增了 OpenAI-compatible provider 作为 primary，LocalRule 降级为 fallback
 - LocalRule 自身的行为未变 —— 依旧返 `None` domain、字符碎片、常量置信度、不做归一化
 - 如果移除 xfail marker，这 9 条测试在 `Settings(planner_provider="local")` 下会内然 FAIL
 - LocalRule 依然会被执行（当 Qwen 抛 `PlannerHttpError` 时 fallback 触发），它的债仍然现实存在
@@ -148,15 +148,15 @@ JSON 文件已回写所有 failures 为 空 + 添加 `_post_correction_note`；�
 所以正确的 "关债表达" 是：
 
 1. **`test_planner_contract.py` 的 xfail 保留不动** — 它们确实反映 LocalRule fallback 路径的债。文件开头 docstring 已更新清晰说明这一点
-2. **通过新建 Qwen 专属契约测试表达关债**：
-   - `test_planner_qwen_api_contract.py`（17 条 mocked，绿）— 证明解析链能把哈格 LLM 响应映射到合格 PlannerOutput
-   - `test_planner_qwen_api_live.py`（19 条活体，绿）— 证明真实 Qwen 的响应确实满足契约
+2. **通过 OpenAI-compatible provider 契约测试表达关债**：
+   - `test_planner_openai_compatible_contract.py`（17 条 mocked，绿）— 证明解析链能把合格 LLM 响应映射到合格 PlannerOutput
+   - `test_planner_openai_compatible_live.py`（19 条活体，绿）— 证明当前 DashScope/Qwen 响应确实满足契约
 
 这两个文件的 36 条绿测 = Qwen 关债的活性证据；LocalRule 的 9 条 xfail = fallback 路径害总存在的债存货。两者并行是正确的，不冲突。
 
 ### 4.3 剩余 Qwen 也不关的债
 
-**没有**。Qwen 在本次 19 条活体 smoke 上达成了 `2_6 §5` 全部 9 条契约。
+**没有**。当前 DashScope/Qwen 后端在本次 19 条活体 smoke 上达成了 `2_6 §5` 全部 9 条契约。
 
 ### 4.4 非债债提醒：债在别的层
 
@@ -363,14 +363,14 @@ _待跑，验证缓存：trace 字段应与 A1 全等_
 
 - **2026-04-21**：初建；A1 "系统权限" 已跑，Qwen 首次活体调用成功，关 3 条契约债（§5.1 / §5.2 / §5.3）
 - **2026-04-21**：A2 "门禁权限怎么申请" 已跑，4 组契约全绿（§5.1/§5.2/§5.3/§5.4），对称污染对 `it × admin` 在 planner 层分开，进度 2/20
-- **2026-04-21**：新建 `test_planner_qwen_api_live.py` 把剩余 17 条 battery + E3 缓存稳定性固化为自动化活体测试；conftest.py 加 `live` marker 闸门，默认 pytest 跳过
+- **2026-04-21**：新建 `test_planner_openai_compatible_live.py` 把剩余 17 条 battery + E3 缓存稳定性固化为自动化活体测试；conftest.py 加 `live` marker 闸门，默认 pytest 跳过
 - **2026-04-21**：用户一次性跑完 19 条，初版 15 passed / 4 failed；经分析 4 条失败全为断言逻辑错误而非 Qwen 质量问题：
   - A3/B2 断言太严（字面相等 → 子串覆盖）
   - C3/C4 假设错误（生产变更是 ops 域专有词而非跨域泛问）
   - 修正断言逻辑后 19/19 全绿
 - **2026-04-21**：3.4 收官——Qwen 皆查 `2_6 §5` 全 9 条契约债；LocalRule xfail marker 保留，但 `test_planner_contract.py` docstring 已更新清晰说明架构；full suite 状态 `206 passed, 19 skipped, 9 xfailed`
 - **2026-04-21 轮 3.4.2**：探索本地 llama-server + Qwen3-1.7B 作为离线 fallback。发现两个问题并修正：
-  - `QwenApiProvider._sanitize_content` 新增防御性 `<think>` 块剥离 + markdown fence 剥离 + 截断时的明确错误（对老版 llama.cpp / DeepSeek-R1 类模型有用；当前 llama-server `--jinja` 下已服务端分离 reasoning_content，不需要）
+  - `OpenAICompatiblePlannerProvider._sanitize_content` 新增防御性 `<think>` 块剥离 + markdown fence 剥离 + 截断时的明确错误（对老版 llama.cpp / DeepSeek-R1 类模型有用；当前 llama-server `--jinja` 下已服务端分离 reasoning_content，不需要）
   - `max_tokens` 从 256 升到 1024，给 reasoning 模型思考+JSON 双段预算预留。Qwen3-1.7B 实测单次最大耗 537 tokens。1024 对云 qwen-plus 无额外成本（DashScope 按实际 completion_tokens 计费）
   - 添加 `scripts/probe_llama_server.py` 诊断工具（dump raw content + reasoning_content + finish_reason + usage）供未来探索新模型直接使用
   - 本地 live smoke 从 6/19 跃升到 15/19，4 条剩余偏差（B1/B2/B3/D3）经验证为**小模型能力天花板**而非参数选项问题（`finish_reason=stop`、JSON 完整、温度已 0）。接受 gap 将 Qwen3-1.7B 定位为离线 fallback，画像归档入 `§4.5`

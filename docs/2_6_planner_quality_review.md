@@ -190,7 +190,7 @@ def _extract_lexical_terms(query: str) -> list[str]:
 
 ### 6.2 路径 B：引入 LLM —— **项目核心路径**
 
-- **做什么**：`QwenApiProvider` 与 `LlamaCppProvider` 两套 provider 实现 `PlannerProvider` Protocol；prompt 设计让小模型输出结构化 `{"domain_hint": ..., "lexical_terms": [...], "planner_confidence": ...}`；温度 0 + 缓存保证可重现
+- **做什么**：`OpenAICompatiblePlannerProvider` 与 `LlamaCppProvider` 两套 provider 实现 `PlannerProvider` Protocol；prompt 设计让模型输出结构化 `{"domain_hint": ..., "lexical_terms": [...], "planner_confidence": ...}`；温度 0 + 缓存保证可重现
 - **收益**：直接关闭 `2_6 §3.1/§3.2/§3.3/§3.4` 四条质量债；验证 LLM 在中文 FAQ 场景下的 planner 能力
 - **风险**：LLM 非确定性（缓解：温度 0 + 缓存）、延迟（缓解：验证环境接受秒级，不做压测）、解析失败（缓解：降级到 LocalRuleProvider）
 - **这是本项目验证的核心**

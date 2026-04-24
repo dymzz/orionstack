@@ -25,6 +25,7 @@ SEEDS: list[dict] = [
         "resource_type": "leave_form",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["hr"],
     },
     {
         "action_link_id": "al-odoo-attendances",
@@ -33,6 +34,7 @@ SEEDS: list[dict] = [
         "resource_type": "attendance_record",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["hr"],
     },
     {
         "action_link_id": "al-odoo-employees",
@@ -41,6 +43,7 @@ SEEDS: list[dict] = [
         "resource_type": "employee_profile",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["hr", "admin"],
     },
     {
         "action_link_id": "al-odoo-expense",
@@ -49,6 +52,7 @@ SEEDS: list[dict] = [
         "resource_type": "expense_form",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["finance"],
     },
     {
         "action_link_id": "al-odoo-invoices",
@@ -57,6 +61,7 @@ SEEDS: list[dict] = [
         "resource_type": "invoice_list",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["finance"],
     },
     {
         "action_link_id": "al-odoo-crm",
@@ -65,6 +70,7 @@ SEEDS: list[dict] = [
         "resource_type": "crm_pipeline",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["sales"],
     },
     {
         "action_link_id": "al-odoo-project",
@@ -73,6 +79,7 @@ SEEDS: list[dict] = [
         "resource_type": "project_board",
         "system_type": "odoo",
         "access_scope": "internal",
+        "business_domains": ["product", "it"],
     },
 ]
 
@@ -93,6 +100,7 @@ def main() -> None:
             access_scope=seed["access_scope"],
             status="active",
             published_at=now,
+            business_domains=tuple(seed.get("business_domains", [])),
         )
         repo.upsert(link)
         print(f"[seed] {link.action_link_id}: {link.label} -> {link.url}")

@@ -27,7 +27,7 @@ from app.query.query_planner import PlannerOutput, QueryPlanner
 class _CountingProvider:
     """Provider that tracks plan() invocation count; returns a canned output."""
 
-    name: str = "qwen_api"
+    name: str = "openai_compatible"
     output: PlannerOutput = field(
         default_factory=lambda: PlannerOutput(
             normalized_query="stub",
@@ -49,7 +49,7 @@ class _CountingProvider:
 class _RaisingCountingProvider:
     """Provider that tracks invocation count and always raises HttpError."""
 
-    name: str = "qwen_api"
+    name: str = "openai_compatible"
     call_count: int = 0
 
     def plan(self, normalized_query: str) -> PlannerOutput:

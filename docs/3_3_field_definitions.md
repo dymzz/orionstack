@@ -275,7 +275,7 @@ running → failed           (全部失败)
 
 ### 9.1 语义
 
-`SystemAdapter` 是所有外部系统适配器的抽象协议（Protocol）。动态查询不直连具体外部系统，而是通过此协议解耦。任何新系统只需实现此协议即可接入。
+`SystemAdapter` 是所有外部系统适配器的抽象协议（Protocol）。动态查询不直连具体外部系统，而是通过此协议解耦。任何新系统只需实现此协议即可接入。当前仓库已实现 `OdooAdapter` / `MockAdapter`，但它们是现有实现，不是架构边界本身。
 
 ### 9.2 接口定义
 
@@ -318,7 +318,7 @@ class SystemAdapter(Protocol):
 
 | resource_type | Odoo 模型 | 字段 |
 |---|---|---|
-| `leave_status` | `hr.leave` | `name, holiday_type, date_from, date_to, state, number_of_days` |
+| `leave_status` | `hr.leave` | `name, holiday_status_id, date_from, date_to, state, number_of_days` |
 | `expense_status` | `hr.expense` | `name, total_amount, state, date` |
 | `attendance_balance` | `hr.attendance` | `check_in, check_out, worked_hours` |
 | `crm_pipeline` | `crm.lead` | `name, expected_revenue, stage_id, probability` |
@@ -335,11 +335,11 @@ class SystemAdapter(Protocol):
 
 | 环境变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | string | `odoo` | 适配器名称 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | string | `odoo` | 当前默认适配器名称，可替换为其他实现 |
 | `ORIONSTACK_ODOO_URL` | string | `http://localhost:8069` | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | string | `odoo` | Odoo 数据库名 |
-| `ORIONSTACK_ODOO_UID` | int | `1` | Odoo 用户 ID |
-| `ORIONSTACK_ODOO_PASSWORD` | string | `admin` | Odoo 用户密码 |
+| `ORIONSTACK_ODOO_UID` | int | `2` | Odoo 用户 ID |
+| `ORIONSTACK_ODOO_PASSWORD` | string | — | Odoo 用户密码；仅在使用 OdooAdapter 时通过环境变量注入 |
 
 ---
 

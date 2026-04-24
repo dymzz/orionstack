@@ -1,4 +1,4 @@
-"""Contract mirror: verify QwenApiProvider parse pipeline maps IDEAL LLM
+"""Contract mirror: verify the OpenAI-compatible planner provider maps IDEAL LLM
 responses to PlannerOutputs that satisfy the 5 contract groups from
 docs/2_6_planner_quality_review.md §5.
 
@@ -27,20 +27,20 @@ import json
 import httpx
 import pytest
 
-from app.query.providers import QwenApiProvider
+from app.query.providers import OpenAICompatiblePlannerProvider
 
 
 _DOMAIN_ENUM = ("hr", "finance", "admin", "it", "ops", "legal", "product", "sales")
 
 
-def _make_provider_returning(payload: dict) -> QwenApiProvider:
+def _make_provider_returning(payload: dict) -> OpenAICompatiblePlannerProvider:
     envelope = {"choices": [{"message": {"content": json.dumps(payload)}}]}
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=envelope)
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return QwenApiProvider(
+    return OpenAICompatiblePlannerProvider(
         api_base="http://mock",
         api_model="qwen-test",
         api_key="mock-key",

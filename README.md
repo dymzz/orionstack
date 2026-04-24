@@ -2,6 +2,8 @@
 
 企业知识助手 / 文档问答最小可运行系统。
 
+当前仓库提供的是一组可运行的默认实现，而不是把架构目标锁死在单一厂商上：检索默认走 Elasticsearch，LLM 侧当前示例主要使用 OpenAI-compatible 配置与 DashScope `qwen-plus`，动态查询通过 adapter 接外部系统，仓库里当前已实现 `OdooAdapter` 和 `MockAdapter`。这些都是现有实现与示例环境，不是项目边界本身。
+
 ## 能做什么
 
 - 上传 `.txt` / `.md` / `.pdf` / `.docx` 文档
@@ -14,7 +16,7 @@
 
 - Python 3.12+（建议使用 `.venv`）
 - Node.js 18+（仅开发和构建前端时需要，生产部署不需要）
-- Docker（Phase 2 检索增强时需要 Elasticsearch）
+- Docker（Elasticsearch 必需；如需验证当前 OdooAdapter 示例，可再启动 Odoo）
 
 ## 快速启动（默认全开档）
 
@@ -164,8 +166,17 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名称 |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 默认开启 planner -> hybrid -> rerank/evidence 服务链 |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 默认开启小 query 规则与 lexical 过渡优化 |
+| `ORIONSTACK_PLANNER_PROVIDER` | `local` | Planner provider：`local` / `openai_compatible` / `qwen_api` / `llama_cpp` |
+| `ORIONSTACK_PLANNER_API_BASE` | DashScope OpenAI-compatible 地址 | 当前 planner provider 的 API 地址 |
+| `ORIONSTACK_PLANNER_API_MODEL` | `qwen-plus` | 当前 planner provider 的模型名 |
+| `ORIONSTACK_EXTRACTION_PROVIDER` | `openai_compatible` | 抽取 provider：`openai_compatible` / `qwen_api` / `llama_cpp` |
+| `ORIONSTACK_EXTRACTION_API_BASE` | DashScope OpenAI-compatible 地址 | 当前抽取 provider 的 API 地址 |
+| `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 当前抽取 provider 的模型名 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 动态查询适配器：`odoo` / `mock` |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
+
+兼容说明：旧的 `ORIONSTACK_QWEN_API_*`、`ORIONSTACK_QWEN_API_KEY`、`DASHSCOPE_API_KEY` / `QWEN_API_KEY` 仍可作为回退配置读取，但不再是唯一入口。
 
 生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`：
 
@@ -235,7 +246,7 @@ orionstack/
 │       └── types/            # 类型定义
 ├── scripts/                 # 启动与维护脚本
 ├── docs/                    # 设计与进度文档
-├── docker-compose.yml       # ES + ollama 容器配置
+├── docker-compose.yml       # ES + Odoo 示例容器配置
 ├── .env.example             # 环境变量参考
 └── README.md
 ```
