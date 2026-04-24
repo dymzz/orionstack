@@ -33,6 +33,9 @@ docs/
 ├── 2_2_file_responsibilities.md
 ├── 2_3_field_definitions.md
 ├── 2_4_test_strategy.md
+├── 2_9_next_line_decision.md
+├── 2_10_provider_bad_case_audit_kickoff.md
+├── 2_11_clarification_boundary_audit.md
 ├── 3_1_progress.md
 ├── 3_2_file_responsibilities.md
 ├── 3_3_field_definitions.md

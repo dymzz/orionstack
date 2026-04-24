@@ -141,11 +141,11 @@
 - `backend/app/retrieval/vector_retriever.py` 与 `backend/app/retrieval/hybrid_retriever.py` 已落地最小 Hybrid Retrieval
 - `backend/app/retrieval/reranker.py` 与 `backend/app/retrieval/evidence_extractor.py` 已接入 planner 高置信的 hybrid 服务链
 - `backend/app/observability/retrieval_trace.py` 与 `backend/app/testing/hard_cases_repo.py` 已落地第一轮最小排查链路
-- `docs/2_9_next_line_decision.md` 已锁定 `2_8` 收口后的推进方式：**开新线，不开新阶段**。理由是当前仍在 Phase 2 目标链内做真实坏例审计与剩余事项收口，没有发生阶段级目标切换；推荐下一条线为 **云端主链真实坏例审计与闭环**，`按需 API fallback` 排第二优先级
-- `docs/2_10_cloud_bad_case_audit_kickoff.md` 已记录新线启动时的第一手现状与首个结论：现有 `hard_cases` 以历史样本为主，`retrieval_trace` 若不持久化 `router_used` 就无法可靠切出 cloud `qwen_api` 主链，因此新线第一子任务先补观测而不是先调 retrieval；当前 `router_used` 已进 trace 与 hard case
-- `2_10` 第一轮云端样本审计（12 条：旧 hard case + 高风险泛问法）已完成：`query_planner_openai_compatible`（兼容旧名 `query_planner_qwen_api`）样本 `12/12 ok`，其中 7 条稳定直答、5 条进入预期 clarification，**尚未筛出需要立即修复的 cloud 主链 blocker**。当前结论不是“再调 retrieval 常量”，而是“继续积累更自然的 cloud 坏例，再做分层归因”
-- 为 `2_10` 下一轮补了最小工具位：`scripts/audit-cloud-bad-cases.py`。后续可以直接按 `router_used=query_planner_openai_compatible`（兼容旧名 `query_planner_qwen_api`）汇总 trace / hard case 分布和候选坏例，不再靠人工逐条翻 `jsonl`
-- 又补了必要样本生成器：`scripts/generate-cloud-audit-samples.py`。首轮 seeded audit 共 28 条 cloud `openai_compatible` 样本，`28/28 ok`、`11` 条进入 clarification、`0` 条进入 hard case / candidate bad trace；目前仍未筛出 blocker，但沉淀了两条 clarification watchlist：`报销单据怎么提交` 与 `什么叫HR`
+- `docs/2_9_next_line_decision.md` 已锁定 `2_8` 收口后的推进方式：**开新线，不开新阶段**。理由是当前仍在 Phase 2 目标链内做真实坏例审计与剩余事项收口，没有发生阶段级目标切换；推荐下一条线为 **Provider 主链真实坏例审计与闭环**，`按需 API fallback` 排第二优先级
+- `docs/2_10_provider_bad_case_audit_kickoff.md` 已记录新线启动时的第一手现状与首个结论：现有 `hard_cases` 以历史样本为主，`retrieval_trace` 若不持久化 `router_used` 就无法可靠切出当前 provider 主链，因此新线第一子任务先补观测而不是先调 retrieval；当前 `router_used` 已进 trace 与 hard case
+- `2_10` 第一轮 provider 样本审计（12 条：旧 hard case + 高风险泛问法）已完成：`query_planner_openai_compatible`（兼容旧名 `query_planner_qwen_api`）样本 `12/12 ok`，其中 7 条稳定直答、5 条进入预期 clarification，**尚未筛出需要立即修复的 provider 主链 blocker**。当前结论不是“再调 retrieval 常量”，而是“继续积累更自然的 provider 坏例，再做分层归因”
+- 为 `2_10` 下一轮补了最小工具位：`scripts/audit-provider-bad-cases.py`。后续可以直接按当前 provider router 汇总 trace / hard case 分布、审计分类和候选坏例，不再靠人工逐条翻 `jsonl`
+- 又补了必要样本生成器：`scripts/generate-provider-audit-samples.py`。首轮 seeded audit 共 28 条 provider 主链样本，`28/28 ok`、`11` 条进入 clarification、`0` 条进入 hard case / candidate bad trace；目前仍未筛出 blocker，但沉淀了两条 clarification watchlist：`报销单据怎么提交` 与 `什么叫HR`
 - `docs/2_11_clarification_boundary_audit.md` 已完成 clarification 通用边界第一轮审计：当前规则只看“两个 accepted FAQ 候选 + rerank score gap <= 0.15”，不直接看 `planner_confidence` / query specificity；结论是**当前没有足够证据支持立即改 clarification 通用规则**。`报销单据怎么提交` 与 `什么叫HR` / `HR是什么` 仅作为 watchlist 继续观察，先不改代码
 - Phase 2 已补齐第一轮最小单测保护：
   - `backend/tests/test_phase2_settings.py`
@@ -898,7 +898,7 @@ normalize
 
 Planner 的 `_DOMAIN_ENUM` 与 `_SYSTEM_PROMPT` 已同步扩展至 8 域。
 
-### 10.4 云端主链审计样本
+### 10.4 Provider 主链审计样本
 
 审计样本从 28 条扩展至 **84 条**，覆盖 8 域多话题。
 

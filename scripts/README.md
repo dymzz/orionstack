@@ -234,20 +234,22 @@ python scripts/run-phase2-regression.py -k clarification
 
 参数：`--check-only`，额外参数透传给 `pytest`。
 
-#### `generate-cloud-audit-samples.py`
+#### `generate-provider-audit-samples.py`
 
-生成 8 域 FAQ 审计样本（114 条），覆盖所有 seed FAQ。
+生成 provider 主链审计样本（114 条），覆盖所有 seed FAQ。旧入口 `generate-cloud-audit-samples.py` 保留兼容。
 
 ```bash
-python scripts/generate-cloud-audit-samples.py
+python scripts/generate-provider-audit-samples.py
 ```
 
-#### `audit-cloud-bad-cases.py`
+#### `audit-provider-bad-cases.py`
 
-审计云端 bad cases，检查抽取质量。
+审计当前 planner provider 主链 bad cases，按语料缺口、clarification 边界、evidence 阈值、planner 边界等队列归类。旧入口 `audit-cloud-bad-cases.py` 保留兼容。
 
 ```bash
-python scripts/audit-cloud-bad-cases.py
+python scripts/audit-provider-bad-cases.py
+python scripts/audit-provider-bad-cases.py --provider openai_compatible,llama_cpp
+python scripts/audit-provider-bad-cases.py --include-local
 ```
 
 #### `probe_llama_server.py`

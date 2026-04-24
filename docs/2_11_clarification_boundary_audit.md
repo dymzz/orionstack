@@ -1,14 +1,14 @@
 # 2.11 Clarification 边界审计（通用规则视角）
 
 > 状态：**第一轮审计完成**  
-> 前置文档：`docs/2_10_cloud_bad_case_audit_kickoff.md`  
-> 目的：回答当前 cloud `qwen_api` 主链下，clarification 的触发边界是否表现稳定、是否出现通用性过宽
+> 前置文档：`docs/2_10_provider_bad_case_audit_kickoff.md`  
+> 目的：回答当前 provider 主链下，clarification 的触发边界是否表现稳定、是否出现通用性过宽
 
 ---
 
 ## 1. 本文回答的问题
 
-> 当前 clarification 是按什么通用规则触发的？这些规则在真实 cloud 主链样本上表现如何？有没有出现“看起来过宽，但还不够构成 bug”的边界样本？
+> 当前 clarification 是按什么通用规则触发的？这些规则在真实 provider 主链样本上表现如何？有没有出现“看起来过宽，但还不够构成 bug”的边界样本？
 
 本文不回答：
 
@@ -79,7 +79,7 @@
 
 ## 4. Cloud 主链第一轮样本结果
 
-基于 `scripts/generate-cloud-audit-samples.py` + `scripts/audit-cloud-bad-cases.py`，当前已补 28 条 cloud `qwen_api` 样本。
+基于 `scripts/generate-provider-audit-samples.py` + `scripts/audit-provider-bad-cases.py`，当前已补 28 条 provider 主链样本。
 
 结果：
 
@@ -211,7 +211,7 @@
 
 1. finance 具体问法是否成簇地落入 clarification
 2. acronym / 缩写问法是否成簇地落入 clarification
-3. 是否出现“用户明显更像要单一答案，却被反复澄清”的 cloud hard case
+3. 是否出现“用户明显更像要单一答案，却被反复澄清”的 provider hard case
 
 只有这些模式开始成簇出现，才值得进入规则级讨论。
 
@@ -222,7 +222,7 @@
 以下任一情况出现，再进入 clarification 规则改造讨论：
 
 1. 同一类具体问法在一个 domain 中持续误触 clarification
-2. cloud `qwen_api` 主链下出现 clarification 相关的真实 down-vote / hard case
-3. `scripts/audit-cloud-bad-cases.py` 开始稳定筛出与 clarification 相关的 candidate bad traces
+2. provider 主链下出现 clarification 相关的真实 down-vote / hard case
+3. `scripts/audit-provider-bad-cases.py` 开始稳定筛出与 clarification 相关的 candidate bad traces
 
 在此之前，clarification 线维持**审计继续、规则不动**。

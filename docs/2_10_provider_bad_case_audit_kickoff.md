@@ -1,14 +1,14 @@
-# 2.10 云端主链真实坏例审计与闭环线（启动记录）
+# 2.10 Provider 主链真实坏例审计与闭环线（启动记录）
 
-> 状态：**启动**  
+> 状态：**收口 / 可执行**  
 > 对应决策：`docs/2_9_next_line_decision.md`  
-> 目的：在 `2_8` planner 云端验证线收口后，开始对 **cloud `openai_compatible` 主链** 的真实 bad case 做审计与闭环
+> 目的：在 `2_8` planner provider 验证线收口后，开始对 **当前配置的 provider 主链** 的真实 bad case 做审计与闭环；DashScope/Qwen 只是已验证后端之一
 
 ---
 
 ## 1. 本线回答的问题
 
-> 在当前 `OpenAI-compatible backend -> planner -> hybrid -> rerank/evidence -> clarification -> trace/hard_cases` 主链已经契约全绿后，真实运行里还剩哪些坏例？这些坏例分别属于哪一层？
+> 在当前 `provider backend -> planner -> hybrid -> rerank/evidence -> clarification -> trace/hard_cases` 主链已经具备可观测性后，真实运行里还剩哪些坏例？这些坏例分别属于哪一层？
 
 本线不回答：
 
@@ -20,7 +20,7 @@
 
 ## 2. 启动时的第一手现状
 
-### 2.1 当前存量 trace / hard case 还不能直接当“云端主链画像”
+### 2.1 当前存量 trace / hard case 还不能直接当“provider 主链画像”
 
 启动审计前先看了两份现有数据源：
 
@@ -29,8 +29,8 @@
 
 得到三个关键事实：
 
-1. `retrieval_traces.jsonl` 历史存量以 `2026-04-19 ~ 2026-04-20` 为主，`2026-04-21` 仅 8 条；它混合了 pre-cloud、本地 planner 和云端 planner 时期的数据，不能未经筛选直接拿来代表当前云端主链
-2. `hard_cases.jsonl` 当前仅 8 条，且大多是旧 trace 派生的 down-vote / `no_evidence` 记录，不能直接代表 cloud `openai_compatible` 主链的当前坏例面
+1. `retrieval_traces.jsonl` 历史存量以 `2026-04-19 ~ 2026-04-20` 为主，`2026-04-21` 仅 8 条；它混合了早期本地 planner、OpenAI-compatible provider 和其他演进阶段的数据，不能未经筛选直接拿来代表当前 provider 主链
+2. `hard_cases.jsonl` 当前仅 8 条，且大多是旧 trace 派生的 down-vote / `no_evidence` 记录，不能直接代表当前 provider 主链的坏例面
 3. 启动时 `retrieval_trace` **未持久化 `router_used`**；这意味着即便 trace 中已有 `domain_hint / retrieval_mode / rerank_score` 等字段，也无法直接从存量文件把 `query_planner_openai_compatible`（历史兼容别名：`query_planner_qwen_api`）与 `query_planner_local` / `rule_parser` 样本切开
 
 ### 2.2 现有 `hard_cases` 的主要问题是“历史性”，不是“数量少”
@@ -41,7 +41,7 @@
 - 语料尚未补齐时的旧坏例
 - 当前已被关闭的问题（例如 `生产变更` 早期误命中 admin）
 
-所以如果不先把 trace 观测补齐，新线会在第一步就把“历史坏例”和“当前云端坏例”混在一起，审计结果不可信。
+所以如果不先把 trace 观测补齐，新线会在第一步就把“历史坏例”和“当前 provider 坏例”混在一起，审计结果不可信。
 
 ---
 
@@ -59,9 +59,9 @@
 
 意义：
 
-- 后续可以直接按 `router_used == "query_planner_openai_compatible"` 筛 cloud 主链样本；旧数据兼容 `query_planner_qwen_api`
+- 后续可以直接按 `router_used == "query_planner_<provider>"` 筛 provider 主链样本；旧数据兼容 `query_planner_qwen_api`
 - 不再需要靠 `domain_hint != None` 或时间段做不可靠代理筛选
-- `hard_cases` 也能区分它是云端主链坏例，还是旧本地路径残留
+- `hard_cases` 也能区分它是 provider 主链坏例，还是旧本地路径残留
 
 ### 3.2 当前这一步仍然不算“新阶段”
 
@@ -71,7 +71,7 @@
 
 ## 4. 第一轮样本审计（2026-04-22）
 
-在补齐 `router_used` 后，先用当前 cloud `openai_compatible` 主链重跑了一批“旧 hard case + 高风险泛问法”样本，共 12 条：
+在补齐 `router_used` 后，先用当前 `openai_compatible` provider 主链重跑了一批“旧 hard case + 高风险泛问法”样本，共 12 条：
 
 - `请假`
 - `如何上传文档？`
@@ -119,7 +119,7 @@
 
 这五条的共同特征是：
 
-- planner 已正确进入云端主链
+- planner 已正确进入 provider 主链
 - retrieval 能召回多条相关 FAQ
 - rerank `accept=True`
 - 最终触发 clarification，而不是误答或 `no_evidence`
@@ -128,11 +128,11 @@
 
 ### 4.3 第一轮审计结论
 
-**第一轮没有筛出需要立即修复的 cloud 主链 blocker。**
+**第一轮没有筛出需要立即修复的 provider 主链 blocker。**
 
 当前真正缺的不是“再调一轮 retrieval 常量”，而是：
 
-1. 继续积累更自然的 cloud 主链 trace
+1. 继续积累更自然的 provider 主链 trace
 2. 等待真实 `down-vote` / `no_evidence` / 错答样本沉淀
 3. 再按层级分类是否属于：
    - 语料缺口
@@ -140,37 +140,39 @@
    - rerank / evidence 阈值问题
    - planner 真实边界
 
-换句话说：**现在已经具备了审计能力，但还没有积累到足够多的“当前云端真实坏例”。**
+换句话说：**现在已经具备了审计能力，但还没有积累到足够多的“当前 provider 真实坏例”。**
 
 ### 4.4 为下一轮补的最小工具
 
 为了避免后续每轮都手工翻 `jsonl`，已新增：
 
-- `scripts/audit-cloud-bad-cases.py`
+- `scripts/audit-provider-bad-cases.py`
 
 职责：
 
-- 从 `retrieval_traces.jsonl` 与 `hard_cases.jsonl` 中只筛 `router_used == query_planner_openai_compatible` 的样本，并兼容旧路由名 `query_planner_qwen_api`
-- 输出 cloud 主链的：
+- 从 `retrieval_traces.jsonl` 与 `hard_cases.jsonl` 中筛当前 provider router 的样本，并兼容旧路由名 `query_planner_qwen_api`
+- 输出 provider 主链的：
   - `final_status` 分布
   - `fallback_reason` 分布
   - `retrieval_mode` 分布
+  - `audit_category` 分布
+  - `audit_resolution` 分布：`open` / `closed_by_later_success`
   - 候选 bad traces
   - 同一路由下的 hard cases
 
 默认用法：
 
 ```powershell
-uv run python scripts/audit-cloud-bad-cases.py
+uv run python scripts/audit-provider-bad-cases.py
 ```
 
 ### 4.5 已执行：补必要样本并跑 seeded audit
 
 为了避免完全被动等待自然流量，又新增：
 
-- `scripts/generate-cloud-audit-samples.py`
+- `scripts/generate-provider-audit-samples.py`
 
-它会主动通过 `chat_route.ask_chat()` 打一批经过挑选的 cloud 主链样本，自动落 trace。当前样本共 28 条，分三组：
+它会主动通过 `chat_route.ask_chat()` 打一批经过挑选的 provider 主链样本，自动落 trace。当前样本共 28 条，分三组：
 
 - stable direct
 - expected clarification
@@ -186,12 +188,34 @@ uv run python scripts/audit-cloud-bad-cases.py
 
 结论：
 
-- 这批“必要样本”仍未筛出 cloud 主链 blocker
+- 这批“必要样本”仍未筛出 provider 主链 blocker
 - 但它们提供了两类**值得继续观察的 clarification 边界样本**：
   - `报销单据怎么提交`：finance 域内出现多候选竞争，进入 clarification；暂不视为错误，但可作为“具体问法是否过度澄清”的观察点
   - `什么叫HR`：planner 正确给 `domain_hint=hr`，但仍进入 clarification；暂不视为错误，可作为“缩写/缩略词是否应走更直接解释”的观察点
 
-这两条目前都不足以触发代码修复，更适合作为下一轮 cloud 样本积累时的 watchlist。
+这两条目前都不足以触发代码修复，更适合作为下一轮 provider 样本积累时的 watchlist。
+
+### 4.6 2026-04-25 收口运行结果
+
+当前 provider-neutral 审计工具已能把“当前仍 open 的坏例”和“历史坏例后来已成功”分开。
+
+```powershell
+uv run python scripts/audit-provider-bad-cases.py --limit 8
+```
+
+当前真实 JSONL 汇总：
+
+- `traces=246`
+- `hard_cases=4`
+- `candidate bad traces=5`
+- `audit_category={'retrieval_backend': 1, 'corpus_gap': 4}`
+- `audit_resolution={'open': 4, 'closed_by_later_success': 1}`
+
+解释：
+
+- `closed_by_later_success` 表示同一 query 后续已有成功 trace，不应再当作当前 blocker
+- `open` 表示仍需人工 triage，不能直接做 query 特判；应先判断是语料缺口、检索后端、evidence 阈值还是 planner 边界
+- 当前工具完成的是审计边界，不直接修改检索策略或知识内容
 
 ---
 
@@ -199,11 +223,11 @@ uv run python scripts/audit-cloud-bad-cases.py
 
 在 `router_used` 已进 trace 之后，本线下一轮按以下顺序推进：
 
-1. 累积一批新的 cloud `openai_compatible` trace
-2. 只筛 `router_used == query_planner_openai_compatible` 的样本，并兼容旧路由名 `query_planner_qwen_api`
+1. 累积一批新的 provider 主链 trace
+2. 只筛当前 provider router 的样本，并兼容旧路由名 `query_planner_qwen_api`
 3. 继续运行：
-   - `uv run python scripts/generate-cloud-audit-samples.py`
-   - `uv run python scripts/audit-cloud-bad-cases.py`
+   - `uv run python scripts/generate-provider-audit-samples.py`
+   - `uv run python scripts/audit-provider-bad-cases.py`
 4. 再按以下层级分类真实坏例：
    - 语料缺口
    - clarification 边界
@@ -221,6 +245,8 @@ uv run python scripts/audit-cloud-bad-cases.py
 - [x] 新线启动文档已落地
 - [x] `retrieval_trace` 已持久化 `router_used`
 - [x] `hard_cases` 已继承 `router_used`
-- [x] 已完成第一轮 cloud 主链样本分类审计
+- [x] 已完成第一轮 provider 主链样本分类审计
 - [x] 已补一批必要样本并完成 seeded audit
-- [ ] 待积累更多真实 cloud 坏例（而非人工探测样本）
+- [x] 已新增 provider-neutral 审计入口，并保留旧 cloud 脚本兼容入口
+- [x] 已新增 `audit_resolution`，区分 `open` 与 `closed_by_later_success`
+- [ ] 待 triage 当前 open provider 坏例；只做通用修复，不做 query 特判
