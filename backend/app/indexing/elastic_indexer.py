@@ -52,6 +52,24 @@ MAPPING = {
                 "format": "strict_date_optional_time||epoch_millis",
                 "ignore_malformed": True,
             },
+            "tenant_id": {"type": "keyword"},
+            "source_record_id": {"type": "keyword"},
+            "unit_version": {"type": "integer"},
+            "fresh_until": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "stale_after": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
+            "published_at": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
         }
     }
 }

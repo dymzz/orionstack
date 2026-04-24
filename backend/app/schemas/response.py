@@ -10,6 +10,21 @@ class CitationItem(BaseModel):
     snippet: str
 
 
+class ActionLinkItem(BaseModel):
+    action_link_id: str
+    label: str
+    url: str
+    system_type: str
+    resource_type: str
+
+
+class DynamicQueryResultItem(BaseModel):
+    query_key: str
+    resource_type: str
+    description: str
+    data: list[dict] = []
+
+
 class ClarificationOption(BaseModel):
     option_id: str
     label: str
@@ -54,6 +69,11 @@ class DebugInfo(BaseModel):
     evidence_confidence: float | None = None
     evidence_span_count: int | None = None
     reject_reason: str | None = None
+    source_record_id: str | None = None
+    import_batch_id: str | None = None
+    unit_version: int | None = None
+    dynamic_query_key: str | None = None
+    freshness_status: str | None = None
 
 
 class ChatAskResponse(BaseModel):
@@ -61,6 +81,8 @@ class ChatAskResponse(BaseModel):
     trace_id: str
     answer: str
     citations: list[CitationItem]
+    action_links: list[ActionLinkItem] = []
+    dynamic_query_result: DynamicQueryResultItem | None = None
     clarification: ClarificationInfo | None = None
     debug_info: DebugInfo | None = None
 

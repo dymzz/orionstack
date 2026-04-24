@@ -37,6 +37,10 @@ class HybridHit:
     rrf_rank: int
     lexical_dominance_applied: bool = False
     vector_dominance_applied: bool = False
+    source_record_id: str = ""
+    unit_version: int = 1
+    fresh_until: str = ""
+    stale_after: str = ""
 
 
 class HybridRetriever:
@@ -144,6 +148,10 @@ class HybridRetriever:
                     rrf_rank=0,
                     lexical_dominance_applied=lexical_dominance_applied,
                     vector_dominance_applied=vector_dominance_applied,
+                    source_record_id=base_hit.source_record_id,
+                    unit_version=base_hit.unit_version,
+                    fresh_until=base_hit.fresh_until,
+                    stale_after=base_hit.stale_after,
                 )
             )
 
@@ -180,6 +188,10 @@ class HybridRetriever:
                     rrf_rank=rank,
                     lexical_dominance_applied=hit.lexical_dominance_applied,
                     vector_dominance_applied=hit.vector_dominance_applied,
+                    source_record_id=hit.source_record_id,
+                    unit_version=hit.unit_version,
+                    fresh_until=hit.fresh_until,
+                    stale_after=hit.stale_after,
                 )
             )
         return ranked_hits

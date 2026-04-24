@@ -9,10 +9,12 @@ from app.routing.contracts import IntentDecision
 from app.routing.resolver import RouteResolver
 from app.schemas.request import ChatAskRequest
 from app.schemas.response import (
+    ActionLinkItem,
     ChatAskResponse,
     ClarificationInfo,
     ClarificationOption,
     DebugInfo,
+    DynamicQueryResultItem,
     RetrievalCandidateSummary,
 )
 from app.storage.repositories.chunk_repo import ChunkRepository
@@ -57,6 +59,7 @@ class ChatService:
             self._hybrid_retriever = self._create_hybrid_retriever()
             if self._hybrid_retriever is not None:
                 self._reranker = self._create_reranker()
+        self._dynamic_query_service = self._create_dynamic_query_service()
 
     def _create_query_planner(self) -> QueryPlanner:
         return QueryPlanner(
@@ -96,6 +99,12 @@ class ChatService:
         from app.retrieval.reranker import Reranker
 
         return Reranker()
+
+    def _create_dynamic_query_service(self):
+        from app.runtime.adapter_factory import create_adapter
+        from app.runtime.dynamic_query_service import DynamicQueryService
+
+        return DynamicQueryService(adapter=create_adapter())
 
     def ask(
         self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
@@ -147,6 +156,12 @@ class ChatService:
             decision.route != "faq_qa"
             or decision.confidence < settings.route_confidence_threshold
         ):
+            dq_result = self._try_dynamic_query(
+                normalized_query, trace_id, debug_enabled
+            )
+            if dq_result is not None:
+                return dq_result
+
             return ChatAskResponse(
                 response_status="fallback",
                 trace_id=trace_id,
@@ -311,6 +326,7 @@ class ChatService:
                 vector_topk=vector_topk,
                 rrf_topk=rrf_topk,
                 rerank_reject_reason="multiple_close_faq_candidates",
+                business_domain=business_domain,
             )
             if clarification_response is not None:
                 return clarification_response
@@ -353,12 +369,23 @@ class ChatService:
         answer = best.answer or best.body_text
         snippet = answer[:160] if not evidence_spans else evidence_spans[0].text
         citation = self._build_hit_citation(best, snippet)
+        action_links = self._find_action_links(business_domain)
+
+        freshness_result = self._check_hit_freshness(best)
+        if freshness_result is not None and not freshness_result.is_fresh:
+            suffix = (
+                "（注意：该知识内容已过期，建议核实最新版本。）"
+                if freshness_result.is_stale
+                else "（提示：该知识内容可能即将过期，建议尽快核实。）"
+            )
+            answer = answer + suffix
 
         return ChatAskResponse(
             response_status="ok",
             trace_id=trace_id,
             answer=answer,
             citations=[citation],
+            action_links=action_links,
             debug_info=self._build_debug_info(
                 debug_enabled,
                 normalized_query,
@@ -374,6 +401,9 @@ class ChatService:
                 vector_topk=vector_topk,
                 rrf_topk=rrf_topk,
                 **self._summarize_rerank_decision(selected_reranked),
+                source_record_id=best.source_record_id or None,
+                unit_version=best.unit_version if best.unit_version > 1 else None,
+                freshness_status=freshness_result.status if freshness_result else None,
             ),
         )
 
@@ -437,6 +467,7 @@ class ChatService:
         vector_topk: list[RetrievalCandidateSummary] | None,
         rrf_topk: list[RetrievalCandidateSummary] | None,
         rerank_reject_reason: str,
+        business_domain: str | None = None,
     ) -> ChatAskResponse | None:
         clarification_candidates = self._collect_clarification_candidates(reranked_hits)
         if len(clarification_candidates) < 2:
@@ -472,6 +503,7 @@ class ChatService:
             trace_id=trace_id,
             answer="当前问题还不够具体，请先确认您想了解的具体规则方向。",
             citations=citations,
+            action_links=self._find_action_links(business_domain),
             clarification=ClarificationInfo(
                 clarification_required=True,
                 question="您更想了解以下哪一项？",
@@ -729,6 +761,11 @@ class ChatService:
         evidence_confidence: float | None = None,
         evidence_span_count: int | None = None,
         reject_reason: str | None = None,
+        source_record_id: str | None = None,
+        import_batch_id: str | None = None,
+        unit_version: int | None = None,
+        dynamic_query_key: str | None = None,
+        freshness_status: str | None = None,
     ) -> DebugInfo | None:
         if not enabled:
             return None
@@ -755,4 +792,112 @@ class ChatService:
             evidence_confidence=evidence_confidence,
             evidence_span_count=evidence_span_count,
             reject_reason=reject_reason,
+            source_record_id=source_record_id,
+            import_batch_id=import_batch_id,
+            unit_version=unit_version,
+            dynamic_query_key=dynamic_query_key,
+            freshness_status=freshness_status,
         )
+
+    def _try_dynamic_query(
+        self, normalized_query: str, trace_id: str, debug_enabled: bool
+    ) -> ChatAskResponse | None:
+        svc = self._dynamic_query_service
+        query_key = svc.detect_query_key(normalized_query)
+        if query_key is None:
+            return None
+        if not svc.is_allowed(query_key):
+            return None
+        result = svc.execute(query_key)
+        if result is None:
+            return None
+
+        action_links = self._find_action_links_by_resource_type(result.resource_type)
+        answer = self._compose_dynamic_query_answer(result)
+
+        return ChatAskResponse(
+            response_status="ok",
+            trace_id=trace_id,
+            answer=answer,
+            citations=[],
+            action_links=action_links,
+            dynamic_query_result=result,
+            debug_info=self._build_debug_info(
+                debug_enabled,
+                normalized_query,
+                route_result="dynamic_query",
+                chunk_ids=[],
+                router_used="dynamic_query",
+                route_confidence=1.0,
+                planner_output=None,
+                retrieval_mode=None,
+                dynamic_query_key=query_key,
+            ),
+        )
+
+    @staticmethod
+    def _compose_dynamic_query_answer(result: DynamicQueryResultItem) -> str:
+        if not result.data:
+            return f"当前没有查到{result.description}的记录。"
+        count = len(result.data)
+        return f"已为您查询到 {count} 条{result.description}记录，详细数据见下方。"
+
+    @classmethod
+    def _find_action_links_by_resource_type(cls, resource_type: str) -> list[ActionLinkItem]:
+        from app.storage.repositories.action_link_repo import ActionLinkRepo
+
+        repo = ActionLinkRepo()
+        links = repo.list_by_resource_type(resource_type)
+        return [
+            ActionLinkItem(
+                action_link_id=link.action_link_id,
+                label=link.label,
+                url=link.url,
+                system_type=link.system_type,
+                resource_type=link.resource_type,
+            )
+            for link in links
+        ]
+
+    _DOMAIN_TO_RESOURCE_TYPES: dict[str, list[str]] = {
+        "hr": ["leave_form", "attendance_record", "employee_profile"],
+        "finance": ["expense_form", "invoice_list"],
+        "sales": ["crm_pipeline"],
+        "product": ["project_board"],
+        "admin": ["employee_profile"],
+        "it": ["project_board"],
+    }
+
+    @classmethod
+    def _find_action_links(cls, business_domain: str | None) -> list[ActionLinkItem]:
+        if business_domain is None:
+            return []
+        resource_types = cls._DOMAIN_TO_RESOURCE_TYPES.get(business_domain, [])
+        if not resource_types:
+            return []
+        from app.storage.repositories.action_link_repo import ActionLinkRepo
+
+        repo = ActionLinkRepo()
+        items: list[ActionLinkItem] = []
+        for rt in resource_types:
+            for link in repo.list_by_resource_type(rt):
+                items.append(
+                    ActionLinkItem(
+                        action_link_id=link.action_link_id,
+                        label=link.label,
+                        url=link.url,
+                        system_type=link.system_type,
+                        resource_type=link.resource_type,
+                    )
+                )
+        return items
+
+    @staticmethod
+    def _check_hit_freshness(hit):
+        from app.sync.freshness import check_freshness
+
+        fresh_until = hit.fresh_until if hasattr(hit, "fresh_until") else ""
+        stale_after = hit.stale_after if hasattr(hit, "stale_after") else ""
+        if not fresh_until and not stale_after:
+            return None
+        return check_freshness(fresh_until or None, stale_after or None)

@@ -217,6 +217,21 @@ def _build_retrieval_trace_record(
         "reject_reason": None
         if debug_info is None
         else getattr(debug_info, "reject_reason", None),
+        "source_record_id": None
+        if debug_info is None
+        else getattr(debug_info, "source_record_id", None),
+        "import_batch_id": None
+        if debug_info is None
+        else getattr(debug_info, "import_batch_id", None),
+        "unit_version": None
+        if debug_info is None
+        else getattr(debug_info, "unit_version", None),
+        "dynamic_query_key": None
+        if debug_info is None
+        else getattr(debug_info, "dynamic_query_key", None),
+        "freshness_status": None
+        if debug_info is None
+        else getattr(debug_info, "freshness_status", None),
         "filters": {
             "document_ids": payload.document_ids,
         },
@@ -236,7 +251,10 @@ def _build_retrieval_trace_record(
 
 
 def _record_hard_case_from_response(retrieval_trace: dict[str, Any]) -> None:
-    if retrieval_trace.get("fallback_reason") != "no_evidence":
+    fallback_reason = retrieval_trace.get("fallback_reason")
+    if fallback_reason is None:
+        return
+    if retrieval_trace.get("final_status") != "fallback":
         return
     hard_cases_repository.upsert(_build_hard_case_item(retrieval_trace))
 
@@ -261,14 +279,18 @@ def _build_hard_case_item(
     retrieval_trace: dict[str, Any],
     *,
     user_feedback: str | None = None,
+    issue_category: str | None = None,
 ) -> dict[str, Any]:
+    fallback_reason = retrieval_trace.get("fallback_reason")
+    if issue_category is None:
+        issue_category = _infer_issue_category(retrieval_trace)
     return {
         "trace_id": retrieval_trace.get("trace_id", ""),
         "raw_query": retrieval_trace.get("raw_query", ""),
         "normalized_query": retrieval_trace.get("normalized_query", ""),
         "router_used": retrieval_trace.get("router_used"),
         "domain_hint": retrieval_trace.get("domain_hint"),
-        "fallback_reason": retrieval_trace.get("fallback_reason"),
+        "fallback_reason": fallback_reason,
         "top_candidates": retrieval_trace.get("citations", []),
         "evidence_spans": [
             {"text": citation.get("snippet", "")}
@@ -276,7 +298,29 @@ def _build_hard_case_item(
             if citation.get("snippet")
         ],
         "user_feedback": user_feedback,
+        "issue_category": issue_category,
+        "source_record_id": retrieval_trace.get("source_record_id"),
+        "import_batch_id": retrieval_trace.get("import_batch_id"),
+        "unit_version": retrieval_trace.get("unit_version"),
+        "dynamic_query_key": retrieval_trace.get("dynamic_query_key"),
     }
+
+
+def _infer_issue_category(retrieval_trace: dict[str, Any]) -> str:
+    if retrieval_trace.get("source_record_id"):
+        return "extraction_drift"
+    fallback_reason = retrieval_trace.get("fallback_reason")
+    if fallback_reason == "no_evidence":
+        return "retrieval_miss"
+    if fallback_reason == "evidence_below_threshold":
+        return "evidence_weak"
+    if fallback_reason == "conflict_requires_clarification":
+        return "retrieval_ambiguous"
+    if fallback_reason in ("retrieval_no_hit", "retrieval_score_below_threshold"):
+        return "retrieval_miss"
+    if fallback_reason in ("route_not_confident_enough",):
+        return "routing_mismatch"
+    return "unknown"
 
 
 def _ensure_record_view_enabled() -> None:

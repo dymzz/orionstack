@@ -21,6 +21,10 @@ class LexicalHit:
     source_type: str
     access_scope: str
     lifecycle_status: str
+    source_record_id: str = ""
+    unit_version: int = 1
+    fresh_until: str = ""
+    stale_after: str = ""
 
 
 class RetrievalBackendError(RuntimeError):
@@ -113,6 +117,10 @@ class LexicalRetriever:
                     source_type=source.get("source_type", ""),
                     access_scope=source.get("access_scope", ""),
                     lifecycle_status=source.get("lifecycle_status", ""),
+                    source_record_id=source.get("source_record_id", ""),
+                    unit_version=int(source.get("unit_version", 1)),
+                    fresh_until=source.get("fresh_until", ""),
+                    stale_after=source.get("stale_after", ""),
                 )
             )
         return hits

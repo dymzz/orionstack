@@ -1,9 +1,10 @@
 # OrionStack 第二阶段系统设计 v1
 
-> 状态：**阶段设计基线（待按迭代实现）**  
-> 目标方向：**Elasticsearch 单引擎 Hybrid Retrieval（Lexical + Vector + RRF）**  
-> 使用场景：**FAQ / 业务知识问答主链路的第二阶段升级**  
-> 与 `1_system_design.md` 的关系：`1_system_design.md` 继续作为**当前真实实现基线**；`2_system_design.md` 定义**下一阶段目标链路**，用于指导后续实现替换与接口冻结。
+> 状态：**已完成落地（Phase 2 已关闭）**
+> 目标方向：**Elasticsearch 单引擎 Hybrid Retrieval（Lexical + Vector + RRF）**
+> 使用场景：**FAQ / 业务知识问答主链路的第二阶段升级**
+> 与 `1_system_design.md` 的关系：`1_system_design.md` 继续作为**当前真实实现基线**；`2_system_design.md` 定义**第二阶段目标链路**（已完成落地）。
+> 与 `3_system_design.md` 的关系：`3_system_design.md` 定义**第三阶段 SaaS 知识副本层**，本文件的 `KnowledgeUnit` 等对象将在第三阶段扩展。
 
 ---
 
@@ -13,10 +14,11 @@
 
 本文档用于定义 OrionStack FAQ / 业务知识问答主链路的第二阶段系统设计，目标是将当前“可运行但对自然问法可用性不足”的检索链路，升级为“对自然问法稳定可召回、可证据化、可降级”的目标链路。
 
-### 1.2 与 `1_system_design.md` / `2_system_design.md` 的职责分工
+### 1.2 与 `1_system_design.md` / `3_system_design.md` 的职责分工
 
 - `1_system_design.md`：当前真实实现基线
-- `2_system_design.md`：下一阶段目标设计基线
+- `2_system_design.md`：第二阶段检索链路升级设计（本文）
+- `3_system_design.md`：第三阶段 SaaS 知识副本层设计（外部数据接入、新鲜度、权限、追溯、抽取漂移）
 
 本文档不再描述“当前代码已经做到什么”，而是描述“第二阶段应收敛成什么”。
 

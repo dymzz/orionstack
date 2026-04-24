@@ -26,6 +26,12 @@ class KnowledgeUnit:
     valid_until: str | None
     version: str
     created_at: str
+    tenant_id: str = "default"
+    source_record_id: str | None = None
+    unit_version: int = 1
+    fresh_until: str | None = None
+    stale_after: str | None = None
+    published_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +52,12 @@ class KnowledgeUnit:
             "valid_until": self.valid_until,
             "version": self.version,
             "created_at": self.created_at,
+            "tenant_id": self.tenant_id,
+            "source_record_id": self.source_record_id,
+            "unit_version": self.unit_version,
+            "fresh_until": self.fresh_until,
+            "stale_after": self.stale_after,
+            "published_at": self.published_at,
         }
 
     def to_elasticsearch_doc(self) -> dict[str, Any]:
@@ -67,6 +79,12 @@ class KnowledgeUnit:
             "valid_until": self.valid_until or "",
             "version": self.version,
             "created_at": self.created_at,
+            "tenant_id": self.tenant_id,
+            "source_record_id": self.source_record_id or "",
+            "unit_version": self.unit_version,
+            "fresh_until": self.fresh_until or "",
+            "stale_after": self.stale_after or "",
+            "published_at": self.published_at or "",
         }
 
 

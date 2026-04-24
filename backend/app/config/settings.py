@@ -160,6 +160,34 @@ class Settings:
         )
     )
 
+    # Phase 3: sync / freshness
+    default_tenant_id: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_DEFAULT_TENANT_ID", "default")
+    )
+    freshness_default_hours: int = field(
+        default_factory=lambda: _resolve_int("ORIONSTACK_FRESHNESS_DEFAULT_HOURS", 72)
+    )
+    stale_default_hours: int = field(
+        default_factory=lambda: _resolve_int("ORIONSTACK_STALE_DEFAULT_HOURS", 168)
+    )
+
+    # Phase 3: dynamic query adapter
+    dynamic_query_adapter: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", "odoo")
+    )
+    odoo_url: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_URL", "http://localhost:8069")
+    )
+    odoo_db: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_DB", "odoo")
+    )
+    odoo_uid: int = field(
+        default_factory=lambda: _resolve_int("ORIONSTACK_ODOO_UID", 2)
+    )
+    odoo_password: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_PASSWORD", "qq3938332")
+    )
+
     @property
     def debug_response_enabled(self) -> bool:
         return self.app_mode in {"demo", "dev"}

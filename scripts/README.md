@@ -1,8 +1,16 @@
 # Scripts Usage
 
-`scripts/` 目录当前包含本地开发与最小发布辅助脚本。
+`scripts/` 目录当前包含本地开发、数据种子、抽取管线与最小发布辅助脚本。
 
-所有脚本使用 Python 重写，不再依赖 PowerShell。
+所有脚本使用 Python，运行方式统一为：
+
+```bash
+python -m scripts.<script_name>
+# 或
+python scripts/<script_name>.py
+```
+
+---
 
 ## 前置要求
 
@@ -10,349 +18,332 @@
 - 已安装 `npm`
 - 已安装 `git`
 - 建议在仓库根目录下准备 `.venv`
+- 抽取管线脚本需要 `DASHSCOPE_API_KEY` 环境变量（DashScope API Key）
+
+---
 
 ## 脚本列表
 
-### `dev-backend.py`
+### 开发服务
 
-用途：
+#### `dev-backend.py`
 
-- 启动后端开发服务
-
-参数：
-
-- `--app-mode demo|dev|prod`
-- `--host 127.0.0.1`
-- `--port 8000`
-- `--check-only`
-
-示例：
+启动后端开发服务（带 `--reload` 热重载）。
 
 ```bash
 python scripts/dev-backend.py --app-mode dev --host 127.0.0.1 --port 8000
 python scripts/dev-backend.py --check-only
 ```
 
-### `dev-frontend.py`
+参数：`--app-mode demo|dev|prod` / `--host` / `--port` / `--check-only`
 
-用途：
+#### `dev-frontend.py`
 
-- 启动前端开发服务
-
-参数：
-
-- `--install`
-- `--backend-origin http://127.0.0.1:8000`
-- `--check-only`
-
-示例：
+启动前端开发服务。
 
 ```bash
 python scripts/dev-frontend.py
 python scripts/dev-frontend.py --install --backend-origin http://127.0.0.1:8000
-python scripts/dev-frontend.py --check-only
 ```
 
-### `dev-demo.py`
+参数：`--install` / `--backend-origin` / `--check-only`
 
-用途：
+#### `dev-demo.py`
 
-- 一键启动后端与前端开发环境
-
-参数：
-
-- `--app-mode demo|dev|prod`
-- `--port 8000`
-- `--timeout 30`
-- `--install-frontend`
-- `--check-only`
-
-示例：
+一键启动后端与前端开发环境。
 
 ```bash
 python scripts/dev-demo.py
 python scripts/dev-demo.py --app-mode demo --port 8000 --install-frontend
-python scripts/dev-demo.py --check-only
 ```
 
-### `git-release.py`
+参数：`--app-mode` / `--port` / `--timeout` / `--install-frontend` / `--check-only`
 
-用途：
+#### `start-backend.py`
 
-- 交互式创建本地版本发布提交
-- 同步 `pyproject.toml` 的 `version`
-- 创建 git tag
-- 推送当前分支与 tag
-
-默认行为：
-
-- tag 格式为 `v<version>`，例如 `v0.1.3`
-- `pyproject.toml` 中的 `version` 会被同步为 `0.1.3`
-- 若未传 `--version` 或 `--commit-message`，脚本会交互式询问
-- 提交前会再做一次确认
-
-参数：
-
-- `--version 0.1.3`
-- `--commit-message "feat: ..."`
-- `--tag-prefix v`
-- `--remote origin`
-- `--skip-push`
-- `--check-only`
-
-示例：
+以生产配置启动后端（不带 `--reload`，支持多 worker）。
 
 ```bash
-python scripts/git-release.py
-python scripts/git-release.py --version 0.1.3 --commit-message "feat: complete P7 document management"
-python scripts/git-release.py --version 0.1.3 --commit-message "chore: release 0.1.3" --skip-push
-python scripts/git-release.py --version 0.1.3 --commit-message "chore: release 0.1.3" --check-only
+python scripts/start-backend.py --app-mode prod --workers 2
 ```
 
-执行结果：
+参数：`--app-mode prod|demo|dev` / `--host` / `--port` / `--workers` / `--check-only`
 
-1. 更新 `pyproject.toml` 版本
-2. 执行 `git add --all`
-3. 执行 `git commit -m "..."`
-4. 创建注解 tag：`git tag -a v0.1.3 -m "release v0.1.3"`
-5. 推送当前分支与 tag
+---
 
-注意事项：
+### 数据种子
 
-- 如果 tag 已存在，脚本会直接停止
-- 如果当前没有可提交变更，脚本会直接停止
-- 如果使用 `--skip-push`，提交与 tag 只保留在本地
-- 如果只想检查参数和版本摘要，可使用 `--check-only`
+#### `seed_action_links.py`
 
-### `clean-local-records.py`
-
-用途：
-
-- 清理本地问答记录文件
-- 仅作用于本地 `chat_records.jsonl` 与 `feedback_records.jsonl`
-
-参数：
-
-- `--chat-only`
-- `--feedback-only`
-- `--check-only`
-- `--what-if`
-
-示例：
+种子 ActionLink 数据 — 为 Odoo 模块生成 7 条 action link（请假、考勤、员工管理、报销、发票、CRM、项目）。
 
 ```bash
-python scripts/clean-local-records.py --check-only
+python -m scripts.seed_action_links
+```
+
+输出：`backend/app/storage/action_links/action_links.jsonl`
+
+#### `seed_dynamic_queries.py`
+
+种子 DynamicQuery 定义 — 生成 5 条动态查询配置（请假状态、假期余额、报销状态、考勤记录、CRM 商机）。
+
+```bash
+python -m scripts.seed_dynamic_queries
+```
+
+输出：`backend/app/storage/dynamic_queries/dynamic_queries.jsonl`
+
+#### `seed_test_source_record.py`
+
+种子测试用 SourceRecord — 写入一条"员工考勤与请假管理制度"制度文档，用于抽取管线验证。
+
+```bash
+python -m scripts.seed_test_source_record
+```
+
+输出：`backend/app/storage/source_records/source_records.jsonl`
+
+---
+
+### 抽取管线
+
+#### `pipeline_cli.py`
+
+**核心脚本。** 可复用的文档 → 知识候选全自动管线。
+
+从任意文本文档（.txt / .md）出发，调用 Qwen API (qwen-plus) 抽取 FAQ / ActionLink / DynamicQuery 候选，审核后发布为可检索的知识单元。
+
+**完整管线流程：**
+
+```text
+任意文档 (.txt / .md)
+       ↓ pipeline_cli import
+  SourceRecord (raw_content)
+       ↓ pipeline_cli extract → Qwen API (qwen-plus)
+  ExtractionCandidate (pending)
+       ↓ pipeline_cli review --approve
+  ┌──────────────┬───────────────┬─────────────────┐
+  │ faq          │ action_link   │ dynamic_query    │
+  │ KnowledgeUnit│ ActionLinkRepo│ DynamicQueryRepo │
+  └──────────────┴───────────────┴─────────────────┘
+```
+
+**命令列表：**
+
+```bash
+# 导入文档为 SourceRecord
+python -m scripts.pipeline_cli import \
+  --file path/to/document.md \
+  --title "文档标题" \
+  --source-system wiki
+
+# 一键完成：导入 + 抽取 + 自动审核 + 发布
+python -m scripts.pipeline_cli import \
+  --file path/to/document.md \
+  --title "文档标题" \
+  --source-system wiki \
+  --auto-approve
+
+# 从已有 SourceRecord 抽取候选
+python -m scripts.pipeline_cli extract \
+  --source-record-id sr-xxx \
+  --candidate-types faq,action_link,dynamic_query
+
+# 抽取后自动审核发布
+python -m scripts.pipeline_cli extract \
+  --source-record-id sr-xxx \
+  --auto-approve
+
+# 审核单条候选
+python -m scripts.pipeline_cli review --candidate-id ec-xxx --approve
+python -m scripts.pipeline_cli review --candidate-id ec-xxx --reject
+
+# 列出候选
+python -m scripts.pipeline_cli list --status pending
+python -m scripts.pipeline_cli list --status approved
+```
+
+**import 参数：**
+
+| 参数 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `--file` | 是 | — | 文档文件路径（.txt / .md） |
+| `--title` | 否 | 文件名 | 文档标题 |
+| `--source-system` | 否 | `manual_upload` | 来源系统标识 |
+| `--object-type` | 否 | `policy_doc` | 来源对象类型 |
+| `--access-scope` | 否 | `internal` | 访问范围 |
+| `--source-record-id` | 否 | 自动生成 | 覆盖 SourceRecord ID |
+| `--auto-approve` | 否 | — | 导入后立即抽取 + 自动审核 + 发布 |
+| `--candidate-types` | 否 | 全部 | 逗号分隔，仅 `--auto-approve` 时生效 |
+
+**extract 参数：**
+
+| 参数 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `--source-record-id` | 是 | — | 要抽取的 SourceRecord ID |
+| `--candidate-types` | 否 | 全部 | 逗号分隔：`faq,action_link,dynamic_query` |
+| `--auto-approve` | 否 | — | 抽取后自动审核 + 发布 |
+
+**review 参数：**
+
+| 参数 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `--candidate-id` | 是 | — | 候选 ID |
+| `--approve` | 否 | — | 通过 |
+| `--reject` | 否 | — | 拒绝 |
+| `--reviewer` | 否 | `cli` | 审核人 |
+
+**list 参数：**
+
+| 参数 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `--status` | 否 | `pending` | 状态过滤：pending / approved / rejected |
+
+**环境变量：**
+
+| 变量 | 说明 |
+|---|---|
+| `DASHSCOPE_API_KEY` | DashScope API Key（必需），在 https://dashscope.aliyun.com 获取 |
+| `ORIONSTACK_QWEN_API_BASE` | API 地址，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `ORIONSTACK_QWEN_API_MODEL` | 模型名，默认 `qwen-plus` |
+
+**E2E 验证记录：**
+
+| 测试文档 | 内容长度 | 抽取结果 |
+|---|---|---|
+| 员工考勤与请假管理制度 | 967 字 | 9 FAQ → KnowledgeUnit |
+| 差旅费用报销管理办法 | 509 字 | 8 FAQ + 2 ActionLink + 2 DynamicQuery |
+
+---
+
+### 测试与回归
+
+#### `run-phase2-regression.py`
+
+一键执行 Phase 2 专项回归（检索、chat flow、trace、hard cases）。
+
+```bash
+python scripts/run-phase2-regression.py
+python scripts/run-phase2-regression.py -k clarification
+```
+
+参数：`--check-only`，额外参数透传给 `pytest`。
+
+#### `generate-cloud-audit-samples.py`
+
+生成 8 域 FAQ 审计样本（114 条），覆盖所有 seed FAQ。
+
+```bash
+python scripts/generate-cloud-audit-samples.py
+```
+
+#### `audit-cloud-bad-cases.py`
+
+审计云端 bad cases，检查抽取质量。
+
+```bash
+python scripts/audit-cloud-bad-cases.py
+```
+
+#### `probe_llama_server.py`
+
+探测本地 llama-server 连通性与响应质量。
+
+```bash
+python scripts/probe_llama_server.py
+```
+
+---
+
+### 运维
+
+#### `rebuild-elastic-index.py`
+
+重建 Elasticsearch 索引（清空并重新写入所有 KnowledgeUnit）。
+
+```bash
+python scripts/rebuild-elastic-index.py
+```
+
+#### `clean-local-records.py`
+
+清理本地问答记录文件（`chat_records.jsonl` 与 `feedback_records.jsonl`）。
+
+```bash
 python scripts/clean-local-records.py --what-if
-python scripts/clean-local-records.py
 python scripts/clean-local-records.py --chat-only
 python scripts/clean-local-records.py --feedback-only
 ```
 
-执行结果：
+参数：`--chat-only` / `--feedback-only` / `--check-only` / `--what-if`
 
-1. 输出当前本地记录文件路径、行数与大小
-2. 根据参数选择清理 ask 记录或 feedback 记录
-3. 删除目标本地记录文件
+#### `git-release.py`
 
-注意事项：
-
-- 该脚本只清理本地记录文件，不清理文档上传数据
-- `--what-if` 只预演，不实际删除
-- `--check-only` 只检查当前文件状态，不执行清理
-
-### `start-backend.py`
-
-用途：
-
-- 以生产配置启动后端服务（不带 `--reload`）
-
-参数：
-
-- `--app-mode prod|demo|dev`
-- `--host 127.0.0.1`
-- `--port 8000`
-- `--workers 1`
-- `--check-only`
-
-示例：
+交互式创建本地版本发布提交、git tag 并推送。
 
 ```bash
-python scripts/start-backend.py
-python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --workers 2
-python scripts/start-backend.py --check-only
+python scripts/git-release.py --version 0.2.0 --commit-message "feat: Phase 3 extraction pipeline"
+python scripts/git-release.py --version 0.2.0 --skip-push
 ```
 
-与 `dev-backend.py` 的差异：
+参数：`--version` / `--commit-message` / `--tag-prefix v` / `--remote origin` / `--skip-push` / `--check-only`
 
-- 不带 `--reload`：生产启动不做热重载
-- 支持 `--workers` 参数：可启动多 worker 进程
-- 默认 `--app-mode prod`：关闭 Debug 信息与记录查看接口
+---
 
-### `run-phase2-regression.py`
-
-用途：
-
-- 一键执行当前固定的 phase 2 专项回归
-- 覆盖检索主链、chat flow、trace、hard cases 四层
-
-固定测试集合：
-
-- `backend/tests/test_phase2_retrieval.py`
-- `backend/tests/test_chat_flow.py`
-- `backend/tests/test_phase2_trace.py`
-- `backend/tests/test_phase2_hard_cases.py`
-
-参数：
-
-- `--check-only`
-- 额外 `pytest` 参数会直接透传
-
-示例：
-
-```bash
-python scripts/run-phase2-regression.py
-python scripts/run-phase2-regression.py --check-only
-python scripts/run-phase2-regression.py -k clarification
-```
-
-## 生产配置说明
-
-### Phase 2 推荐启动矩阵
-
-当前 phase 2 检索链建议按三档使用：
-
-1. 默认全开档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=true`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-   - `ORIONSTACK_PLANNER_PROVIDER=local`
-2. 软回退档：
-   - `ORIONSTACK_SEARCH_BACKEND=elasticsearch`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=true`
-3. 硬回退档：
-   - `ORIONSTACK_SEARCH_BACKEND=local`
-   - `ORIONSTACK_ENABLE_QUERY_PLANNER=false`
-   - `ORIONSTACK_ENABLE_FAST_TRACK=false`
-
-建议理解为：
-
-- planner 高置信时：进入 `lexical + vector + RRF -> rerank + evidence`
-- planner 低置信时：回退到 `Fast Track + lexical-only`
-- 当前长期默认建议直接运行全开档；软/硬回退只保留为排障手段
-
-### 环境变量
-
-后端通过环境变量读取所有配置。可用变量参见仓库根目录 `.env.example`。
-
-关键配置项：
+## Phase 3 环境变量
 
 | 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `ORIONSTACK_APP_MODE` | `demo` | `demo` / `dev` / `prod` |
-| `ORIONSTACK_HOST` | `127.0.0.1` | 监听地址，生产环境可改为 `0.0.0.0` |
-| `ORIONSTACK_PORT` | `8000` | 监听端口 |
-| `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 允许的前端来源，逗号分隔 |
-| `ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD` | `0.6` | 路由置信度阈值 |
-| `ORIONSTACK_RETRIEVAL_MIN_SCORE` | `2` | 检索最低分 |
-| `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch`：默认全开档；`local`：硬回退到主线 1 默认链路 |
-| `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 默认进入 planner -> hybrid -> rerank/evidence 服务链 |
-| `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 默认启用小 query 规则与 lexical 过渡优化 |
-| `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
-| `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | — | DashScope API Key（抽取管线必需） |
+| `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | Odoo 服务地址 |
+| `ORIONSTACK_ODOO_DB` | `odoo` | Odoo 数据库名 |
+| `ORIONSTACK_ODOO_UID` | `2` | Odoo 用户 ID |
+| `ORIONSTACK_ODOO_PASSWORD` | `qq3938332` | Odoo 用户密码 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 适配器选择：`odoo` / `mock` |
 
-### 推荐启动示例
+---
 
-```bash
-# 默认全开档
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
+## Phase 2 推荐启动矩阵
 
-# 软回退：回到 Elasticsearch lexical-only
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
-
-# 硬回退：完整回到主线 1 默认链路
-ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
-```
-
-### 发布前最小 smoke
-
-建议至少执行：
+| 档位 | SEARCH_BACKEND | QUERY_PLANNER | FAST_TRACK | 说明 |
+|---|---|---|---|---|
+| 全开（推荐） | `elasticsearch` | `true` | `true` | planner → hybrid → rerank/evidence |
+| 软回退 | `elasticsearch` | `false` | `true` | lexical-only |
+| 硬回退 | `local` | `false` | `false` | 回到 Phase 1 默认链路 |
 
 ```bash
-python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+# 全开档（推荐）
+python scripts/dev-backend.py
+
+# 硬回退档
+ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
 ```
 
-如果只是验证 phase 2 当前固定回归面，优先直接执行：
+---
+
+## prod 模式行为
+
+`ORIONSTACK_APP_MODE=prod` 时：
+
+- `debug_info` 不返回给前端
+- `/api/chat/records` 与 `/api/chat/feedback` 返回 `404`
+- 前端 `canDebug` 为 `false`
+
+---
+
+## 前端生产构建
 
 ```bash
-python scripts/run-phase2-regression.py
+cd frontend && npm run build
 ```
 
-若当前准备长期使用默认全开档，建议再手动验证：
+构建产物在 `frontend/dist/`，可直接通过 Nginx 等提供。
 
-- `请假`
-- `病假材料`
-- `请假进度怎么看`
-
-预期：
-
-- `route_result = faq_qa_elastic`
-- `retrieved_chunks` 为 FAQ 风格 ID
-- `citation.source_locator` 为 `hr_faq_seed_v1#...`
-- 不返回 `document_chunk` JSON 残片
-
-### `prod` 模式行为
-
-将 `ORIONSTACK_APP_MODE` 设为 `prod` 时：
-
-- `debug_info` 不会返回给前端，即使请求带了 `debug=true`
-- `/api/chat/records` 与 `/api/chat/feedback` 接口返回 `404`
-- 前端 `canDebug` 为 `false`，不展示 Debug 面板与最近记录区
-
-### CORS 来源
-
-生产环境必须将 `ORIONSTACK_CORS_ORIGINS` 设为实际部署域名，否则前端无法跨域请求后端。
-
-示例：
-
-```bash
-export ORIONSTACK_CORS_ORIGINS="https://app.example.com"
-```
-
-不设置时默认为开发来源：
-
-- `http://localhost:5173`
-- `http://127.0.0.1:5173`
-
-### 前端生产构建
-
-```bash
-cd frontend
-npm run build
-```
-
-构建产物在 `frontend/dist/`，可直接通过 Nginx 或其他静态文件服务提供。
-
-前端生产模式下 `canDebug` 为 `false`，不展示 Debug 面板与最近记录区。
+---
 
 ## 记录保留策略
 
-后端在保存记录时会自动截断最旧记录，默认保留数量为 200 条。
+后端自动截断最旧记录，默认保留 200 条：
 
-配置项：
-
-- `ORIONSTACK_CHAT_RECORD_MAX_COUNT`：问答记录保留数量上限，默认 `200`
-- `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT`：反馈记录保留数量上限，默认 `200`
-
-设置方式：
-
-```bash
-export ORIONSTACK_CHAT_RECORD_MAX_COUNT=50
-export ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT=50
-```
-
-行为说明：
-
-- 每次保存新记录后检查当前记录总数
-- 如果超出 `max_count`，自动删除最旧记录
-- 设置为 `0` 或不配置时保留默认上限 200 条
+- `ORIONSTACK_CHAT_RECORD_MAX_COUNT=200`
+- `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT=200`

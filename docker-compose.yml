@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   elasticsearch:
     build:
@@ -13,15 +12,20 @@ services:
       - "9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: orionstack-ollama
+  odoo:
+    image: odoo:19.0
+    container_name: odoo
+    restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "8069:8069"
+    environment:
+      HOST: host.docker.internal
+      PORT: 5432
+      USER: odoo
+      PASSWORD: qq3938332
     volumes:
-      - ollama_data:/root/.ollama
+      - odoo-data:/var/lib/odoo
 
 volumes:
   es_data:
-  ollama_data:
+  odoo-data:

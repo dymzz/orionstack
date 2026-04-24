@@ -14,6 +14,21 @@ export interface CitationItem {
   snippet: string
 }
 
+export interface ActionLinkItem {
+  action_link_id: string
+  label: string
+  url: string
+  system_type: string
+  resource_type: string
+}
+
+export interface DynamicQueryResultItem {
+  query_key: string
+  resource_type: string
+  description: string
+  data: Record<string, unknown>[]
+}
+
 export interface ClarificationOption {
   option_id: string
   label: string
@@ -46,6 +61,8 @@ export interface ChatAskResponse {
   trace_id: string
   answer: string
   citations: CitationItem[]
+  action_links?: ActionLinkItem[]
+  dynamic_query_result?: DynamicQueryResultItem | null
   clarification?: ClarificationInfo | null
   debug_info?: DebugInfo
 }

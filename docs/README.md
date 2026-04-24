@@ -33,9 +33,13 @@ docs/
 ├── 2_2_file_responsibilities.md
 ├── 2_3_field_definitions.md
 ├── 2_4_test_strategy.md
+├── 3_1_progress.md
+├── 3_2_file_responsibilities.md
+├── 3_3_field_definitions.md
 └── designs/
    ├── 1_system_design.md
    ├── 2_system_design.md
+   ├── 3_system_design.md
    ├── document_ingestion_boundary.md
    └── document_library/
       ├── README.md
@@ -150,7 +154,42 @@ docs/
 
 ---
 
-## 3.3 文档接入边界补充
+## 3.3 主线 3：SaaS 知识副本层
+
+这一组文档描述**第三阶段目标设计**，解决外部 SaaS 导出数据如何安全、可控、可追溯地接入知识问答系统。
+
+### `docs/designs/3_system_design.md`
+
+职责：
+
+- 定义第三阶段 SaaS 知识副本层设计基线
+- 说明新鲜度、删除传播、权限漂移、可追溯、抽取漂移 5 个核心工程问题
+- 定义核心对象：SourceRecord / KnowledgeUnit 扩展 / ActionLink / DynamicQuery / ExtractionCandidate / ImportBatch
+
+### `docs/3_1_progress.md`
+
+职责：
+
+- 记录第三阶段从设计到最小可执行改造的推进状态
+- 说明哪些能力只是目标，哪些已经开始进入仓库
+
+### `docs/3_2_file_responsibilities.md`
+
+职责：
+
+- 说明第三阶段新增文件、扩展文件与预留文件位的职责边界
+- 避免把第三阶段新能力写回 Phase 1 / Phase 2 旧文件
+
+### `docs/3_3_field_definitions.md`
+
+职责：
+
+- 冻结第三阶段核心对象的字段语义、类型、约束与默认值
+- 对齐 SourceRecord / ActionLink / DynamicQuery / ExtractionCandidate / ImportBatch 的字段含义
+
+---
+
+## 3.4 文档接入边界补充
 
 ### `docs/designs/document_ingestion_boundary.md`
 
@@ -168,7 +207,7 @@ docs/
 
 ---
 
-## 3.4 文档库标准目录
+## 3.5 文档库标准目录
 
 ### `docs/designs/document_library/README.md`
 
@@ -251,7 +290,16 @@ docs/
 3. `docs/designs/document_library/phase1_document_library_fields_freeze.md`
 4. 对应业务域的 `domain_*_library_v1.md`
 
-## 4.6 想判断“当前改动应该落在哪份文档”
+## 4.6 想推进"第三阶段 SaaS 知识副本层"
+
+推荐顺序：
+
+1. `docs/designs/3_system_design.md`
+2. `docs/3_1_progress.md`
+3. `docs/3_2_file_responsibilities.md`
+4. `docs/3_3_field_definitions.md`
+
+## 4.7 想判断“当前改动应该落在哪份文档”
 
 可按以下原则判断：
 
@@ -319,6 +367,15 @@ docs/
   4. `docs/2_3_field_definitions.md`  
   5. `docs/2_4_test_strategy.md`
 
+### 第三阶段 SaaS 知识副本层（主线 3）
+
+- SourceRecord / ImportBatch / ExtractionCandidate / ActionLink / DynamicQuery / Freshness / Tombstone  
+  阅读顺序：  
+  1. `docs/designs/3_system_design.md`  
+  2. `docs/3_2_file_responsibilities.md`  
+  3. `docs/3_1_progress.md`  
+  4. `docs/3_3_field_definitions.md`
+
 ---
 
 ## 5. 当前维护原则
@@ -332,11 +389,12 @@ docs/
 - `docs/*_field_definitions.md` 负责字段解释
 - `docs/*_test_strategy.md` 负责测试策略
 
-### 5.2 主线 1 与主线 2 分开维护
+### 5.2 主线 1 / 2 / 3 分开维护
 
 - 主线 1 记录当前默认实现基线
-- 主线 2 记录升级目标与过渡落地状态
-- 不把第二阶段内容反向写进主线 1 文档里冒充“当前默认实现”
+- 主线 2 记录检索链路升级（已完成落地）
+- 主线 3 记录 SaaS 知识副本层设计（待实现）
+- 不把后续阶段内容反向写进前序阶段文档里冒充“当前默认实现”
 
 ### 5.3 接入边界与文档库标准不回写系统主设计正文
 
