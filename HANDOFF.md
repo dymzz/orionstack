@@ -1,7 +1,7 @@
 # OrionStack 交接文档
 
 > 版本：v1
-> 日期：2026-04-25
+> 日期：2026-04-26
 > 目的：为下一任开发者/AI 提供项目全貌、当前状态、关键决策与上手路径
 
 ---
@@ -381,7 +381,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 | 问题 | 状态 | 说明 |
 |---|---|---|
-| 裸 `python` 环境可能缺依赖 | 已知环境问题 | 项目依赖已在 `pyproject.toml`；以 `uv run ...` 为测试基线 |
+| 裸 `python` 环境可能缺依赖 | 已知环境问题 | 项目依赖已在 `pyproject.toml`；当前 Windows 工作区以仓库内 `.venv\Scripts\python.exe` 为测试基线 |
 | Odoo 19 字段差异 | 已处理 | `hr.leave` 用 `holiday_status_id`（不是 `holiday_type`） |
 | `_build_clarification_response` 缺参 | 已修复 | ActionLink 集成时暴露并修复 |
 | JSONL 存储 | 架构限制 | 无数据库，不适合高并发生产环境 |

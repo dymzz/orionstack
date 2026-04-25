@@ -1,6 +1,6 @@
 # OrionStack 第三阶段推进状态
 
-> 状态：**设计基线已冻结，待按迭代实现**
+> 状态：**Phase 3 第一轮已完成，进入维护与后续扩展期**
 > 对应设计文档：`docs/designs/3_system_design.md`
 > 配套职责文档：`docs/3_2_file_responsibilities.md`
 > 配套字段文档：`docs/3_3_field_definitions.md`
@@ -62,8 +62,8 @@
 
 当前状态：
 
-- **设计基线已冻结**
-- 代码实现尚未启动
+- **已完成**（27 测试）
+- 已落地 SourceRecord / ImportBatch / ExtractionCandidate 数据层、freshness 判定、tombstone 传播与最小 access scope 约束
 
 ### Step 2：action link（次做）
 
@@ -75,8 +75,8 @@
 
 当前状态：
 
-- 设计基线已冻结
-- 依赖 Step 1 完成
+- **已完成**（15 测试）
+- 已落地 ActionLink 数据层、按 resource/domain 附带原系统入口，以及与问答链路的最小集成
 
 ### Step 3：最小动态查询（次做）
 
@@ -109,8 +109,8 @@
 
 当前状态：
 
-- 设计基线已冻结
-- 依赖 Step 1 完成
+- **已完成**（18 测试 + E2E 验证通过）
+- 已落地可替换抽取 provider → ExtractionCandidate → review → 发布到 FAQ / ActionLink / DynamicQuery 的最小管线
 
 ### Step 5：trace / hard cases 收敛（最后做）
 
@@ -121,7 +121,7 @@
 当前状态：
 
 - **已完成**（9 测试）
-- 依赖 Step 1-4 部分完成
+- 已完成 trace / hard case provenance 字段扩展与 issue_category 自动分类
 
 实现要点：
 
