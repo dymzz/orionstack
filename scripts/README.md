@@ -258,7 +258,10 @@ python scripts/probe_llama_server.py
 
 ```text
 python scripts/rebuild-elastic-index.py
+python scripts/rebuild-elastic-index.py --check-only
 ```
+
+参数：`--check-only`
 
 #### `clean-local-records.py`
 
