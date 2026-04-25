@@ -7,7 +7,7 @@
 > 前置收口：Phase 2 已关闭（见 `docs/2_1_progress.md §10`）
 > 目标：把外部 SaaS 导出数据安全、可控、可追溯地接入知识问答系统
 > 原则：**先静态知识副本层，再 action link，再动态查询，最后抽取自动化**
-> 边界：当前仓库示例使用 DashScope `qwen-plus` 与 `OdooAdapter`，但 Phase 3 目标是可替换 provider / adapter，不把 Qwen + Odoo 写成架构绑定
+> 边界：当前仓库默认示例使用 DashScope `qwen-plus` 与 `MockAdapter`；`OdooAdapter` 是显式可选外部系统示例。Phase 3 目标是可替换 provider / adapter，不把 Qwen + Odoo 写成架构绑定
 
 ---
 
@@ -89,7 +89,7 @@
 
 当前状态：
 
-- **已完成**（39 测试，含 adapter-neutral 边界回归）
+- **已完成**（43 测试：39 个 DynamicQuery 基础测试 + 4 个 adapter 双模式 smoke）
 - 默认 adapter 为 `mock`，OdooAdapter 需要通过配置显式选择
 
 实现要点：
@@ -98,6 +98,7 @@
 2. `SystemAdapter.fetch(resource_type, params)` 的 `params` 由具体 adapter 解释，通用层不注入 Odoo XML-RPC `domain`
 3. OdooAdapter 内部负责 `resource_type -> Odoo model/fields` 映射，Odoo 字段差异停留在 adapter 内
 4. MockAdapter 是默认本地/demo adapter，避免无配置启动时隐式依赖 Odoo
+5. P2.1 双模式 smoke 已固化：默认 `mock` 路径不得触碰 Odoo；显式 `odoo` 配置才进入 Odoo adapter 分支，且测试不发真实 XML-RPC 请求
 
 ### Step 4：抽取候选自动化（后做）
 
@@ -169,7 +170,7 @@ Phase 3 不重新实现 Phase 2 已落地的能力，而是**在现有链路上�
 | `3_3_field_definitions.md` 字段定义 | 已更新（含 SystemAdapter Protocol） |
 | Step 1 代码实现 | 已完成（27 测试） |
 | Step 2 代码实现（ActionLink） | 已完成（15 测试） |
-| Step 3 代码实现（DynamicQuery） | 已完成（39 测试，含 adapter-neutral 边界回归） |
+| Step 3 代码实现（DynamicQuery） | 已完成（43 测试，含 adapter-neutral 边界回归 + 双模式 smoke） |
 | Step 4 代码实现（抽取候选自动化） | 已完成（18 测试 + E2E 验证通过） |
 | Step 5 代码实现 | 已完成（9 测试） |
 

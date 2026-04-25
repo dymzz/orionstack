@@ -596,6 +596,11 @@ SystemAdapter (Protocol)            ← 抽象接口
 | `ORIONSTACK_ODOO_UID` | int | Odoo 用户 ID |
 | `ORIONSTACK_ODOO_PASSWORD` | string | Odoo 用户密码，需通过环境变量注入 |
 
+双模式 smoke 已固化在 `backend/tests/test_dynamic_query_adapter_modes.py`：
+
+1. 默认未配置 `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` 时必须选择 `mock`，且不得触碰 Odoo factory
+2. 显式配置 `odoo` 时才选择 Odoo adapter 分支；单元 smoke 不发真实 XML-RPC 请求
+
 #### 如何新增适配器
 
 1. 在 `backend/app/runtime/` 下新建适配器文件

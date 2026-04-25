@@ -63,6 +63,13 @@ OrionStack 是一个**企业知识助手 / 文档问答系统**。核心能力�
 - ActionLink 的领域展示来自 JSONL 数据的 `business_domains`，代码里不再维护 domain → resource_type 映射
 - 旧的 `qwen_api` provider/router 名只作为兼容别名或历史 trace 名保留
 
+### 2026-04-26 DynamicQuery 双模式 smoke 收口
+
+- 新增 `backend/tests/test_dynamic_query_adapter_modes.py`，固化默认 `mock` 与显式 `odoo` 两种 adapter 选择路径
+- 默认模式 smoke 会在 Odoo factory 被触碰时直接失败，防止无配置启动重新隐式依赖 Odoo
+- 显式 Odoo 模式 smoke 只验证 adapter 分支选择与 chat dynamic query 透传，不发真实 XML-RPC 请求、不需要真实凭据
+- Step 3 DynamicQuery 回归基线更新为 43 个测试：39 个基础/边界测试 + 4 个双模式 smoke
+
 ### 2026-04-25 Provider bad-case 闭环收口
 
 - Provider bad-case audit 已完成 P1.1-P1.5 闭环：当前没有仍处于 `open` 的 provider 主链 bad-case
@@ -218,27 +225,27 @@ python scripts/dev-demo.py
 ### 5.1 运行全部测试
 
 ```bash
-uv run python -m pytest backend/tests -q
+.venv\Scripts\python.exe -m pytest backend/tests -q
 ```
 
-当前项目环境基线：**344 passed, 21 skipped, 9 xfailed**。
+当前项目环境基线：**353 passed, 21 skipped, 9 xfailed**（2026-04-26）。
 
-裸 `python` 环境如果没有同步项目依赖，可能出现导入期缺包错误；交接和回归请以 `uv run ...` 为准。live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
+裸 `python` 环境如果没有同步项目依赖，可能出现导入期缺包错误；当前 Windows 工作区回归请优先使用仓库内 `.venv`。live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
 ### 5.2 Phase 3 专项测试
 
 ```bash
 # Phase 3 基础链路：freshness / sync / trace / hard cases
-uv run python -m pytest backend/tests/test_phase3_*.py -q
+.venv\Scripts\python.exe -m pytest backend/tests/test_phase3_*.py -q
 
-# Phase 3 运行时组件：ActionLink / DynamicQuery / Extraction
-uv run python -m pytest backend/tests/test_action_link.py backend/tests/test_dynamic_query.py backend/tests/test_extraction.py -q
+# Phase 3 运行时组件：ActionLink / DynamicQuery / Adapter modes / Extraction
+.venv\Scripts\python.exe -m pytest backend/tests/test_action_link.py backend/tests/test_dynamic_query.py backend/tests/test_dynamic_query_adapter_modes.py backend/tests/test_extraction.py -q
 ```
 
 ### 5.3 Phase 2 回归
 
 ```bash
-uv run python scripts/run-phase2-regression.py
+.venv\Scripts\python.exe scripts/run-phase2-regression.py
 ```
 
 ---
@@ -411,4 +418,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（`uv run python -m pytest backend/tests -q`：344 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（`.venv\Scripts\python.exe -m pytest backend/tests -q`：353 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
