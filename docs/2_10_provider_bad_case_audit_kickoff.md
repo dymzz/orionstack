@@ -251,4 +251,7 @@ uv run python scripts/audit-provider-bad-cases.py --limit 8
 - [x] 已新增 `audit_resolution`，区分 `open` 与 `closed_by_later_success`
 - [x] 已完成当前 open provider 坏例 triage：见 `docs/2_12_provider_open_bad_case_triage.md`
 - [x] 已完成受控复测：`演示资料` / `功能定位` 不是语料缺口，主要暴露无 domain 宽搜的 recall / timeout 风险
-- [ ] 下一步做通用稳定性修复；不做 query 特判
+- [x] 已完成 P1.3 通用稳定性修复：hybrid 检索单侧 backend 失败时可 soft fallback 到另一侧
+- [x] 已完成 P1.4 通用召回 / 重排修复：补 provider-neutral 领域约定、合并保护性 lexical terms、扩大无 domain rerank 候选池并保留跨域候选
+- [x] 已完成 P1.4 受控复测：在 `domain_hint=null` 下 `演示资料` 命中 `sales-faq-003`，`功能定位` 命中 `product-faq-004`
+- [ ] 下一步重新运行 provider bad-case audit，确认历史 open miss 是否已被 later success 关闭

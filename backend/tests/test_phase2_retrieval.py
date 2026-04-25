@@ -41,6 +41,16 @@ class _FakeLexicalRetriever:
         return list(self._hits)
 
 
+class _FailingRetriever:
+    def __init__(self, error: RetrievalBackendError) -> None:
+        self._error = error
+        self.calls = []
+
+    def search(self, query: str, **kwargs):
+        self.calls.append({"query": query, **kwargs})
+        raise self._error
+
+
 class _FakePlanner:
     router_name = "query_planner_local"
 
@@ -527,6 +537,52 @@ def test_hybrid_retriever_fuses_lexical_and_vector_hits_with_rrf() -> None:
     assert vector_retriever.calls[0]["query"] == "请假"
 
 
+def test_hybrid_retriever_soft_fallbacks_to_vector_when_lexical_backend_fails() -> None:
+    lexical_error = RetrievalBackendError("lexical", RuntimeError("search failed"))
+    lexical_retriever = _FailingRetriever(lexical_error)
+    vector_retriever = _FakeLexicalRetriever([_build_hr_leave_hit()])
+    retriever = HybridRetriever(lexical_retriever, vector_retriever)
+
+    hits = retriever.search(
+        lexical_query="请假 申请",
+        vector_query="请假",
+        lexical_terms=["请假"],
+        business_domain="hr",
+        size=3,
+    )
+
+    assert [hit.unit_id for hit in hits] == [LEAVE_APPLY_ID]
+    assert hits[0].lexical_rank is None
+    assert hits[0].vector_rank == 1
+    assert hits[0].bm25_score is None
+    assert hits[0].vector_score == 2.0
+    assert retriever.last_backend_warning is not None
+    assert retriever.last_backend_warning.failed_stage == "lexical"
+    assert retriever.last_backend_warning.cause_name == "RuntimeError"
+    assert retriever.last_backend_warning.fallback_stage == "vector"
+
+
+def test_hybrid_retriever_raises_backend_error_when_both_branches_fail() -> None:
+    lexical_retriever = _FailingRetriever(
+        RetrievalBackendError("lexical", RuntimeError("lexical failed"))
+    )
+    vector_retriever = _FailingRetriever(
+        RetrievalBackendError("vector", RuntimeError("vector failed"))
+    )
+    retriever = HybridRetriever(lexical_retriever, vector_retriever)
+
+    with pytest.raises(RetrievalBackendError) as error:
+        retriever.search(
+            lexical_query="请假",
+            vector_query="请假",
+            lexical_terms=["请假"],
+            size=3,
+        )
+
+    assert error.value.stage == "lexical"
+    assert retriever.last_backend_warning is None
+
+
 def test_hybrid_retriever_keeps_dominant_lexical_faq_ahead_of_noisy_vector_hits() -> None:
     lexical_retriever = _FakeLexicalRetriever(
         [
@@ -557,6 +613,36 @@ def test_hybrid_retriever_keeps_dominant_lexical_faq_ahead_of_noisy_vector_hits(
     assert hits[0].lexical_rank == 1
     assert hits[0].vector_rank is None
     assert hits[0].score > hits[1].score
+
+
+def test_hybrid_retriever_keeps_domain_diverse_candidates_when_unscoped() -> None:
+    faq_by_id = fixture_faq_map()
+    lexical_retriever = _FakeLexicalRetriever(
+        [
+            _build_fixture_lexical_hit(faq_by_id["finance-faq-001"], score=5.0),
+            _build_fixture_lexical_hit(faq_by_id["hr-faq-001"], score=4.9),
+            _build_fixture_lexical_hit(faq_by_id["admin-faq-001"], score=4.8),
+            _build_fixture_lexical_hit(faq_by_id["hr-faq-002"], score=4.7),
+            _build_fixture_lexical_hit(faq_by_id["sales-faq-003"], score=4.6),
+        ]
+    )
+    vector_retriever = _FakeLexicalRetriever([])
+    retriever = HybridRetriever(lexical_retriever, vector_retriever)
+
+    hits = retriever.search(
+        lexical_query="资料在哪里找",
+        vector_query="资料在哪里找",
+        lexical_terms=["资料", "哪里"],
+        lifecycle_status="active",
+        size=4,
+    )
+
+    assert [hit.unit_id for hit in hits] == [
+        "finance-faq-001",
+        "hr-faq-001",
+        "admin-faq-001",
+        "sales-faq-003",
+    ]
 
 
 def test_hybrid_retriever_keeps_dominant_lexical_document_chunk_ahead_of_noisy_vector_hits() -> None:
@@ -1309,6 +1395,139 @@ def test_chat_service_uses_query_planner_outputs_in_elasticsearch_path(
     assert fake_hybrid_retriever.calls[0]["vector_query"] == "请假"
     assert fake_hybrid_retriever.calls[0]["business_domain"] is None
     assert fake_hybrid_retriever.calls[0]["lexical_terms"] == ["请假"]
+
+
+def test_chat_service_augments_unscoped_planner_terms_before_hybrid_search(
+    monkeypatch,
+) -> None:
+    sales_hit = _build_hybrid_fixture_hit(
+        "sales-faq-003",
+        score=0.031,
+        lexical_rank=4,
+        vector_rank=5,
+        rrf_rank=4,
+        bm25_score=2.2,
+        vector_score=0.62,
+    )
+    fake_retriever = _FakeLexicalRetriever([])
+    fake_hybrid_retriever = _FakeHybridRetriever([sales_hit])
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="演示资料在哪里找",
+            domain_hint=None,
+            lexical_terms=["演示资料"],
+            planner_confidence=0.86,
+        )
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(
+            search_backend="elasticsearch",
+            elastic_url="http://localhost:9200",
+            enable_query_planner=True,
+        ),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: fake_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_hybrid_retriever",
+        lambda self: fake_hybrid_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_query_planner",
+        lambda self: fake_planner,
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="演示资料在哪里找", debug=True),
+        trace_id="trace-phase2-unscoped-term-guard",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.citations[0].citation_id == "sales-faq-003"
+    assert fake_hybrid_retriever.calls[0]["size"] == ChatService._UNSCOPED_HYBRID_RERANK_SIZE
+    effective_terms = fake_hybrid_retriever.calls[0]["lexical_terms"]
+    assert effective_terms[0] == "演示资料"
+    assert "演示" in effective_terms
+    assert "资料" in effective_terms
+
+
+def test_chat_service_uses_hybrid_soft_fallback_when_lexical_branch_times_out(
+    monkeypatch,
+) -> None:
+    fake_retriever = _FakeLexicalRetriever([_build_hr_leave_hit()])
+    soft_fallback_hybrid = HybridRetriever(
+        _FailingRetriever(
+            RetrievalBackendError("lexical", RuntimeError("search timed out"))
+        ),
+        _FakeLexicalRetriever([_build_hr_leave_hit()]),
+    )
+    fake_planner = _FakePlanner(
+        PlannerOutput(
+            normalized_query="如何申请年假",
+            domain_hint="hr",
+            lexical_terms=["申请年假", "年假"],
+            planner_confidence=0.9,
+        )
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(
+            search_backend="elasticsearch",
+            elastic_url="http://localhost:9200",
+            enable_query_planner=True,
+        ),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: fake_retriever,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_hybrid_retriever",
+        lambda self: soft_fallback_hybrid,
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_query_planner",
+        lambda self: fake_planner,
+    )
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="如何申请年假", debug=True),
+        trace_id="trace-phase2-hybrid-soft-fallback",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert response.citations[0].citation_id == LEAVE_APPLY_ID
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "lexical_backend_soft_fallback"
+    assert (
+        response.debug_info.reject_reason
+        == "lexical_backend_soft_fallback:RuntimeError"
+    )
+    assert response.debug_info.retrieval_mode == "hybrid_rerank"
+    assert response.debug_info.lexical_topk == []
+    assert response.debug_info.vector_topk is not None
+    assert [item.unit_id for item in response.debug_info.vector_topk] == [
+        LEAVE_APPLY_ID
+    ]
+    assert response.debug_info.rrf_topk is not None
+    assert [item.unit_id for item in response.debug_info.rrf_topk] == [
+        LEAVE_APPLY_ID
+    ]
 
 
 def test_chat_service_prefers_faq_evidence_over_document_chunk_in_hybrid_path(

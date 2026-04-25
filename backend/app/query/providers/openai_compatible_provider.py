@@ -39,8 +39,8 @@ _SYSTEM_PROMPT: str = """\
 - it: 技术支持、账号、系统登录、权限、设备
 - ops: 运营、生产变更、值班、事件处理
 - legal: 法务、合同审批、印章、合规、保密协议
-- product: 产品、需求、版本、缺陷、发布
-- sales: 销售、报价、客户、商机、合同模板
+- product: 产品、需求、版本、缺陷、发布、功能说明、功能定位
+- sales: 销售、报价、客户、商机、合同模板、演示资料、销售资料
 
 输出要求（严格 JSON，不要任何前后缀文字）：
 {
@@ -66,6 +66,12 @@ _SYSTEM_PROMPT: str = """\
 
 输入：请假
 输出：{"normalized_query":"请假","domain_hint":"hr","lexical_terms":["请假"],"planner_confidence":0.38}
+
+输入：演示资料怎么下载
+输出：{"normalized_query":"演示资料怎么下载","domain_hint":"sales","lexical_terms":["演示资料","下载"],"planner_confidence":0.86}
+
+输入：功能定位说明在哪看
+输出：{"normalized_query":"功能定位说明在哪看","domain_hint":"product","lexical_terms":["功能定位","功能说明","产品文档"],"planner_confidence":0.86}
 
 输入：xxyyzz 乱码输入 asdfq
 输出：{"normalized_query":"xxyyzz 乱码输入 asdfq","domain_hint":null,"lexical_terms":["乱码输入"],"planner_confidence":0.08}
@@ -289,4 +295,3 @@ class OpenAICompatiblePlannerProvider:
                 )
             restored_terms.append(restored)
         return restored_terms
-

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.retrieval.lexical_retriever import LexicalHit, LexicalRetriever
+from app.retrieval.lexical_retriever import (
+    LexicalHit,
+    LexicalRetriever,
+    RetrievalBackendError,
+)
 from app.retrieval.vector_retriever import VectorRetriever
 
 RRF_RANK_CONSTANT = 60
@@ -13,6 +17,7 @@ LEXICAL_DOMINANCE_ABSOLUTE_FLOOR = 1.0
 VECTOR_DOMINANCE_RATIO = 3.0
 VECTOR_DOMINANCE_BONUS = 0.02
 VECTOR_DOMINANCE_ABSOLUTE_FLOOR = 0.5
+DOMAIN_DIVERSITY_HEAD_SIZE = 3
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,13 @@ class HybridHit:
     stale_after: str = ""
 
 
+@dataclass(frozen=True)
+class HybridBackendWarning:
+    failed_stage: str
+    cause_name: str
+    fallback_stage: str
+
+
 class HybridRetriever:
     def __init__(
         self,
@@ -56,6 +68,11 @@ class HybridRetriever:
         self._vector_retriever = vector_retriever
         self._rank_constant = rank_constant
         self._rank_window_size = rank_window_size
+        self._last_backend_warning: HybridBackendWarning | None = None
+
+    @property
+    def last_backend_warning(self) -> HybridBackendWarning | None:
+        return self._last_backend_warning
 
     def search(
         self,
@@ -68,28 +85,66 @@ class HybridRetriever:
         lifecycle_status: str | None = None,
         size: int = 10,
     ) -> list[HybridHit]:
-        lexical_hits = self._lexical_retriever.search(
-            lexical_query,
-            lexical_terms=lexical_terms,
-            min_score=0.1,
-            business_domain=business_domain,
-            access_scope=access_scope,
-            lifecycle_status=lifecycle_status,
-            size=max(size, self._rank_window_size),
-        )
-        vector_hits = self._vector_retriever.search(
-            vector_query,
-            min_score=0.0,
-            business_domain=business_domain,
-            access_scope=access_scope,
-            lifecycle_status=lifecycle_status,
-            size=max(size, self._rank_window_size),
-        )
+        self._last_backend_warning = None
+        lexical_error: RetrievalBackendError | None = None
+        vector_error: RetrievalBackendError | None = None
 
-        return self._fuse_hits(lexical_hits, vector_hits, size=size)
+        try:
+            lexical_hits = self._lexical_retriever.search(
+                lexical_query,
+                lexical_terms=lexical_terms,
+                min_score=0.1,
+                business_domain=business_domain,
+                access_scope=access_scope,
+                lifecycle_status=lifecycle_status,
+                size=max(size, self._rank_window_size),
+            )
+        except RetrievalBackendError as error:
+            lexical_error = error
+            lexical_hits = []
+
+        try:
+            vector_hits = self._vector_retriever.search(
+                vector_query,
+                min_score=0.0,
+                business_domain=business_domain,
+                access_scope=access_scope,
+                lifecycle_status=lifecycle_status,
+                size=max(size, self._rank_window_size),
+            )
+        except RetrievalBackendError as error:
+            vector_error = error
+            vector_hits = []
+
+        if lexical_error is not None and vector_error is not None:
+            raise lexical_error
+        if lexical_error is not None:
+            self._last_backend_warning = HybridBackendWarning(
+                failed_stage=lexical_error.stage,
+                cause_name=lexical_error.cause_name,
+                fallback_stage="vector",
+            )
+        elif vector_error is not None:
+            self._last_backend_warning = HybridBackendWarning(
+                failed_stage=vector_error.stage,
+                cause_name=vector_error.cause_name,
+                fallback_stage="lexical",
+            )
+
+        return self._fuse_hits(
+            lexical_hits,
+            vector_hits,
+            size=size,
+            diversify_domains=business_domain is None,
+        )
 
     def _fuse_hits(
-        self, lexical_hits: list[LexicalHit], vector_hits: list[LexicalHit], *, size: int
+        self,
+        lexical_hits: list[LexicalHit],
+        vector_hits: list[LexicalHit],
+        *,
+        size: int,
+        diversify_domains: bool = False,
     ) -> list[HybridHit]:
         dominant_lexical_winner_id = self._find_dominant_lexical_winner_id(lexical_hits)
         dominant_vector_winner_id = self._find_dominant_vector_winner_id(vector_hits)
@@ -164,8 +219,14 @@ class HybridRetriever:
             reverse=True,
         )
 
+        selected_hits = self._select_return_hits(
+            hybrid_hits,
+            size=size,
+            diversify_domains=diversify_domains,
+        )
+
         ranked_hits: list[HybridHit] = []
-        for rank, hit in enumerate(hybrid_hits[:size], start=1):
+        for rank, hit in enumerate(selected_hits, start=1):
             ranked_hits.append(
                 HybridHit(
                     unit_id=hit.unit_id,
@@ -195,6 +256,43 @@ class HybridRetriever:
                 )
             )
         return ranked_hits
+
+    @staticmethod
+    def _select_return_hits(
+        hits: list[HybridHit], *, size: int, diversify_domains: bool
+    ) -> list[HybridHit]:
+        if not diversify_domains or len(hits) <= size:
+            return hits[:size]
+
+        selected: list[HybridHit] = []
+        selected_ids: set[str] = set()
+
+        def append(hit: HybridHit) -> None:
+            if hit.unit_id in selected_ids or len(selected) >= size:
+                return
+            selected.append(hit)
+            selected_ids.add(hit.unit_id)
+
+        # Keep the strongest global candidates first; domain diversification
+        # only uses the remaining slots so precise top matches are not demoted.
+        for hit in hits[:DOMAIN_DIVERSITY_HEAD_SIZE]:
+            append(hit)
+
+        seen_domains = {hit.business_domain for hit in selected if hit.business_domain}
+        for hit in hits:
+            if not hit.business_domain or hit.business_domain in seen_domains:
+                continue
+            append(hit)
+            seen_domains.add(hit.business_domain)
+            if len(selected) >= size:
+                break
+
+        for hit in hits:
+            append(hit)
+            if len(selected) >= size:
+                break
+
+        return selected
 
     @staticmethod
     def _find_dominant_lexical_winner_id(lexical_hits: list[LexicalHit]) -> str | None:

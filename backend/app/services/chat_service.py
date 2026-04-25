@@ -26,6 +26,9 @@ class ChatService:
     _ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP = 0.35
     _CLARIFICATION_MAX_RERANK_SCORE_GAP = 0.15
     _ELASTIC_REQUEST_TIMEOUT_SECONDS = 2
+    _SCOPED_HYBRID_RERANK_SIZE = 5
+    _UNSCOPED_HYBRID_RERANK_SIZE = 12
+    _LEXICAL_TERM_LIMIT = 18
     _REFUSAL_TERMS = {
         "unsafe_request": (
             "炸弹",
@@ -222,14 +225,24 @@ class ChatService:
             else planner_output.normalized_query
         )
         search_query = base_query
-        lexical_terms = (
+        planner_terms = (
             planner_output.lexical_terms
             if planner_output is not None and planner_output.lexical_terms
-            else self._extract_lexical_terms(search_query)
+            else []
+        )
+        lexical_terms = self._merge_lexical_terms(
+            planner_terms,
+            self._extract_lexical_terms(search_query),
         )
         business_domain = None if planner_output is None else planner_output.domain_hint
+        hybrid_size = (
+            self._UNSCOPED_HYBRID_RERANK_SIZE
+            if business_domain is None
+            else self._SCOPED_HYBRID_RERANK_SIZE
+        )
 
         used_hybrid = planner_output is not None and self._hybrid_retriever is not None
+        backend_warning = None
         try:
             if used_hybrid:
                 retrieval_mode = "hybrid"
@@ -239,7 +252,10 @@ class ChatService:
                     lexical_terms=lexical_terms,
                     business_domain=business_domain,
                     lifecycle_status="active",
-                    size=5,
+                    size=hybrid_size,
+                )
+                backend_warning = getattr(
+                    self._hybrid_retriever, "last_backend_warning", None
                 )
                 lexical_topk, vector_topk, rrf_topk = self._summarize_hybrid_hits(hits)
             else:
@@ -249,7 +265,7 @@ class ChatService:
                     min_score=0.1,
                     business_domain=business_domain,
                     lifecycle_status="active",
-                    size=5,
+                    size=self._SCOPED_HYBRID_RERANK_SIZE,
                 )
                 lexical_topk = self._summarize_lexical_hits(hits)
         except RetrievalBackendError as error:
@@ -299,7 +315,10 @@ class ChatService:
                     lexical_topk=lexical_topk,
                     vector_topk=vector_topk,
                     rrf_topk=rrf_topk,
-                    **self._summarize_rerank_decision(None),
+                    **self._summarize_rerank_decision(
+                        None,
+                        reject_reason=self._format_backend_warning(backend_warning),
+                    ),
                 ),
             )
 
@@ -356,7 +375,10 @@ class ChatService:
                         rrf_topk=rrf_topk,
                         **self._summarize_rerank_decision(
                             top_reranked,
-                            reject_reason="evidence_below_threshold",
+                            reject_reason=self._combine_reject_reason(
+                                "evidence_below_threshold",
+                                backend_warning,
+                            ),
                         ),
                     ),
                 )
@@ -395,12 +417,18 @@ class ChatService:
                 route_confidence=None,
                 retrieval_score=None if used_hybrid else best.score,
                 fusion_score=best.score if used_hybrid else None,
+                fallback_reason=self._format_backend_soft_fallback_reason(
+                    backend_warning
+                ),
                 planner_output=planner_output,
                 retrieval_mode=retrieval_mode,
                 lexical_topk=lexical_topk,
                 vector_topk=vector_topk,
                 rrf_topk=rrf_topk,
-                **self._summarize_rerank_decision(selected_reranked),
+                **self._summarize_rerank_decision(
+                    selected_reranked,
+                    reject_reason=self._format_backend_warning(backend_warning),
+                ),
                 source_record_id=best.source_record_id or None,
                 unit_version=best.unit_version if best.unit_version > 1 else None,
                 freshness_status=freshness_result.status if freshness_result else None,
@@ -633,6 +661,31 @@ class ChatService:
             "reject_reason": reject_reason,
         }
 
+    @staticmethod
+    def _format_backend_warning(backend_warning) -> str | None:
+        if backend_warning is None:
+            return None
+        return f"{backend_warning.failed_stage}_backend_soft_fallback:{backend_warning.cause_name}"
+
+    @classmethod
+    def _combine_reject_reason(
+        cls,
+        reject_reason: str | None,
+        backend_warning,
+    ) -> str | None:
+        backend_reason = cls._format_backend_warning(backend_warning)
+        if backend_reason is None:
+            return reject_reason
+        if reject_reason is None:
+            return backend_reason
+        return f"{reject_reason};{backend_reason}"
+
+    @staticmethod
+    def _format_backend_soft_fallback_reason(backend_warning) -> str | None:
+        if backend_warning is None:
+            return None
+        return f"{backend_warning.failed_stage}_backend_soft_fallback"
+
     def _search_local(
         self,
         decision: IntentDecision,
@@ -715,6 +768,24 @@ class ChatService:
             query_for_search=planner_output.normalized_query,
         )
         return decision, planner_output, self._query_planner.router_name
+
+    @classmethod
+    def _merge_lexical_terms(
+        cls,
+        *term_groups: list[str] | tuple[str, ...],
+    ) -> list[str]:
+        terms: list[str] = []
+        seen: set[str] = set()
+        for group in term_groups:
+            for term in group:
+                normalized = term.strip()
+                if not normalized or normalized in seen:
+                    continue
+                terms.append(normalized)
+                seen.add(normalized)
+                if len(terms) >= cls._LEXICAL_TERM_LIMIT:
+                    return terms
+        return terms
 
     @staticmethod
     def _extract_lexical_terms(query: str) -> list[str]:

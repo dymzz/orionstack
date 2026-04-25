@@ -115,3 +115,67 @@ P1.2 结论：
 1. P1.3：先修无 domain 宽搜的通用稳定性，优先考虑检索后端 retry / timeout soft fallback，降低 `lexical_backend_error`
 2. P1.4：再评估 planner domain hint 是否应把 `演示资料` 归 sales、`功能定位` 归 product
 3. 暂不进入 API fallback；当前证据不足以说明这是外部系统查询缺口
+
+---
+
+## 6. P1.3 通用稳定性修复结果
+
+实现内容：
+
+- `HybridRetriever` 在 lexical / vector 单侧 backend 失败时，不再立即让整个 hybrid 检索失败
+- 如果 lexical 失败但 vector 可用，则使用 vector 结果继续走 fusion / rerank
+- 如果 vector 失败但 lexical 可用，则使用 lexical 结果继续走 fusion / rerank
+- 如果两侧都失败，仍返回 backend error fallback
+- `ChatService` 会在 debug 中记录 `*_backend_soft_fallback`，用于后续 trace 审计
+
+专项测试：
+
+- `test_hybrid_retriever_soft_fallbacks_to_vector_when_lexical_backend_fails`
+- `test_hybrid_retriever_raises_backend_error_when_both_branches_fail`
+- `test_chat_service_uses_hybrid_soft_fallback_when_lexical_branch_times_out`
+
+受控复测：
+
+| query | P1.3 后结果 | 结论 |
+|---|---|---|
+| `演示资料在哪里找` | `fallback=no_evidence`，不再是 `lexical_backend_error` | backend error 已收敛；仍需处理 domain hint / recall |
+| `某个功能的定位是什么` | `fallback=no_evidence`，不再是 `lexical_backend_error` | backend error 已收敛；仍需处理 product domain hint / rerank |
+| `怎么请假` | `ok`，进入 clarification | 当前稳定 |
+
+P1.3 结论：
+
+- `lexical_backend_error` 不再是这 3 个样本的主要 blocker
+- 当前剩余问题已从“检索后端异常”收敛为“无 domain hint 时的宽域 recall / rerank”
+- 下一步应进入 P1.4：provider/domain hint 或 retrieval recall 的通用修复，不做 query 特判
+
+---
+
+## 7. P1.4 无 domain hint 的宽域召回 / 重排修复
+
+实现内容：
+
+- Provider prompt 的业务域约定补充 `product` / `sales` 的领域词，不绑定具体后端；`Qwen` 只是当前可用 provider 之一
+- `ChatService` 不再只信任 provider 返回的 `lexical_terms`，会合并本地保护性检索词，避免 provider 漏掉可由知识库关键词命中的短词
+- 无 `domain_hint` 的 hybrid 检索把 rerank 候选池从 5 扩大到 12；有明确 `domain_hint` 时仍保持 5，避免已收窄场景过度扩张
+- `HybridRetriever` 在无 domain filter 时保留跨业务域候选，避免前几个高分同域噪声把其他域候选完全挤出 rerank
+- live planner smoke 增加 `sales` / `product` 领域样本，默认测试仍跳过 live API
+
+新增专项测试：
+
+- `test_hybrid_retriever_keeps_domain_diverse_candidates_when_unscoped`
+- `test_chat_service_augments_unscoped_planner_terms_before_hybrid_search`
+
+P1.4 结论：
+
+- 这一步修的是“候选进入 rerank 的机会”和“provider 领域约定”，不是补单条 FAQ
+- 若 provider 正确给 `domain_hint`，系统走窄域检索
+- 若 provider 仍返回 `domain_hint=null`，系统也会用更稳的宽域候选池把跨域候选带入 rerank
+- 受控复测中强制 `ORIONSTACK_PLANNER_PROVIDER=local`，也就是保持 `domain_hint=null`，两条 open miss 已从 `no_evidence` 收敛为直答
+
+受控复测结果：
+
+| query | P1.4 后结果 | 结论 |
+|---|---|---|
+| `演示资料在哪里找` | `ok`，`hybrid_rerank`，命中 `sales-faq-003` | 历史 open miss 可关闭 |
+| `某个功能的定位是什么` | `ok`，`hybrid_rerank`，命中 `product-faq-004` | 历史 open miss 可关闭 |
+| `怎么请假` | `ok`，进入 clarification，命中 `hr-faq-001` / `hr-faq-003` | 仍是合理澄清 |

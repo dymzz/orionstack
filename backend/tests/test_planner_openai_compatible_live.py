@@ -111,7 +111,7 @@ class SmokeCase:
 
 
 # ---------------------------------------------------------------------------
-# The 20-query battery (mirrors docs/2_8_smoke_results.md §2)
+# The provider smoke battery (started from docs/2_8_smoke_results.md §2)
 # E2 is dropped as duplicate of A2. E3 (cache stability) lives in its own test.
 # ---------------------------------------------------------------------------
 
@@ -150,6 +150,18 @@ BATTERY: list[SmokeCase] = [
         expected_domain=None,  # must be null — cross-domain shared tokens
         max_confidence=0.70,
         note="cross-domain shared words MUST NOT narrow",
+    ),
+    SmokeCase(
+        "A6", "演示资料在哪里找",
+        expected_domain="sales", min_confidence=0.70,
+        must_contain_terms=["演示资料"],
+        note="sales-exclusive knowledge access query",
+    ),
+    SmokeCase(
+        "A7", "功能定位说明在哪看",
+        expected_domain="product", min_confidence=0.70,
+        must_contain_terms=["功能定位"],
+        note="product-exclusive feature-positioning query",
     ),
 
     # --- B. lexical_terms quality (2_6 §5.2) ---
