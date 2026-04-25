@@ -91,7 +91,7 @@ ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONS
 # 软回退：回到 Elasticsearch lexical-only
 ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
 
-# 硬回退：完整回到主线 1 默认链路
+# 硬回退：完整回到 Phase 1 本地链路
 ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
 ```
 
@@ -161,7 +161,7 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_HOST` | `127.0.0.1` | 后端监听地址 |
 | `ORIONSTACK_PORT` | `8000` | 后端监听端口 |
 | `ORIONSTACK_CORS_ORIGINS` | 开发默认值 | 前端允许的来源，逗号分隔 |
-| `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch`：默认全开档；`local`：硬回退到主线 1 默认链路 |
+| `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch`：默认全开档；`local`：硬回退到 Phase 1 本地链路 |
 | `ORIONSTACK_ELASTIC_URL` | `http://localhost:9200` | ES 连接地址 |
 | `ORIONSTACK_ELASTIC_INDEX` | `knowledge_units_v1` | ES 索引名称 |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 默认开启 planner -> hybrid -> rerank/evidence 服务链 |
@@ -225,21 +225,25 @@ orionstack/
 ├── backend/                 # FastAPI 后端
 │   ├── main.py              # 应用入口
 │   └── app/
-│       ├── api/routes/       # 路由（health, chat, documents）
+│       ├── api/routes/       # 路由（health, chat, documents, extraction）
 │       ├── config/           # 配置（settings.py）
+│       ├── extract/          # 抽取 provider -> 候选 -> 审核发布
 │       ├── guardrails/       # 输入归一化
 │       ├── indexing/         # ES 索引与健康检查
-│       ├── llm/providers/   # LLM Provider 抽象（占位）
-│       ├── query/            # Query Planner（占位）
+│       ├── observability/    # retrieval trace
+│       ├── query/            # Query Planner 与 provider
 │       ├── retrieval/        # 检索（retriever, lexical_retriever, citation_mapper）
 │       ├── routing/          # 路由决策
-│       ├── runtime/          # trace 生成
+│       ├── runtime/          # 动态查询 adapter 与 trace 辅助
 │       ├── schemas/          # 请求与响应模型
 │       ├── services/         # 业务服务
-│       └── storage/          # 本地存储（JSONL + KnowledgeUnit）
+│       ├── storage/          # 本地 JSONL 存储与仓储
+│       ├── sync/             # SourceRecord 同步、freshness、tombstone
+│       └── testing/          # hard case 等测试辅助
 ├── frontend/                 # Vue 3 + Vite 前端
 │   └── src/
 │       ├── components/chat/  # 问答组件
+│       ├── pages/admin/      # trace / hard case / extraction / debug 管理页
 │       ├── pages/chat/       # 问答主页面
 │       ├── services/         # API 调用
 │       ├── styles/           # 全局样式
@@ -260,9 +264,14 @@ orionstack/
 | `POST` | `/api/chat/feedback` | 提交反馈 |
 | `GET` | `/api/chat/records` | 最近问答记录（仅 demo/dev） |
 | `GET` | `/api/chat/feedback` | 最近反馈记录（仅 demo/dev） |
+| `GET` | `/api/chat/traces/{trace_id}` | 检索 trace 回放（仅 demo/dev） |
+| `GET` | `/api/chat/hard-cases` | hard case 列表（仅 demo/dev） |
 | `POST` | `/api/documents/upload` | 上传文档 |
 | `GET` | `/api/documents` | 文档列表 |
 | `DELETE` | `/api/documents/{id}` | 删除文档 |
+| `POST` | `/api/extraction/extract` | 从 SourceRecord 抽取候选 |
+| `POST` | `/api/extraction/review` | 审核候选并按需发布 |
+| `GET` | `/api/extraction/candidates` | 候选列表 |
 
 ## 脚本说明
 
@@ -280,11 +289,14 @@ orionstack/
 
 ## 数据存储
 
-当前使用本地 JSONL 文件存储，数据位于 `backend/app/storage/data/`：
+当前使用本地 JSONL 文件存储，数据位于 `backend/app/storage/` 下的分目录：
 
-- `chat_records.jsonl` — 问答记录
-- `feedback_records.jsonl` — 反馈记录
-- `chunks.jsonl` — 文档切块
-- `documents.jsonl` — 文档元数据
+- `chat_records/` — 问答记录
+- `feedback/` — 反馈记录
+- `retrieval_traces/` — 检索 trace
+- `hard_cases/` — hard case
+- `documents/` / `chunks/` / `uploads/` — 文档元数据、切块与上传文件
+- `source_records/` / `extraction_candidates/` — 原始来源记录与抽取候选
+- `action_links/` / `dynamic_queries/` — 原系统入口与动态查询定义
 
 记录保留数量可通过环境变量配置，超出自增数量后自动截断最旧记录。

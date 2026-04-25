@@ -9,7 +9,7 @@
 1. 当前有哪些正式文档
 2. 每份文档分别负责什么
 3. 应该先读哪份，再读哪份
-4. 当前实现基线、后续升级基线、接入边界与文档库标准分别落在哪组文档
+4. Phase 1-3 已完成基线、接入边界与文档库标准分别落在哪组文档
 
 本文件不承担以下职责：
 
@@ -62,23 +62,25 @@ docs/
 
 ## 3. 如何理解当前 `/docs` 分层
 
-## 3.1 主线 1：当前真实实现基线
+## 3.1 Phase 1：最小可运行基线（已完成）
 
-这一组文档描述**当前已经进入默认实现链路**的系统状态。
+这一组文档描述 OrionStack 的第一轮最小可运行能力：FAQ / 文档问答、路由、retriever、guardrails、citation 与 JSONL 存储。
+
+当前完整系统已经在 Phase 1 基础上叠加 Phase 2 检索增强与 Phase 3 SaaS 知识副本层；判断当前真实入口时，应优先看根目录 `HANDOFF.md`、`README.md` 与本文件的 Phase 2 / Phase 3 导航。
 
 ### `docs/designs/1_system_design.md`
 
 职责：
 
-- 定义当前真实实现基线
-- 说明当前系统定位、范围、主链路、模块边界与不做什么
-- 约束当前默认运行链路
+- 定义第一轮最小可运行系统基线
+- 说明 Phase 1 系统定位、范围、主链路、模块边界与不做什么
+- 作为后续 Phase 2 / Phase 3 扩展的历史基础
 
 ### `docs/1_1_progress.md`
 
 职责：
 
-- 记录主线 1 当前真实进度
+- 记录 Phase 1 进度与收口状态
 - 标记已完成、进行中与下一步工作
 - 防止重复扩写已完成内容
 
@@ -86,27 +88,27 @@ docs/
 
 职责：
 
-- 说明当前默认链路下的文件职责与边界
+- 说明 Phase 1 默认链路下的文件职责与边界
 - 帮助判断某段逻辑应放在哪个现有文件
 
 ### `docs/1_3_field_definitions.md`
 
 职责：
 
-- 解释主线 1 当前冻结字段的语义
+- 解释 Phase 1 冻结字段的语义
 - 对齐请求、响应、存储与调试字段含义
 
 ---
 
-## 3.2 主线 2：后续升级设计基线
+## 3.2 Phase 2：检索增强（已完成）
 
-这一组文档描述**后续升级目标**，以及第二阶段已经开始落地的过渡模块。
+这一组文档描述已经完成落地的第二阶段检索增强：Query Planner、Knowledge Unit、Elasticsearch lexical / hybrid retrieval、RRF、Rerank、Evidence、Clarification 与 provider bad-case 审计闭环。
 
 ### `docs/designs/2_system_design.md`
 
 职责：
 
-- 作为第二阶段升级设计基线
+- 作为第二阶段检索增强设计基线
 - 说明 Query Planner、Knowledge Unit、Elastic lexical-only、Hybrid Retrieval、RRF、Rerank、Evidence 等目标链路
 - 约束升级顺序与目标边界
 
@@ -114,8 +116,8 @@ docs/
 
 职责：
 
-- 记录第二阶段从设计到最小可执行改造的推进状态
-- 说明哪些能力只是目标，哪些已经开始进入仓库
+- 记录第二阶段从设计到完成收口的推进状态
+- 说明 Query Planner / Hybrid Retrieval / Rerank / Evidence / Provider audit 等能力的真实落地边界
 
 ### `docs/2_2_file_responsibilities.md`
 
@@ -137,9 +139,9 @@ docs/
 
 - 说明第二阶段当前最小测试策略
 - 区分当前可执行的 smoke / regression 与后续目标测试位
-- 为已落地 phase 2 过渡模块提供最小回归保护带
+- 为已落地 Phase 2 模块提供最小回归保护带
 
-### 当前第二阶段已开始落地的过渡模块
+### 当前第二阶段已完成落地的模块
 
 当前仓库中已经出现、并应按第二阶段语义理解的文件主要包括：
 
@@ -152,15 +154,15 @@ docs/
 
 因此：
 
-- 主线 2 不是“纯未来文档”
-- 但也不是“已经完全切换完成的默认链路”
+- Phase 2 是已完成落地文档
+- 默认全开档已经使用 Phase 2 检索增强链路
 - 具体已落地边界，应优先看 `docs/2_1_progress.md` 与 `docs/2_2_file_responsibilities.md`
 
 ---
 
-## 3.3 主线 3：SaaS 知识副本层
+## 3.3 Phase 3：SaaS 知识副本层（第一轮已完成）
 
-这一组文档描述**第三阶段目标设计**，解决外部 SaaS 导出数据如何安全、可控、可追溯地接入知识问答系统。
+这一组文档描述第三阶段 SaaS 知识副本层的已落地第一轮能力：SourceRecord / ImportBatch / ExtractionCandidate、ActionLink、DynamicQuery、抽取候选自动化、freshness / tombstone / provenance / hard case 分类。
 
 ### `docs/designs/3_system_design.md`
 
@@ -174,8 +176,8 @@ docs/
 
 职责：
 
-- 记录第三阶段从设计到最小可执行改造的推进状态
-- 说明哪些能力只是目标，哪些已经开始进入仓库
+- 记录第三阶段从设计到第一轮完成的推进状态
+- 说明已完成能力、当前测试基线与后续维护/扩展入口
 
 ### `docs/3_2_file_responsibilities.md`
 
@@ -253,12 +255,13 @@ docs/
 
 推荐顺序：
 
-1. `docs/designs/1_system_design.md`
-2. `docs/1_1_progress.md`
-3. `docs/1_2_file_responsibilities.md`
-4. `docs/1_3_field_definitions.md`
+1. 根目录 `HANDOFF.md`
+2. 根目录 `README.md`
+3. `docs/3_1_progress.md`
+4. `docs/2_1_progress.md`
+5. `docs/designs/3_system_design.md`
 
-## 4.2 想继续推进“第二阶段升级”
+## 4.2 想理解或维护“第二阶段检索增强”
 
 推荐顺序：
 
@@ -276,14 +279,16 @@ docs/
 2. `docs/2_1_progress.md`
 3. `docs/2_4_test_strategy.md`
 
-## 4.4 想判断“某项能力到底是当前默认链路，还是第二阶段过渡能力”
+## 4.4 想判断“某项能力属于 Phase 1 基线、Phase 2 默认增强，还是 Phase 3 知识副本层”
 
 推荐顺序：
 
-1. `docs/designs/1_system_design.md`
-2. `docs/designs/2_system_design.md`
-3. `docs/1_1_progress.md`
-4. `docs/2_1_progress.md`
+1. 根目录 `HANDOFF.md`
+2. `docs/3_1_progress.md`
+3. `docs/2_1_progress.md`
+4. `docs/designs/1_system_design.md`
+5. `docs/designs/2_system_design.md`
+6. `docs/designs/3_system_design.md`
 
 ## 4.5 想判断“文档接入与清洗”边界
 
@@ -294,7 +299,7 @@ docs/
 3. `docs/designs/document_library/phase1_document_library_fields_freeze.md`
 4. 对应业务域的 `domain_*_library_v1.md`
 
-## 4.6 想推进"第三阶段 SaaS 知识副本层"
+## 4.6 想理解或扩展"第三阶段 SaaS 知识副本层"
 
 推荐顺序：
 
@@ -324,11 +329,11 @@ docs/
 - 改“职责链拆分定义”或“某条链负责什么 / 不负责什么”  
   -> 同时改对应 `docs/designs/*system_design.md` 与 `docs/*_2_file_responsibilities.md`
 
-## 4.7 想按职责链推进开发
+## 4.8 想按职责链推进开发
 
 推荐先判断当前问题属于哪条职责链，再进入对应文档组。
 
-### 当前默认实现（主线 1）
+### Phase 1 基线链
 
 - Query / Routing 链  
   阅读顺序：  
@@ -361,7 +366,7 @@ docs/
   2. `docs/1_1_progress.md`  
   3. `scripts/README.md` 与记录相关 repo
 
-### 第二阶段升级（主线 2）
+### Phase 2 检索增强链
 
 - Query Planner / Knowledge Unit / Retrieval Execution / Rerank / Evidence / Trace Gray Rollback  
   阅读顺序：  
@@ -371,7 +376,7 @@ docs/
   4. `docs/2_3_field_definitions.md`  
   5. `docs/2_4_test_strategy.md`
 
-### 第三阶段 SaaS 知识副本层（主线 3）
+### Phase 3 SaaS 知识副本链
 
 - SourceRecord / ImportBatch / ExtractionCandidate / ActionLink / DynamicQuery / Freshness / Tombstone  
   阅读顺序：  
@@ -393,12 +398,12 @@ docs/
 - `docs/*_field_definitions.md` 负责字段解释
 - `docs/*_test_strategy.md` 负责测试策略
 
-### 5.2 主线 1 / 2 / 3 分开维护
+### 5.2 Phase 1 / 2 / 3 分开维护
 
-- 主线 1 记录当前默认实现基线
-- 主线 2 记录检索链路升级（已完成落地）
-- 主线 3 记录 SaaS 知识副本层设计（待实现）
-- 不把后续阶段内容反向写进前序阶段文档里冒充“当前默认实现”
+- Phase 1 记录最小可运行基线
+- Phase 2 记录已完成落地的检索增强链路
+- Phase 3 记录已完成第一轮的 SaaS 知识副本层
+- 不把后续阶段内容反向写进前序阶段文档里冒充历史基线
 
 ### 5.3 接入边界与文档库标准不回写系统主设计正文
 
@@ -421,4 +426,4 @@ docs/
 
 ## 6. 一句话收口
 
-**`/docs` 当前应理解为：以 `docs/designs/1_system_design.md` 为当前默认实现基线、以 `docs/designs/2_system_design.md` 为第二阶段升级基线、以 `document_ingestion_boundary.md` 为接入边界补充、以 `document_library/` 为文档库标准目录的正式文档入口。**
+**`/docs` 当前应理解为：以 `HANDOFF.md` 与根目录 `README.md` 为当前上手入口，以 `docs/designs/1_system_design.md`、`docs/designs/2_system_design.md`、`docs/designs/3_system_design.md` 分别承载 Phase 1-3 的设计基线，以 `document_ingestion_boundary.md` 为接入边界补充，以 `document_library/` 为文档库标准目录的正式文档入口。**
