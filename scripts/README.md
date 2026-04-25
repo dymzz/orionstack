@@ -2,13 +2,13 @@
 
 `scripts/` 目录当前包含本地开发、数据种子、抽取管线与最小发布辅助脚本。
 
-所有脚本使用 Python，运行方式统一为：
+所有 Python 脚本统一从仓库根目录运行：
 
-```bash
-python -m scripts.<script_name>
-# 或
+```text
 python scripts/<script_name>.py
 ```
+
+配置切换统一修改 `.env`；不要在命令前拼接临时环境变量。
 
 ---
 
@@ -17,7 +17,6 @@ python scripts/<script_name>.py
 - 已安装 `python`（建议 3.12+）
 - 已安装 `npm`
 - 已安装 `git`
-- 建议在仓库根目录下准备 `.venv`
 - 抽取管线脚本需要配置抽取 provider；当前配置优先读取 `ORIONSTACK_EXTRACTION_*`，旧的 `ORIONSTACK_QWEN_*` / `DASHSCOPE_API_KEY` 仍保留兼容
 
 ---
@@ -30,7 +29,7 @@ python scripts/<script_name>.py
 
 启动后端开发服务（带 `--reload` 热重载）。
 
-```bash
+```text
 python scripts/dev-backend.py --app-mode dev --host 127.0.0.1 --port 8000
 python scripts/dev-backend.py --check-only
 ```
@@ -41,7 +40,7 @@ python scripts/dev-backend.py --check-only
 
 启动前端开发服务。
 
-```bash
+```text
 python scripts/dev-frontend.py
 python scripts/dev-frontend.py --install --backend-origin http://127.0.0.1:8000
 ```
@@ -52,7 +51,7 @@ python scripts/dev-frontend.py --install --backend-origin http://127.0.0.1:8000
 
 一键启动后端与前端开发环境。
 
-```bash
+```text
 python scripts/dev-demo.py
 python scripts/dev-demo.py --app-mode demo --port 8000 --install-frontend
 ```
@@ -63,7 +62,7 @@ python scripts/dev-demo.py --app-mode demo --port 8000 --install-frontend
 
 以生产配置启动后端（不带 `--reload`，支持多 worker）。
 
-```bash
+```text
 python scripts/start-backend.py --app-mode prod --workers 2
 ```
 
@@ -77,8 +76,8 @@ python scripts/start-backend.py --app-mode prod --workers 2
 
 种子 ActionLink 数据 — 为当前 Odoo 示例模块生成 7 条 action link（请假、考勤、员工管理、报销、发票、CRM、项目）。
 
-```bash
-python -m scripts.seed_action_links
+```text
+python scripts/seed_action_links.py
 ```
 
 输出：`backend/app/storage/action_links/action_links.jsonl`
@@ -87,8 +86,8 @@ python -m scripts.seed_action_links
 
 种子 DynamicQuery 定义 — 生成 5 条动态查询配置（请假状态、假期余额、报销状态、考勤记录、CRM 商机）。
 
-```bash
-python -m scripts.seed_dynamic_queries
+```text
+python scripts/seed_dynamic_queries.py
 ```
 
 输出：`backend/app/storage/dynamic_queries/dynamic_queries.jsonl`
@@ -97,8 +96,8 @@ python -m scripts.seed_dynamic_queries
 
 种子测试用 SourceRecord — 写入一条"员工考勤与请假管理制度"制度文档，用于抽取管线验证。
 
-```bash
-python -m scripts.seed_test_source_record
+```text
+python scripts/seed_test_source_record.py
 ```
 
 输出：`backend/app/storage/source_records/source_records.jsonl`
@@ -130,37 +129,26 @@ python -m scripts.seed_test_source_record
 
 **命令列表：**
 
-```bash
+```text
 # 导入文档为 SourceRecord
-python -m scripts.pipeline_cli import \
-  --file path/to/document.md \
-  --title "文档标题" \
-  --source-system wiki
+python scripts/pipeline_cli.py import --file path/to/document.md --title "文档标题" --source-system wiki
 
 # 一键完成：导入 + 抽取 + 自动审核 + 发布
-python -m scripts.pipeline_cli import \
-  --file path/to/document.md \
-  --title "文档标题" \
-  --source-system wiki \
-  --auto-approve
+python scripts/pipeline_cli.py import --file path/to/document.md --title "文档标题" --source-system wiki --auto-approve
 
 # 从已有 SourceRecord 抽取候选
-python -m scripts.pipeline_cli extract \
-  --source-record-id sr-xxx \
-  --candidate-types faq,action_link,dynamic_query
+python scripts/pipeline_cli.py extract --source-record-id sr-xxx --candidate-types faq,action_link,dynamic_query
 
 # 抽取后自动审核发布
-python -m scripts.pipeline_cli extract \
-  --source-record-id sr-xxx \
-  --auto-approve
+python scripts/pipeline_cli.py extract --source-record-id sr-xxx --auto-approve
 
 # 审核单条候选
-python -m scripts.pipeline_cli review --candidate-id ec-xxx --approve
-python -m scripts.pipeline_cli review --candidate-id ec-xxx --reject
+python scripts/pipeline_cli.py review --candidate-id ec-xxx --approve
+python scripts/pipeline_cli.py review --candidate-id ec-xxx --reject
 
 # 列出候选
-python -m scripts.pipeline_cli list --status pending
-python -m scripts.pipeline_cli list --status approved
+python scripts/pipeline_cli.py list --status pending
+python scripts/pipeline_cli.py list --status approved
 ```
 
 **import 参数：**
@@ -227,7 +215,7 @@ python -m scripts.pipeline_cli list --status approved
 
 一键执行 Phase 2 专项回归（检索、chat flow、trace、hard cases）。
 
-```bash
+```text
 python scripts/run-phase2-regression.py
 python scripts/run-phase2-regression.py -k clarification
 ```
@@ -238,7 +226,7 @@ python scripts/run-phase2-regression.py -k clarification
 
 生成 provider 主链审计样本（114 条），覆盖所有 seed FAQ。旧入口 `generate-cloud-audit-samples.py` 保留兼容。
 
-```bash
+```text
 python scripts/generate-provider-audit-samples.py
 ```
 
@@ -246,7 +234,7 @@ python scripts/generate-provider-audit-samples.py
 
 审计当前 planner provider 主链 bad cases，按语料缺口、clarification 边界、evidence 阈值、planner 边界等队列归类。旧入口 `audit-cloud-bad-cases.py` 保留兼容。
 
-```bash
+```text
 python scripts/audit-provider-bad-cases.py
 python scripts/audit-provider-bad-cases.py --provider openai_compatible,llama_cpp
 python scripts/audit-provider-bad-cases.py --include-local
@@ -256,7 +244,7 @@ python scripts/audit-provider-bad-cases.py --include-local
 
 探测本地 llama-server 连通性与响应质量。
 
-```bash
+```text
 python scripts/probe_llama_server.py
 ```
 
@@ -268,7 +256,7 @@ python scripts/probe_llama_server.py
 
 重建 Elasticsearch 索引（清空并重新写入所有 KnowledgeUnit）。
 
-```bash
+```text
 python scripts/rebuild-elastic-index.py
 ```
 
@@ -276,7 +264,7 @@ python scripts/rebuild-elastic-index.py
 
 清理本地问答记录文件（`chat_records.jsonl` 与 `feedback_records.jsonl`）。
 
-```bash
+```text
 python scripts/clean-local-records.py --what-if
 python scripts/clean-local-records.py --chat-only
 python scripts/clean-local-records.py --feedback-only
@@ -288,7 +276,7 @@ python scripts/clean-local-records.py --feedback-only
 
 交互式创建本地版本发布提交、git tag 并推送。
 
-```bash
+```text
 python scripts/git-release.py --version 0.2.0 --commit-message "feat: Phase 3 extraction pipeline"
 python scripts/git-release.py --version 0.2.0 --skip-push
 ```
@@ -312,7 +300,7 @@ python scripts/git-release.py --version 0.2.0 --skip-push
 | `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | `odoo` | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | `2` | Odoo 用户 ID |
-| `ORIONSTACK_ODOO_PASSWORD` | — | Odoo 用户密码，通过环境变量注入 |
+| `ORIONSTACK_ODOO_PASSWORD` | — | Odoo 用户密码，通过 `.env` 或部署密钥注入 |
 | `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 当前实现适配器选择：`mock` / `odoo` / 自定义 |
 
 ---
@@ -325,12 +313,10 @@ python scripts/git-release.py --version 0.2.0 --skip-push
 | 软回退 | `elasticsearch` | `false` | `true` | lexical-only |
 | 硬回退 | `local` | `false` | `false` | 回到 Phase 1 默认链路 |
 
-```bash
-# 全开档（推荐）
-python scripts/dev-backend.py
+切换档位只改 `.env`，启动命令保持不变。
 
-# 硬回退档
-ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
+```text
+python scripts/dev-backend.py
 ```
 
 ---
@@ -347,8 +333,8 @@ ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false python scr
 
 ## 前端生产构建
 
-```bash
-cd frontend && npm run build
+```text
+npm --prefix frontend run build
 ```
 
 构建产物在 `frontend/dist/`，可直接通过 Nginx 等提供。
