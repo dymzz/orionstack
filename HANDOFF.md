@@ -174,29 +174,35 @@ orionstack/
 - Node.js 18+
 - Docker（Elasticsearch；如需验证当前 OdooAdapter 示例，可再启动 Odoo）
 
-### 4.2 启动 Elasticsearch
+### 4.2 命令约定
 
-```bash
+- 项目服务与回归入口统一使用 Python 脚本：`python scripts/*.py`
+- 本地切换配置统一修改 `.env`，不要在命令前拼接临时环境变量
+- 后端启动脚本会优先使用仓库内 `.venv`，找不到时才回退到当前 `python`
+
+### 4.3 启动 Elasticsearch
+
+```text
 docker compose up -d elasticsearch
 ```
 
-### 4.3 启动 Odoo（可选，用于验证当前 OdooAdapter 示例）
+### 4.4 启动 Odoo（可选，用于验证当前 OdooAdapter 示例）
 
-```bash
+```text
 docker compose up -d odoo
 ```
 
-### 4.4 一键开发启动
+### 4.5 一键开发启动
 
-```bash
+```text
 python scripts/dev-demo.py
 ```
 
 浏览器打开 `http://localhost:5173`。
 
-### 4.5 环境变量
+### 4.6 环境变量
 
-必须配置的：
+本地配置优先写入 `.env`。当前默认 `mock` adapter 可脱离 Odoo 启动；只有使用 DashScope 示例 provider 或显式验证 OdooAdapter 时，才需要填写对应凭据。
 
 | 变量 | 用途 |
 |---|---|
@@ -222,31 +228,19 @@ python scripts/dev-demo.py
 
 ## 5. 测试
 
-### 5.1 运行全部测试
+### 5.1 快速回归
 
-```bash
-.venv\Scripts\python.exe -m pytest backend/tests -q
+```text
+python scripts/run-phase2-regression.py
 ```
 
-当前项目环境基线：**353 passed, 21 skipped, 9 xfailed**（2026-04-26）。
+当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。全量后端测试基线：**353 passed, 21 skipped, 9 xfailed**（2026-04-26）。
 
-裸 `python` 环境如果没有同步项目依赖，可能出现导入期缺包错误；当前 Windows 工作区回归请优先使用仓库内 `.venv`。live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
+live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
 ### 5.2 Phase 3 专项测试
 
-```bash
-# Phase 3 基础链路：freshness / sync / trace / hard cases
-.venv\Scripts\python.exe -m pytest backend/tests/test_phase3_*.py -q
-
-# Phase 3 运行时组件：ActionLink / DynamicQuery / Adapter modes / Extraction
-.venv\Scripts\python.exe -m pytest backend/tests/test_action_link.py backend/tests/test_dynamic_query.py backend/tests/test_dynamic_query_adapter_modes.py backend/tests/test_extraction.py -q
-```
-
-### 5.3 Phase 2 回归
-
-```bash
-.venv\Scripts\python.exe scripts/run-phase2-regression.py
-```
+Phase 3 当前已完成第一轮，专项测试覆盖 freshness / sync / trace / hard cases、ActionLink、DynamicQuery、adapter 双模式与 Extraction。日常交接优先跑 `python scripts/run-phase2-regression.py`；需要更细的测试文件组合时再参考 `backend/tests/`。
 
 ---
 
@@ -381,7 +375,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 | 问题 | 状态 | 说明 |
 |---|---|---|
-| 裸 `python` 环境可能缺依赖 | 已知环境问题 | 项目依赖已在 `pyproject.toml`；当前 Windows 工作区以仓库内 `.venv\Scripts\python.exe` 为测试基线 |
+| 裸 `python` 环境可能缺依赖 | 已知环境问题 | 项目依赖已在 `pyproject.toml`；优先使用项目脚本入口，它们会自动优先选择仓库内 `.venv` |
 | Odoo 19 字段差异 | 已处理 | `hr.leave` 用 `holiday_status_id`（不是 `holiday_type`） |
 | `_build_clarification_response` 缺参 | 已修复 | ActionLink 集成时暴露并修复 |
 | JSONL 存储 | 架构限制 | 无数据库，不适合高并发生产环境 |
@@ -418,4 +412,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（`.venv\Scripts\python.exe -m pytest backend/tests -q`：353 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（全量后端：353 passed, 21 skipped, 9 xfailed；快速回归入口：`python scripts/run-phase2-regression.py`），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**

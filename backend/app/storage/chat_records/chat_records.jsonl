@@ -1,4 +1,3 @@
-{"trace_id": "d822718db29f4c35a13c053233e61f7f", "raw_query": "邮箱签名怎么修改", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-009"], "created_at": "2026-04-21T17:42:06.975101+00:00"}
 {"trace_id": "9f214f093c7d4d0796d0fb5fd9a2ba39", "raw_query": "病假材料", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-21T18:10:57.923253+00:00"}
 {"trace_id": "3dc773c7e069408d8c9572ffec4bf7bd", "raw_query": "请假进度怎么看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003"], "created_at": "2026-04-21T18:11:03.933981+00:00"}
 {"trace_id": "4ff3374a71ff4642b08b8e3656c9f213", "raw_query": "考勤异常怎么申诉", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-004"], "created_at": "2026-04-21T18:11:10.211272+00:00"}
@@ -198,3 +197,4 @@
 {"trace_id": "137fcd085282462e9f27fdd7cfb029fa", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001", "hr-faq-003"], "created_at": "2026-04-25T00:58:15.879558+00:00"}
 {"trace_id": "ba16a95a08d440b5afee73c64f4658af", "raw_query": "内部支持联系人清单在哪里看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-010", "it-faq-003"], "created_at": "2026-04-25T01:14:09.425704+00:00"}
 {"trace_id": "affa0168308046eb9671d6979e2c4842", "raw_query": "CRM 使用说明在哪里", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["sales-faq-006"], "created_at": "2026-04-25T01:14:58.246186+00:00"}
+{"trace_id": "0865a056de4a4de69e9abf2895b8aff5", "raw_query": "生产变更", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["ops-faq-003"], "created_at": "2026-04-25T17:43:59.101012+00:00"}
