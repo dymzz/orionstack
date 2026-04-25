@@ -36,6 +36,7 @@ docs/
 ├── 2_9_next_line_decision.md
 ├── 2_10_provider_bad_case_audit_kickoff.md
 ├── 2_11_clarification_boundary_audit.md
+├── 2_12_provider_open_bad_case_triage.md
 ├── 3_1_progress.md
 ├── 3_2_file_responsibilities.md
 ├── 3_3_field_definitions.md

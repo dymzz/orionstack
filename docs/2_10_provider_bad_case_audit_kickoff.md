@@ -249,4 +249,6 @@ uv run python scripts/audit-provider-bad-cases.py --limit 8
 - [x] 已补一批必要样本并完成 seeded audit
 - [x] 已新增 provider-neutral 审计入口，并保留旧 cloud 脚本兼容入口
 - [x] 已新增 `audit_resolution`，区分 `open` 与 `closed_by_later_success`
-- [ ] 待 triage 当前 open provider 坏例；只做通用修复，不做 query 特判
+- [x] 已完成当前 open provider 坏例 triage：见 `docs/2_12_provider_open_bad_case_triage.md`
+- [x] 已完成受控复测：`演示资料` / `功能定位` 不是语料缺口，主要暴露无 domain 宽搜的 recall / timeout 风险
+- [ ] 下一步做通用稳定性修复；不做 query 特判

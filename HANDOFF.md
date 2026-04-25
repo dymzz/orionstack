@@ -339,6 +339,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 | Phase 1 实现基线 | `docs/designs/1_system_design.md` |
 | Phase 2 检索升级 | `docs/designs/2_system_design.md` |
 | Provider 主链坏例审计 | `docs/2_10_provider_bad_case_audit_kickoff.md` |
+| Provider open 坏例 triage | `docs/2_12_provider_open_bad_case_triage.md` |
 | Phase 3 知识副本层 | `docs/designs/3_system_design.md` |
 | Phase 3 推进状态 | `docs/3_1_progress.md` |
 | Phase 3 文件职责 | `docs/3_2_file_responsibilities.md` |
