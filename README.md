@@ -18,6 +18,12 @@
 - Node.js 18+（仅开发和构建前端时需要，生产部署不需要）
 - Docker（Elasticsearch 必需；如需验证当前 OdooAdapter 示例，可再启动 Odoo）
 
+## 命令约定
+
+- 项目服务与回归入口统一使用 Python 脚本：`python scripts/*.py`
+- 本地切换配置统一修改 `.env`，不要在命令前拼接 shell 专属的环境变量写法
+- 后端启动脚本会优先使用仓库内 `.venv`，找不到时才回退到当前 `python`
+
 ## 快速启动（默认全开档）
 
 默认运行方式依赖 Elasticsearch，并进入：
@@ -29,13 +35,13 @@
 
 先启动 Elasticsearch：
 
-```bash
+```text
 docker compose up -d elasticsearch
 ```
 
 再启动应用：
 
-```bash
+```text
 python scripts/dev-demo.py
 ```
 
@@ -67,45 +73,67 @@ python scripts/dev-demo.py
 - planner 低置信时：回退到 `Fast Track + lexical-only`
 - 若当前机器上的 Elasticsearch 不可用，优先先做软回退；只有仍无法稳定使用时再做硬回退
 
-要启用 Elasticsearch 过渡检索：
+如果需要单独验证检索链路：
 
 ### 1. 启动 Elasticsearch
 
-```bash
+```text
 docker compose up -d elasticsearch
 ```
 
-### 2. 索引知识单元
+### 2. 确认 `.env` 使用默认全开档
 
-```bash
-# 启动后端后，调用索引接口（或通过启动脚本自动索引）
-ORIONSTACK_SEARCH_BACKEND=elasticsearch python scripts/dev-backend.py
+```text
+ORIONSTACK_SEARCH_BACKEND=elasticsearch
+ORIONSTACK_ENABLE_FAST_TRACK=true
+ORIONSTACK_ENABLE_QUERY_PLANNER=true
+ORIONSTACK_PLANNER_PROVIDER=local
 ```
 
-### 3. 切换检索后端
+### 3. 重建 Elasticsearch 索引
 
-```bash
-# 默认全开档
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=true ORIONSTACK_PLANNER_PROVIDER=local python scripts/dev-backend.py
-
-# 软回退：回到 Elasticsearch lexical-only
-ORIONSTACK_SEARCH_BACKEND=elasticsearch ORIONSTACK_ENABLE_FAST_TRACK=true ORIONSTACK_ENABLE_QUERY_PLANNER=false python scripts/dev-backend.py
-
-# 硬回退：完整回到 Phase 1 本地链路
-ORIONSTACK_SEARCH_BACKEND=local ORIONSTACK_ENABLE_QUERY_PLANNER=false ORIONSTACK_ENABLE_FAST_TRACK=false python scripts/dev-backend.py
+```text
+python scripts/rebuild-elastic-index.py
 ```
 
-### 4. 发布前最小 smoke
+### 4. 启动后端
 
-建议至少执行：
-
-```bash
-python -m pytest backend/tests/test_chat_flow.py backend/tests/test_document_flow.py backend/tests/test_phase2_settings.py backend/tests/test_phase2_knowledge_unit.py backend/tests/test_phase2_indexing.py backend/tests/test_phase2_retrieval.py backend/tests/test_phase2_planner.py
+```text
+python scripts/dev-backend.py
 ```
 
-如果只是验证当前 phase 2 专项回归面，可以直接执行：
+### 切换检索档位
 
-```bash
+切换档位只改 `.env`，启动命令仍然使用 `python scripts/dev-backend.py` 或 `python scripts/dev-demo.py`。
+
+默认全开档：
+
+```text
+ORIONSTACK_SEARCH_BACKEND=elasticsearch
+ORIONSTACK_ENABLE_FAST_TRACK=true
+ORIONSTACK_ENABLE_QUERY_PLANNER=true
+ORIONSTACK_PLANNER_PROVIDER=local
+```
+
+软回退档：
+
+```text
+ORIONSTACK_SEARCH_BACKEND=elasticsearch
+ORIONSTACK_ENABLE_FAST_TRACK=true
+ORIONSTACK_ENABLE_QUERY_PLANNER=false
+```
+
+硬回退档：
+
+```text
+ORIONSTACK_SEARCH_BACKEND=local
+ORIONSTACK_ENABLE_QUERY_PLANNER=false
+ORIONSTACK_ENABLE_FAST_TRACK=false
+```
+
+### 发布前最小 smoke
+
+```text
 python scripts/run-phase2-regression.py
 ```
 
@@ -128,16 +156,15 @@ python scripts/run-phase2-regression.py
 
 > 以下步骤需要 Node.js 18+。构建完成后生产环境不再依赖 Node.js。
 
-```bash
-cd frontend
-npm run build
+```text
+npm --prefix frontend run build
 ```
 
 构建产物在 `frontend/dist/`，由 Nginx 或其他静态文件服务提供。
 
 ### 2. 启动后端
 
-```bash
+```text
 python scripts/start-backend.py
 ```
 
@@ -145,13 +172,13 @@ python scripts/start-backend.py
 
 常用参数：
 
-```bash
+```text
 python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --workers 2
 ```
 
 ### 3. 环境变量
 
-所有配置通过环境变量控制。参见 `.env.example` 获取完整列表。
+本地配置优先写入 `.env`；部署环境可使用平台自带的环境变量配置。参见 `.env.example` 获取完整列表。
 
 关键变量：
 
@@ -178,10 +205,10 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 
 兼容说明：旧的 `ORIONSTACK_QWEN_API_*`、`ORIONSTACK_QWEN_API_KEY`、`DASHSCOPE_API_KEY` / `QWEN_API_KEY` 仍可作为回退配置读取，但不再是唯一入口。
 
-生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`：
+生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`，本地可在 `.env` 中写：
 
-```bash
-export ORIONSTACK_CORS_ORIGINS="https://app.example.com"
+```text
+ORIONSTACK_CORS_ORIGINS=https://app.example.com
 ```
 
 ### 4. `prod` 模式行为
