@@ -291,8 +291,8 @@ class SystemAdapter(Protocol):
         统一查询入口。
 
         参数：
-          resource_type: 资源类型标识，如 'leave_status' / 'expense_status'
-          params:        查询参数，一般包含 'domain'（过滤条件）和 'limit'
+          resource_type: OrionStack 资源类型标识，如 'leave_status' / 'expense_status'
+          params:        查询参数，由具体 adapter 解释；通用层不假设外部系统方言
 
         返回：
           标准化行数据列表，每个元素是一个 dict，key 为字段名，value 为原始值。
@@ -335,7 +335,7 @@ class SystemAdapter(Protocol):
 
 | 环境变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | string | `odoo` | 当前默认适配器名称，可替换为其他实现 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | string | `mock` | 当前默认适配器名称，可替换为 `odoo` 或其他实现 |
 | `ORIONSTACK_ODOO_URL` | string | `http://localhost:8069` | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | string | `odoo` | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | int | `2` | Odoo 用户 ID |

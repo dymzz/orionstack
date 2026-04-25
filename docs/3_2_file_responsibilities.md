@@ -152,7 +152,7 @@
 
 职责：
 
-- `detect_query_key(query)` — 正则识别动态查询意图
+- `match_query_key(query)` — 正则识别动态查询意图
 - `is_allowed(query_key)` — 通过 repo 判权
 - `execute(query_key, params)` — 调用 `SystemAdapter.fetch()` 获取实时数据并返回 `DynamicQueryResultItem`
 - `_sanitize_rows()` — 清洗原始行数据（去除 `id`、序列化复杂类型）
@@ -161,6 +161,7 @@
 
 - 不直接连接外部系统（通过 adapter 间接调用）
 - 不负责适配器实例创建（由 `adapter_factory` 负责）
+- 不解释 adapter-specific 查询方言（如 Odoo XML-RPC domain）
 
 ---
 

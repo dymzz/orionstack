@@ -65,7 +65,7 @@
   - Clarification
   - Hard Cases / Trace
 - LLM 提取与外部系统接入都应走可替换接口
-  - 当前仓库默认示例：DashScope `qwen-plus` + `OdooAdapter`
+  - 当前仓库默认示例：DashScope `qwen-plus` + `MockAdapter`；OdooAdapter 是可选外部系统示例
   - 架构目标：provider / adapter 可替换，不把单一厂商或单一系统写死为边界
 
 ### 2.2 核心定位
@@ -558,7 +558,7 @@ hard case 必须能反查：
 ### 12.2 动态状态查询
 
 1. FAQ 路由低置信度时，尝试动态查询检测
-2. `DynamicQueryService.detect_query_key()` 正则识别查询意图
+2. `DynamicQueryService.match_query_key()` 正则识别查询意图
 3. `DynamicQueryService.is_allowed()` 通过 repo 判权
 4. `DynamicQueryService.execute()` 通过 `SystemAdapter.fetch()` 获取实时数据
 5. 返回 `DynamicQueryResultItem` + 关联 `ActionLink`
@@ -574,6 +574,7 @@ SystemAdapter (Protocol)            ← 抽象接口
   .name -> str                      ← 适配器名称标识
   .fetch(resource_type, params)     ← 统一查询入口
       -> list[dict[str, Any]]       ← 标准化行数据
+      params 由具体 adapter 解释      ← 通用层不假设外部系统方言
   │
   ├── OdooAdapter                   ← 当前已实现的 Odoo XML-RPC 适配器
   │     model_fields_map 可配置     ← resource_type → (model, fields) 映射
@@ -589,7 +590,7 @@ SystemAdapter (Protocol)            ← 抽象接口
 
 | 环境变量 | 可选值 | 说明 |
 |---|---|---|
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo`（当前默认实现）/ `mock` / 自定义 | 选择适配器实现 |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock`（默认）/ `odoo` / 自定义 | 选择适配器实现 |
 | `ORIONSTACK_ODOO_URL` | URL | Odoo 服务地址 |
 | `ORIONSTACK_ODOO_DB` | string | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | int | Odoo 用户 ID |
@@ -611,7 +612,7 @@ OdooAdapter 通过 `model_fields_map` 配置将 `resource_type` 映射到 Odoo �
 _MODEL_FIELDS_MAP: dict[str, tuple[str, list[str]]] = {
     "leave_status": (
         "hr.leave",
-        ["name", "holiday_type", "date_from", "date_to", "state", "number_of_days"],
+        ["name", "holiday_status_id", "date_from", "date_to", "state", "number_of_days"],
     ),
     "expense_status": (
         "hr.expense",

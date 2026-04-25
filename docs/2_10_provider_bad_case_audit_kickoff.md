@@ -217,6 +217,24 @@ uv run python scripts/audit-provider-bad-cases.py --limit 8
 - `open` 表示仍需人工 triage，不能直接做 query 特判；应先判断是语料缺口、检索后端、evidence 阈值还是 planner 边界
 - 当前工具完成的是审计边界，不直接修改检索策略或知识内容
 
+### 4.7 2026-04-25 P1.5 闭环冻结结果
+
+P1.3 / P1.4 修复后，通过正式 `chat_route.ask_chat()` 追加目标样本 trace，并重新运行 provider bad-case audit。
+
+最新真实 JSONL 汇总：
+
+- `traces=251`
+- `hard_cases=4`
+- `candidate bad traces=5`
+- `audit_category={'retrieval_backend': 1, 'corpus_gap': 4}`
+- `audit_resolution={'closed_by_later_success': 5}`
+
+结论：
+
+- 当前 provider 主链没有仍处于 `open` 的 bad-case
+- 历史 `演示资料在哪里找` / `某个功能的定位是什么` / `怎么请假` 已由后续成功 trace 关闭
+- 本线不继续做 query 特判或 FAQ 补丁；后续仅继续积累真实 trace，等新 bad-case 出现后再分类处理
+
 ---
 
 ## 5. 下一步执行顺序
@@ -254,4 +272,4 @@ uv run python scripts/audit-provider-bad-cases.py --limit 8
 - [x] 已完成 P1.3 通用稳定性修复：hybrid 检索单侧 backend 失败时可 soft fallback 到另一侧
 - [x] 已完成 P1.4 通用召回 / 重排修复：补 provider-neutral 领域约定、合并保护性 lexical terms、扩大无 domain rerank 候选池并保留跨域候选
 - [x] 已完成 P1.4 受控复测：在 `domain_hint=null` 下 `演示资料` 命中 `sales-faq-003`，`功能定位` 命中 `product-faq-004`
-- [ ] 下一步重新运行 provider bad-case audit，确认历史 open miss 是否已被 later success 关闭
+- [x] 已完成 P1.5 Provider Bad-case Audit 闭环冻结：`audit_resolution={'closed_by_later_success': 5}`，当前无 open provider bad-case

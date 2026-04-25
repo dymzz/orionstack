@@ -172,7 +172,7 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_EXTRACTION_PROVIDER` | `openai_compatible` | 抽取 provider：`openai_compatible` / `qwen_api` / `llama_cpp` |
 | `ORIONSTACK_EXTRACTION_API_BASE` | DashScope OpenAI-compatible 地址 | 当前抽取 provider 的 API 地址 |
 | `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 当前抽取 provider 的模型名 |
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 动态查询适配器：`odoo` / `mock` |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 动态查询适配器：`mock` / `odoo` / 自定义 |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 

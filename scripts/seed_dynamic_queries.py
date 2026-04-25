@@ -1,4 +1,7 @@
-"""Seed DynamicQuery definitions for Odoo resource types.
+"""Seed provider-neutral DynamicQuery definitions.
+
+The resource_type values are OrionStack business-resource keys. Adapters map
+them to their own backend-specific model/table/API names.
 
 Run: python -m scripts.seed_dynamic_queries
 """

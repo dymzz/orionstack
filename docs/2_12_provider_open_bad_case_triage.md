@@ -179,3 +179,44 @@ P1.4 结论：
 | `演示资料在哪里找` | `ok`，`hybrid_rerank`，命中 `sales-faq-003` | 历史 open miss 可关闭 |
 | `某个功能的定位是什么` | `ok`，`hybrid_rerank`，命中 `product-faq-004` | 历史 open miss 可关闭 |
 | `怎么请假` | `ok`，进入 clarification，命中 `hr-faq-001` / `hr-faq-003` | 仍是合理澄清 |
+
+---
+
+## 8. P1.5 Provider Bad-case Audit 闭环验证
+
+执行方式：
+
+- 通过正式 `chat_route.ask_chat()` 打目标样本，让结果写入 `retrieval_traces.jsonl`
+- 样本：
+  - `演示资料在哪里找`
+  - `某个功能的定位是什么`
+  - `怎么请假`
+- 随后运行：
+
+```powershell
+.venv\Scripts\python.exe scripts/audit-provider-bad-cases.py --limit 10
+```
+
+正式 route 结果：
+
+| query | status | router | mode | fallback | domain | citation |
+|---|---|---|---|---|---|---|
+| `演示资料在哪里找` | `ok` | `query_planner_qwen_api` | `hybrid_rerank` | `null` | `null` | `sales-faq-003` |
+| `某个功能的定位是什么` | `ok` | `query_planner_qwen_api` | `hybrid_rerank` | `null` | `null` | `product-faq-004` |
+| `怎么请假` | `ok` | `query_planner_qwen_api` | `clarification` | `conflict_requires_clarification` | `null` | `hr-faq-001`, `hr-faq-003` |
+
+Audit 结果：
+
+- `traces=251`
+- `hard_cases=4`
+- `status={'ok': 246, 'fallback': 5}`
+- `fallback_reason={'conflict_requires_clarification': 62, 'no_evidence': 4, 'lexical_backend_error': 1}`
+- `audit_category={'retrieval_backend': 1, 'corpus_gap': 4}`
+- `audit_resolution={'closed_by_later_success': 5}`
+
+P1.5 结论：
+
+- P1.1/P1.2 识别出的 4 个 open provider bad-case 已全部被后续成功 trace 关闭
+- 历史 `价格口径在哪里确认` 也继续保持 `closed_by_later_success`
+- 当前没有仍处于 `open` 的 provider bad-case
+- 本轮 provider bad-case 闭环线可以阶段性收口；后续优先级应转向继续积累真实 provider trace，或处理下一条已知风险线

@@ -36,9 +36,7 @@ class DynamicQueryService:
             return None
 
         resource_type = dq.resource_type
-        fetch_params = params or {}
-        if "domain" not in fetch_params:
-            fetch_params["domain"] = []
+        fetch_params = dict(params or {})
 
         try:
             rows = self._adapter.fetch(resource_type, fetch_params)

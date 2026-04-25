@@ -1,7 +1,7 @@
 # OrionStack 交接文档
 
 > 版本：v1
-> 日期：2026-04-24
+> 日期：2026-04-25
 > 目的：为下一任开发者/AI 提供项目全貌、当前状态、关键决策与上手路径
 
 ---
@@ -57,9 +57,20 @@ OrionStack 是一个**企业知识助手 / 文档问答系统**。核心能力�
 
 - `Qwen` / `DashScope` 已收敛为当前默认示例和兼容入口；主路径命名是 `openai_compatible`、`planner_api_*`、`extraction_api_*`
 - `Odoo` 已收敛为 `SystemAdapter` 的当前适配器之一；动态查询主路径不再依赖 Odoo 语义
+- 动态查询默认 adapter 为 `mock`；如需验证当前 Odoo 示例，显式设置 `ORIONSTACK_DYNAMIC_QUERY_ADAPTER=odoo`
+- `DynamicQueryService` 不解释 Odoo XML-RPC `domain` 等外部系统方言，adapter-specific 查询参数停留在具体 adapter 内
 - DynamicQuery 识别规则来自 JSONL 数据的 `detect_patterns`，代码里不再维护业务 regex 表
 - ActionLink 的领域展示来自 JSONL 数据的 `business_domains`，代码里不再维护 domain → resource_type 映射
 - 旧的 `qwen_api` provider/router 名只作为兼容别名或历史 trace 名保留
+
+### 2026-04-25 Provider bad-case 闭环收口
+
+- Provider bad-case audit 已完成 P1.1-P1.5 闭环：当前没有仍处于 `open` 的 provider 主链 bad-case
+- 最新审计基线：`traces=251`、`hard_cases=4`、`audit_resolution={'closed_by_later_success': 5}`
+- `演示资料在哪里找` 已由后续成功 trace 命中 `sales-faq-003`
+- `某个功能的定位是什么` 已由后续成功 trace 命中 `product-faq-004`
+- `怎么请假` 已恢复为合理 clarification，命中 `hr-faq-001` / `hr-faq-003`
+- 本轮修复保持 provider/adapter-neutral：没有补单条 FAQ，没有写 query 特判，没有把 Qwen/Odoo 写成项目目标
 
 ---
 
@@ -192,7 +203,7 @@ python scripts/dev-demo.py
 | `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch` 或 `local` |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 是否启用 planner |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 是否启用 fast track |
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 当前实现可选 `odoo` 或 `mock`，后续可扩展更多 adapter |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 当前实现可选 `mock` 或 `odoo`，后续可扩展更多 adapter |
 | `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | 当前 OdooAdapter 示例地址 |
 | `ORIONSTACK_ODOO_DB` | `odoo` | 当前 OdooAdapter 示例数据库 |
 | `ORIONSTACK_ODOO_UID` | `2` | 当前 OdooAdapter 示例用户 ID |
@@ -210,7 +221,7 @@ python scripts/dev-demo.py
 uv run python -m pytest backend/tests -q
 ```
 
-当前项目环境基线：**336 passed, 19 skipped, 9 xfailed**。
+当前项目环境基线：**344 passed, 21 skipped, 9 xfailed**。
 
 裸 `python` 环境如果没有同步项目依赖，可能出现导入期缺包错误；交接和回归请以 `uv run ...` 为准。live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
@@ -400,4 +411,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 全部完成，项目环境回归基线稳定（`uv run python -m pytest backend/tests -q`：336 passed, 19 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（`uv run python -m pytest backend/tests -q`：344 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**

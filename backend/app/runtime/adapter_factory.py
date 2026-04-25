@@ -32,10 +32,10 @@ _ADAPTER_FACTORIES: dict[str, AdapterFactory] = {
 
 
 def create_adapter() -> SystemAdapter:
-    provider = settings.dynamic_query_adapter.strip().lower()
-    factory = _ADAPTER_FACTORIES.get(provider)
+    adapter_name = settings.dynamic_query_adapter.strip().lower()
+    factory = _ADAPTER_FACTORIES.get(adapter_name)
     if factory is None:
-        raise ValueError(f"Unknown dynamic_query_adapter: {provider!r}")
+        raise ValueError(f"Unknown dynamic_query_adapter: {adapter_name!r}")
     return factory()
 
 

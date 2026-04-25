@@ -1,8 +1,3 @@
-{"trace_id": "072be569d35c46329f5055685b723b01", "raw_query": "账号被锁定后怎么处理", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-002"], "created_at": "2026-04-21T17:41:53.849501+00:00"}
-{"trace_id": "1fb481c71a534e0091ea72b5e0b223ef", "raw_query": "密码", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-001", "it-faq-007"], "created_at": "2026-04-21T17:41:56.364139+00:00"}
-{"trace_id": "e987e8894a9c4ab1b8efa3fc42752d1b", "raw_query": "忘记登录密码怎么办", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-001"], "created_at": "2026-04-21T17:41:59.054933+00:00"}
-{"trace_id": "3c32a1cc983c495fa3242252dd7e90e7", "raw_query": "什么叫HR", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003", "hr-faq-009"], "created_at": "2026-04-21T17:42:01.709284+00:00"}
-{"trace_id": "9fa5ef0be00f45cf95a80bcfc75807a0", "raw_query": "HR是什么", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-008", "hr-faq-007"], "created_at": "2026-04-21T17:42:04.202258+00:00"}
 {"trace_id": "d822718db29f4c35a13c053233e61f7f", "raw_query": "邮箱签名怎么修改", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-009"], "created_at": "2026-04-21T17:42:06.975101+00:00"}
 {"trace_id": "9f214f093c7d4d0796d0fb5fd9a2ba39", "raw_query": "病假材料", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-002"], "created_at": "2026-04-21T18:10:57.923253+00:00"}
 {"trace_id": "3dc773c7e069408d8c9572ffec4bf7bd", "raw_query": "请假进度怎么看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-003"], "created_at": "2026-04-21T18:11:03.933981+00:00"}
@@ -198,3 +193,8 @@
 {"trace_id": "c9ee97a980084cfbadb9045953917217", "raw_query": "CRM 使用说明在哪里", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["sales-faq-006"], "created_at": "2026-04-23T13:37:45.409620+00:00"}
 {"trace_id": "5df4e37c16cf4c8d8f37da3e95d3d90a", "raw_query": "内部支持联系人清单在哪里看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-010", "it-faq-003"], "created_at": "2026-04-23T13:44:32.323235+00:00"}
 {"trace_id": "40529b02d3b34e0bbce7788500ac5c44", "raw_query": "请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001", "hr-faq-003"], "created_at": "2026-04-23T13:45:44.280313+00:00"}
+{"trace_id": "97081e1c31d14119b007093fb7b2531e", "raw_query": "演示资料在哪里找", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["sales-faq-003"], "created_at": "2026-04-25T00:58:13.220998+00:00"}
+{"trace_id": "706724ddc5f143669fad179fd6b70abb", "raw_query": "某个功能的定位是什么", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["product-faq-004"], "created_at": "2026-04-25T00:58:14.568840+00:00"}
+{"trace_id": "137fcd085282462e9f27fdd7cfb029fa", "raw_query": "怎么请假", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["hr-faq-001", "hr-faq-003"], "created_at": "2026-04-25T00:58:15.879558+00:00"}
+{"trace_id": "ba16a95a08d440b5afee73c64f4658af", "raw_query": "内部支持联系人清单在哪里看", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["it-faq-010", "it-faq-003"], "created_at": "2026-04-25T01:14:09.425704+00:00"}
+{"trace_id": "affa0168308046eb9671d6979e2c4842", "raw_query": "CRM 使用说明在哪里", "document_ids": [], "response_status": "ok", "retrieved_chunk_ids": ["sales-faq-006"], "created_at": "2026-04-25T01:14:58.246186+00:00"}

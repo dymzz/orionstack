@@ -13,6 +13,18 @@ from app.runtime.dynamic_query_service import DynamicQueryService
 from app.schemas.response import DynamicQueryResultItem
 
 
+class _CapturingAdapter:
+    name = "capture"
+
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._rows = rows or [{"name": "ok"}]
+
+    def fetch(self, resource_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        self.calls.append({"resource_type": resource_type, "params": params})
+        return list(self._rows)
+
+
 def _make_dq(**overrides) -> DynamicQuery:
     defaults = dict(
         dynamic_query_id="dq-test-001",
@@ -179,6 +191,27 @@ class TestOdooAdapterUnit:
         assert adapter.name == "odoo"
         assert adapter._model_fields_map == custom_map
 
+    def test_default_domain_is_adapter_local(self) -> None:
+        from app.runtime.odoo_adapter import OdooAdapter
+
+        adapter = OdooAdapter()
+        captured: dict[str, Any] = {}
+
+        def fake_search_read(model, domain, fields, limit):
+            captured.update(
+                {"model": model, "domain": domain, "fields": fields, "limit": limit}
+            )
+            return [{"name": "事假"}]
+
+        adapter._search_read = fake_search_read  # type: ignore[method-assign]
+
+        rows = adapter.fetch("leave_status", {})
+
+        assert rows == [{"name": "事假"}]
+        assert captured["model"] == "hr.leave"
+        assert captured["domain"] == []
+        assert captured["limit"] == 10
+
 
 # ---------------------------------------------------------------------------
 # DynamicQueryService
@@ -310,6 +343,34 @@ class TestDynamicQueryService:
         assert "id" not in result.data[0]
         assert result.data[0]["name"] == "test"
 
+    def test_execute_does_not_inject_adapter_specific_domain_param(
+        self, tmp_path: Path
+    ) -> None:
+        adapter = _CapturingAdapter()
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-adapter-neutral")
+        repo.create(_make_dq())
+        svc = DynamicQueryService(adapter=adapter, repo=repo)
+
+        result = svc.execute("leave_status")
+
+        assert result is not None
+        assert adapter.calls == [{"resource_type": "leave_status", "params": {}}]
+
+    def test_execute_copies_params_before_adapter_fetch(self, tmp_path: Path) -> None:
+        adapter = _CapturingAdapter()
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-param-copy")
+        repo.create(_make_dq())
+        svc = DynamicQueryService(adapter=adapter, repo=repo)
+        params = {"limit": 3}
+
+        result = svc.execute("leave_status", params=params)
+
+        assert result is not None
+        assert params == {"limit": 3}
+        assert adapter.calls == [
+            {"resource_type": "leave_status", "params": {"limit": 3}}
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Adapter factory
@@ -317,6 +378,26 @@ class TestDynamicQueryService:
 
 
 class TestAdapterFactory:
+    def test_settings_default_adapter_is_mock(self, monkeypatch) -> None:
+        from app.config.settings import Settings
+
+        monkeypatch.delenv("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", raising=False)
+
+        assert Settings().dynamic_query_adapter == "mock"
+
+    def test_create_default_mock_adapter(self, monkeypatch) -> None:
+        from app.config.settings import Settings
+        from app.runtime import adapter_factory
+        from app.runtime.adapter_factory import create_adapter
+
+        monkeypatch.delenv("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", raising=False)
+        s = Settings()
+        monkeypatch.setattr(adapter_factory, "settings", s)
+
+        adapter = create_adapter()
+
+        assert adapter.name == "mock"
+
     def test_create_mock_adapter(self, monkeypatch) -> None:
         from app.config.settings import Settings
         from app.runtime.adapter_factory import create_adapter

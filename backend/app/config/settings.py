@@ -209,7 +209,7 @@ class Settings:
 
     # Phase 3: dynamic query adapter
     dynamic_query_adapter: str = field(
-        default_factory=lambda: _resolve_str("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", "odoo")
+        default_factory=lambda: _resolve_str("ORIONSTACK_DYNAMIC_QUERY_ADAPTER", "mock")
     )
     odoo_url: str = field(
         default_factory=lambda: _resolve_str("ORIONSTACK_ODOO_URL", "http://localhost:8069")

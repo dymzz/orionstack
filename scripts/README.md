@@ -313,7 +313,7 @@ python scripts/git-release.py --version 0.2.0 --skip-push
 | `ORIONSTACK_ODOO_DB` | `odoo` | Odoo 数据库名 |
 | `ORIONSTACK_ODOO_UID` | `2` | Odoo 用户 ID |
 | `ORIONSTACK_ODOO_PASSWORD` | — | Odoo 用户密码，通过环境变量注入 |
-| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `odoo` | 当前实现适配器选择：`odoo` / `mock` |
+| `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 当前实现适配器选择：`mock` / `odoo` / 自定义 |
 
 ---
 

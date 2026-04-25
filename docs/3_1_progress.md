@@ -89,8 +89,15 @@
 
 当前状态：
 
-- 设计基线已冻结
-- 依赖 Step 1 完成
+- **已完成**（39 测试，含 adapter-neutral 边界回归）
+- 默认 adapter 为 `mock`，OdooAdapter 需要通过配置显式选择
+
+实现要点：
+
+1. `DynamicQueryService` 只负责 pattern 检测、repo 判权、adapter 调用和结果清洗
+2. `SystemAdapter.fetch(resource_type, params)` 的 `params` 由具体 adapter 解释，通用层不注入 Odoo XML-RPC `domain`
+3. OdooAdapter 内部负责 `resource_type -> Odoo model/fields` 映射，Odoo 字段差异停留在 adapter 内
+4. MockAdapter 是默认本地/demo adapter，避免无配置启动时隐式依赖 Odoo
 
 ### Step 4：抽取候选自动化（后做）
 
@@ -162,7 +169,7 @@ Phase 3 不重新实现 Phase 2 已落地的能力，而是**在现有链路上�
 | `3_3_field_definitions.md` 字段定义 | 已更新（含 SystemAdapter Protocol） |
 | Step 1 代码实现 | 已完成（27 测试） |
 | Step 2 代码实现（ActionLink） | 已完成（15 测试） |
-| Step 3 代码实现（DynamicQuery） | 已完成（32 测试） |
+| Step 3 代码实现（DynamicQuery） | 已完成（39 测试，含 adapter-neutral 边界回归） |
 | Step 4 代码实现（抽取候选自动化） | 已完成（18 测试 + E2E 验证通过） |
 | Step 5 代码实现 | 已完成（9 测试） |
 
