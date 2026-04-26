@@ -284,6 +284,7 @@ LLM 从资料里抽 FAQ / action link / 动态查询候选时，可能抽偏、�
 |---|---|---:|---|
 | `dynamic_query_id` | string | 是 | 查询定义 ID |
 | `tenant_id` | string | 是 | 租户 |
+| `source_record_id` | string | 否 | 对应来源记录，用于删除 / 撤权传播 |
 | `query_key` | string | 是 | 查询标识 |
 | `resource_type` | string | 是 | 资源类型 |
 | `action` | string | 是 | 允许动作，如 `read` |

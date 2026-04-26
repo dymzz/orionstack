@@ -54,6 +54,7 @@ class TestDynamicQueryModel:
         assert d["resource_type"] == "leave_status"
         assert d["action"] == "read"
         assert len(d["detect_patterns"]) == 2
+        assert d["source_record_id"] is None
 
     def test_frozen_dataclass_rejects_mutation(self) -> None:
         dq = _make_dq()
@@ -124,6 +125,28 @@ class TestDynamicQueryRepo:
         got = repo.get("dq-test-001")
         assert got is not None
         assert got.status == "revoked"
+
+    def test_list_by_source_record(self, repo: DynamicQueryRepo) -> None:
+        repo.create(_make_dq(dynamic_query_id="dq-1", source_record_id="sr-001"))
+        repo.create(_make_dq(dynamic_query_id="dq-2", source_record_id="sr-002"))
+
+        result = repo.list_by_source_record("sr-001")
+
+        assert len(result) == 1
+        assert result[0].dynamic_query_id == "dq-1"
+
+    def test_update_status_by_source_record(self, repo: DynamicQueryRepo) -> None:
+        repo.create(_make_dq(dynamic_query_id="dq-1", source_record_id="sr-001"))
+        repo.create(_make_dq(dynamic_query_id="dq-2", source_record_id="sr-001"))
+        repo.create(_make_dq(dynamic_query_id="dq-3", source_record_id="sr-002"))
+
+        updated = repo.update_status_by_source_record("sr-001", "revoked")
+
+        assert updated == ["dq-1", "dq-2"]
+        assert repo.list_by_source_record("sr-001") == []
+        assert repo.get("dq-1").status == "revoked"
+        assert repo.get("dq-2").status == "revoked"
+        assert repo.get("dq-3").status == "active"
 
 
 # ---------------------------------------------------------------------------

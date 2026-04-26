@@ -57,6 +57,21 @@ class ActionLinkRepo:
                 l = replace(l, status=status)
             self._append(l)
 
+    def update_status_by_source_record(
+        self, source_record_id: str, status: str
+    ) -> list[str]:
+        links = list(self._iter_all())
+        updated_ids: list[str] = []
+        self._file.write_text("", encoding="utf-8")
+        for link in links:
+            if link.source_record_id == source_record_id and link.status != status:
+                from dataclasses import replace
+
+                updated_ids.append(link.action_link_id)
+                link = replace(link, status=status)
+            self._append(link)
+        return updated_ids
+
     def _remove(self, action_link_id: str) -> None:
         links = [l for l in self._iter_all() if l.action_link_id != action_link_id]
         self._file.write_text("", encoding="utf-8")

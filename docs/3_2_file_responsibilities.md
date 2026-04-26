@@ -86,6 +86,7 @@
 
 - `DynamicQuery` 的 CRUD
 - 按 `query_key` / `status` 查询
+- 按 `source_record_id` 传播撤权 / 删除导致的失效
 - 运行时判定某查询是否允许执行
 
 不负责：

@@ -40,6 +40,13 @@ class DynamicQueryRepo:
             if q.resource_type == resource_type and q.status == "active"
         ]
 
+    def list_by_source_record(self, source_record_id: str) -> list[DynamicQuery]:
+        return [
+            q
+            for q in self._iter_all()
+            if q.source_record_id == source_record_id and q.status == "active"
+        ]
+
     def upsert(self, query: DynamicQuery) -> None:
         existing = self._find_by_query_key(query.query_key)
         if existing is not None:
@@ -55,6 +62,21 @@ class DynamicQueryRepo:
 
                 q = replace(q, status=status)
             self._append(q)
+
+    def update_status_by_source_record(
+        self, source_record_id: str, status: str
+    ) -> list[str]:
+        queries = list(self._iter_all())
+        updated_ids: list[str] = []
+        self._file.write_text("", encoding="utf-8")
+        for query in queries:
+            if query.source_record_id == source_record_id and query.status != status:
+                from dataclasses import replace
+
+                updated_ids.append(query.dynamic_query_id)
+                query = replace(query, status=status)
+            self._append(query)
+        return updated_ids
 
     def _find_by_query_key(self, query_key: str) -> DynamicQuery | None:
         for q in self._iter_all():
@@ -96,4 +118,5 @@ class DynamicQueryRepo:
             status=d.get("status", "active"),
             description=d.get("description", ""),
             detect_patterns=tuple(d.get("detect_patterns", [])),
+            source_record_id=d.get("source_record_id"),
         )

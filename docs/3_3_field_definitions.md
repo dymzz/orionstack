@@ -127,6 +127,7 @@ Phase 2 已有的 `KnowledgeUnit` 字段不变（见 `2_3_field_definitions.md`�
 |---|---|---:|---|---|
 | `dynamic_query_id` | string | 是 | — | 查询定义 ID |
 | `tenant_id` | string | 是 | `"default"` | 租户标识 |
+| `source_record_id` | string | 否 | `None` | 对应来源记录。用于 SourceRecord 删除 / 撤权时传播失效 |
 | `query_key` | string | 是 | — | 查询标识。如 `leave_status` / `payroll_balance` |
 | `resource_type` | string | 是 | — | 资源类型。如 `leave` / `payroll` / `approval` |
 | `action` | string | 是 | `"read"` | 允许动作。当前只支持 `read` |

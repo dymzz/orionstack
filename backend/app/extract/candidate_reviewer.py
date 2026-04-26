@@ -128,6 +128,7 @@ def _publish_dynamic_query(
         status="active",
         description=payload.get("description", ""),
         detect_patterns=tuple(payload.get("detect_patterns", [])),
+        source_record_id=source_record.source_record_id,
     )
     repo = dynamic_query_repo or DynamicQueryRepo()
     repo.upsert(dq)

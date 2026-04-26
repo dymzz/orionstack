@@ -40,6 +40,7 @@ docs/
 ├── 3_1_progress.md
 ├── 3_2_file_responsibilities.md
 ├── 3_3_field_definitions.md
+├── 3_4_contract_audit.md
 └── designs/
    ├── 1_system_design.md
    ├── 2_system_design.md
@@ -193,6 +194,13 @@ docs/
 - 冻结第三阶段核心对象的字段语义、类型、约束与默认值
 - 对齐 SourceRecord / ActionLink / DynamicQuery / ExtractionCandidate / ImportBatch 的字段含义
 
+### `docs/3_4_contract_audit.md`
+
+职责：
+
+- 对照第三阶段 5 个核心工程契约审计当前代码真实闭环程度
+- 给出 tombstone、动态查询判权、provenance、freshness 与 sync 的后续修复顺序
+
 ---
 
 ## 3.4 文档接入边界补充
@@ -307,6 +315,7 @@ docs/
 2. `docs/3_1_progress.md`
 3. `docs/3_2_file_responsibilities.md`
 4. `docs/3_3_field_definitions.md`
+5. `docs/3_4_contract_audit.md`
 
 ## 4.7 想判断“当前改动应该落在哪份文档”
 
@@ -384,6 +393,7 @@ docs/
   2. `docs/3_2_file_responsibilities.md`  
   3. `docs/3_1_progress.md`  
   4. `docs/3_3_field_definitions.md`
+  5. `docs/3_4_contract_audit.md`
 
 ---
 

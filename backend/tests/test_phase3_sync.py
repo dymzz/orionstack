@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from app.runtime.dynamic_query_service import DynamicQueryService
+from app.storage.models.action_link import ActionLink
+from app.storage.models.dynamic_query import DynamicQuery
 from app.storage.models.source_record import SourceRecord
 from app.storage.models.import_batch import ImportBatch
 from app.storage.models.extraction_candidate import ExtractionCandidate
+from app.storage.repositories.action_link_repo import ActionLinkRepo
+from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
@@ -282,6 +288,99 @@ class TestTombstone:
         handle_tombstone("sr-001", "revoked", repo)
         assert repo.get("sr-001").status == "revoked"
 
+    def test_tombstone_revokes_action_links_by_source_record(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        al_repo = ActionLinkRepo(storage_dir=tmp_path / "al")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        al_repo.create(_make_action_link("al-1", "sr-001"))
+        al_repo.create(_make_action_link("al-2", "sr-002"))
+
+        affected = handle_tombstone(
+            "sr-001",
+            "revoked",
+            sr_repo,
+            action_link_repo=al_repo,
+        )
+
+        assert affected == ["sr-001", "al-1"]
+        assert sr_repo.get("sr-001").status == "revoked"
+        assert al_repo.list_by_source_record("sr-001") == []
+        assert al_repo.get("al-1").status == "revoked"
+        assert al_repo.get("al-2").status == "active"
+
+    def test_tombstone_deletes_action_links_by_source_record(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        al_repo = ActionLinkRepo(storage_dir=tmp_path / "al")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        al_repo.create(_make_action_link("al-1", "sr-001"))
+
+        handle_tombstone(
+            "sr-001",
+            "deleted",
+            sr_repo,
+            action_link_repo=al_repo,
+        )
+
+        assert sr_repo.get("sr-001").status == "deleted"
+        assert al_repo.list_by_source_record("sr-001") == []
+        assert al_repo.get("al-1").status == "deleted"
+
+    def test_tombstone_revokes_dynamic_query_and_blocks_execution(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        dq_repo = DynamicQueryRepo(storage_dir=tmp_path / "dq")
+        adapter = _CapturingAdapter()
+        service = DynamicQueryService(adapter=adapter, repo=dq_repo)
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        dq_repo.create(_make_dynamic_query("dq-1", "sr-001"))
+        dq_repo.create(
+            _make_dynamic_query(
+                "dq-2",
+                "sr-002",
+                query_key="expense_status",
+                detect_patterns=(r"报销.{0,4}(状态|进度)",),
+            )
+        )
+
+        assert service.match_query_key("我的请假进度") == "leave_status"
+
+        affected = handle_tombstone(
+            "sr-001",
+            "revoked",
+            sr_repo,
+            dynamic_query_repo=dq_repo,
+        )
+
+        assert affected == ["sr-001", "dq-1"]
+        assert dq_repo.list_by_source_record("sr-001") == []
+        assert dq_repo.get("dq-1").status == "revoked"
+        assert service.match_query_key("我的请假进度") is None
+        assert service.execute("leave_status") is None
+        assert adapter.calls == []
+
+    def test_tombstone_deleted_source_revokes_dynamic_query(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        dq_repo = DynamicQueryRepo(storage_dir=tmp_path / "dq")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        dq_repo.create(_make_dynamic_query("dq-1", "sr-001"))
+
+        handle_tombstone(
+            "sr-001",
+            "deleted",
+            sr_repo,
+            dynamic_query_repo=dq_repo,
+        )
+
+        assert sr_repo.get("sr-001").status == "deleted"
+        assert dq_repo.get("dq-1").status == "revoked"
+
 
 # ---------------------------------------------------------------------------
 # Extract / Publish
@@ -418,3 +517,56 @@ def _make_candidate(
         review_status="pending",
         created_at="2026-01-01T00:00:00Z",
     )
+
+
+def _make_action_link(
+    action_link_id: str,
+    source_record_id: str,
+) -> ActionLink:
+    return ActionLink(
+        action_link_id=action_link_id,
+        tenant_id="default",
+        source_record_id=source_record_id,
+        label="去请假系统",
+        system_type="manual_export",
+        url="https://example.com/leave",
+        resource_type="leave_form",
+        access_scope="internal",
+        status="active",
+        published_at="2026-01-01T00:00:00Z",
+        business_domains=("hr",),
+    )
+
+
+def _make_dynamic_query(
+    dynamic_query_id: str,
+    source_record_id: str,
+    *,
+    query_key: str = "leave_status",
+    detect_patterns: tuple[str, ...] = (
+        r"请假.{0,4}(状态|进度|审批|情况|记录)",
+    ),
+) -> DynamicQuery:
+    return DynamicQuery(
+        dynamic_query_id=dynamic_query_id,
+        tenant_id="default",
+        query_key=query_key,
+        resource_type=query_key,
+        action="read",
+        scope_type="self",
+        status="active",
+        description="请假状态",
+        detect_patterns=detect_patterns,
+        source_record_id=source_record_id,
+    )
+
+
+class _CapturingAdapter:
+    name = "capture"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def fetch(self, resource_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        self.calls.append({"resource_type": resource_type, "params": dict(params)})
+        return [{"name": "ok"}]

@@ -15,6 +15,7 @@ class DynamicQuery:
     status: str
     description: str
     detect_patterns: tuple[str, ...] = ()
+    source_record_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,4 +28,5 @@ class DynamicQuery:
             "status": self.status,
             "description": self.description,
             "detect_patterns": list(self.detect_patterns),
+            "source_record_id": self.source_record_id,
         }

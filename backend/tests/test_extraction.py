@@ -204,6 +204,7 @@ class TestCandidateReviewer:
         result = publish_candidate(candidate, sr, dynamic_query_repo=dq_repo)
         assert result is not None
         assert result.query_key == "leave_balance_test"
+        assert result.source_record_id == "sr-test-001"
         assert result.detect_patterns == (
             r"年假.{0,4}(余额|剩余)",
             r"剩余.{0,4}假期",
@@ -211,6 +212,7 @@ class TestCandidateReviewer:
 
         dq = dq_repo.get_by_query_key("leave_balance_test")
         assert dq is not None
+        assert dq.source_record_id == "sr-test-001"
         assert dq.detect_patterns == (
             r"年假.{0,4}(余额|剩余)",
             r"剩余.{0,4}假期",

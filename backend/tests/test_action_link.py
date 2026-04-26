@@ -110,6 +110,19 @@ class TestActionLinkRepo:
         assert got is not None
         assert got.status == "revoked"
 
+    def test_update_status_by_source_record(self, repo: ActionLinkRepo) -> None:
+        repo.create(_make_link(action_link_id="al-1", source_record_id="sr-001"))
+        repo.create(_make_link(action_link_id="al-2", source_record_id="sr-001"))
+        repo.create(_make_link(action_link_id="al-3", source_record_id="sr-002"))
+
+        updated = repo.update_status_by_source_record("sr-001", "revoked")
+
+        assert updated == ["al-1", "al-2"]
+        assert repo.list_by_source_record("sr-001") == []
+        assert repo.get("al-1").status == "revoked"
+        assert repo.get("al-2").status == "revoked"
+        assert repo.get("al-3").status == "active"
+
     def test_list_active_empty_on_fresh_repo(self, repo: ActionLinkRepo) -> None:
         assert repo.list_active() == []
 
