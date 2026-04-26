@@ -319,6 +319,8 @@ def _infer_issue_category(retrieval_trace: dict[str, Any]) -> str:
         return "retrieval_miss"
     if fallback_reason in ("route_not_confident_enough",):
         return "routing_mismatch"
+    if fallback_reason == "stale_knowledge":
+        return "freshness_stale"
     if "evidence_below_threshold" in reject_reason:
         return "evidence_weak"
     if retrieval_trace.get("source_record_id"):

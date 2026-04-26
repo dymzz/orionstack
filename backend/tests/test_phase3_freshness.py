@@ -14,6 +14,14 @@ from conftest import fixture_case
 LEAVE_APPLY = fixture_case("leave_apply")
 
 
+class _FakeLexicalRetriever:
+    def __init__(self, hits) -> None:
+        self._hits = hits
+
+    def search(self, query: str, **kwargs):
+        return list(self._hits)
+
+
 def _configure_trace_storage(tmp_path: Path) -> None:
     chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
     chat_route.chat_record_repository._path = tmp_path / "chat_records.jsonl"
@@ -109,6 +117,89 @@ def test_freshness_stale_appends_warning_to_answer() -> None:
     assert result.is_stale
 
 
+def test_stale_elastic_hit_returns_safe_fallback_with_action_link(
+    monkeypatch, tmp_path
+) -> None:
+    from app.retrieval.lexical_retriever import LexicalHit
+    from app.services import chat_service as chat_service_module
+    from app.services.chat_service import ChatService
+    from app.storage.models.action_link import ActionLink
+    from app.storage.repositories.action_link_repo import ActionLinkRepo
+
+    past = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    stale_answer = "请上传到 OA 系统即可。"
+    stale_hit = LexicalHit(
+        unit_id="unit-stale-001",
+        source_kind="faq",
+        question="如何上传文档？",
+        answer=stale_answer,
+        body_text=stale_answer,
+        source_label="FAQ",
+        source_locator="faq#001",
+        score=2.5,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        source_record_id="sr-stale-001",
+        import_batch_id="ib-stale-001",
+        unit_version=2,
+        fresh_until=past,
+        stale_after=past,
+    )
+    action_repo = ActionLinkRepo(storage_dir=tmp_path / "action_links")
+    action_repo.create(
+        ActionLink(
+            action_link_id="al-stale-001",
+            tenant_id="default",
+            source_record_id="sr-stale-001",
+            label="去原系统核实",
+            system_type="manual_export",
+            url="https://example.com/source",
+            resource_type="policy_doc",
+            access_scope="internal",
+            status="active",
+            published_at="2026-01-01T00:00:00Z",
+            business_domains=("hr",),
+        )
+    )
+    monkeypatch.setattr(
+        "app.storage.repositories.action_link_repo._STORAGE_DIR",
+        tmp_path / "action_links",
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(search_backend="elasticsearch", enable_query_planner=False),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: _FakeLexicalRetriever([stale_hit]),
+    )
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="如何上传文档？", debug=True),
+        trace_id="trace-stale-safe",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "fallback"
+    assert stale_answer not in response.answer
+    assert "过期" in response.answer
+    assert response.citations == []
+    assert [link.label for link in response.action_links] == ["去原系统核实"]
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "stale_knowledge"
+    assert response.debug_info.freshness_status == "stale"
+    assert response.debug_info.source_record_id == "sr-stale-001"
+    assert response.debug_info.import_batch_id == "ib-stale-001"
+    assert response.debug_info.unit_version == 2
+
+
 def test_freshness_warning_detected() -> None:
     from app.retrieval.hybrid_retriever import HybridHit
     from app.services.chat_service import ChatService
@@ -141,6 +232,60 @@ def test_freshness_warning_detected() -> None:
     result = ChatService._check_hit_freshness(warning_hit)
     assert result is not None
     assert result.is_warning
+
+
+def test_warning_elastic_hit_still_answers_with_freshness_notice(
+    monkeypatch,
+) -> None:
+    from app.retrieval.lexical_retriever import LexicalHit
+    from app.services import chat_service as chat_service_module
+    from app.services.chat_service import ChatService
+
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    warning_answer = "年假需要提前三天申请。"
+    warning_hit = LexicalHit(
+        unit_id="unit-warning-001",
+        source_kind="faq",
+        question="年假怎么申请？",
+        answer=warning_answer,
+        body_text=warning_answer,
+        source_label="FAQ",
+        source_locator="faq#002",
+        score=2.5,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        fresh_until=past,
+        stale_after=future,
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(search_backend="elasticsearch", enable_query_planner=False),
+    )
+    monkeypatch.setattr(
+        ChatService,
+        "_create_lexical_retriever",
+        lambda self: _FakeLexicalRetriever([warning_hit]),
+    )
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+
+    service = ChatService()
+    response = service.ask(
+        ChatAskRequest(raw_query="年假怎么申请？", debug=True),
+        trace_id="trace-warning-answer",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert warning_answer in response.answer
+    assert "可能即将过期" in response.answer
+    assert response.citations
+    assert response.debug_info is not None
+    assert response.debug_info.freshness_status == "warning"
 
 
 def test_freshness_fresh_does_not_modify_answer(monkeypatch, tmp_path) -> None:

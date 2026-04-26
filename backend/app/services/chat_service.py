@@ -407,13 +407,47 @@ class ChatService:
         action_links = self._find_action_links_for_domain(business_domain)
 
         freshness_result = self._check_hit_freshness(best)
-        if freshness_result is not None and not freshness_result.is_fresh:
-            suffix = (
-                "（注意：该知识内容已过期，建议核实最新版本。）"
-                if freshness_result.is_stale
-                else "（提示：该知识内容可能即将过期，建议尽快核实。）"
+        if freshness_result is not None and freshness_result.is_stale:
+            stale_action_links = action_links or self._find_action_links_for_source_record(
+                best.source_record_id
             )
-            answer = answer + suffix
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer=(
+                    "命中的知识内容已过期，我先不直接给出原答案。"
+                    "请通过下方入口到原系统核实最新信息，或刷新知识后再查询。"
+                ),
+                citations=[],
+                action_links=stale_action_links,
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result="faq_qa_elastic",
+                    chunk_ids=[best.unit_id],
+                    router_used=router_used,
+                    route_confidence=None,
+                    retrieval_score=None if used_hybrid else best.score,
+                    fusion_score=best.score if used_hybrid else None,
+                    fallback_reason="stale_knowledge",
+                    planner_output=planner_output,
+                    retrieval_mode=retrieval_mode,
+                    lexical_topk=lexical_topk,
+                    vector_topk=vector_topk,
+                    rrf_topk=rrf_topk,
+                    **self._summarize_rerank_decision(
+                        selected_reranked,
+                        reject_reason=self._format_backend_warning(backend_warning),
+                    ),
+                    source_record_id=best.source_record_id or None,
+                    import_batch_id=best.import_batch_id or None,
+                    unit_version=best.unit_version,
+                    freshness_status=freshness_result.status,
+                ),
+            )
+
+        if freshness_result is not None and freshness_result.is_warning:
+            answer = answer + "（提示：该知识内容可能即将过期，建议尽快核实。）"
 
         return ChatAskResponse(
             response_status="ok",
@@ -973,6 +1007,27 @@ class ChatService:
 
         repo = ActionLinkRepo()
         links = repo.list_by_resource_type(resource_type)
+        return [
+            ActionLinkItem(
+                action_link_id=link.action_link_id,
+                label=link.label,
+                url=link.url,
+                system_type=link.system_type,
+                resource_type=link.resource_type,
+            )
+            for link in links
+        ]
+
+    @classmethod
+    def _find_action_links_for_source_record(
+        cls, source_record_id: str | None
+    ) -> list[ActionLinkItem]:
+        if not source_record_id:
+            return []
+        from app.storage.repositories.action_link_repo import ActionLinkRepo
+
+        repo = ActionLinkRepo()
+        links = repo.list_by_source_record(source_record_id)
         return [
             ActionLinkItem(
                 action_link_id=link.action_link_id,
