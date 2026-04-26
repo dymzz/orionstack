@@ -372,6 +372,11 @@ def test_lexical_retriever_builds_expected_filters_and_maps_hits() -> None:
                             "source_type": "manual_faq",
                             "access_scope": "internal",
                             "lifecycle_status": "active",
+                            "source_record_id": "sr-001",
+                            "import_batch_id": "ib-001",
+                            "unit_version": 2,
+                            "fresh_until": "2026-06-01T00:00:00Z",
+                            "stale_after": "2026-07-01T00:00:00Z",
                         },
                     }
                 ]
@@ -391,6 +396,11 @@ def test_lexical_retriever_builds_expected_filters_and_maps_hits() -> None:
     assert len(hits) == 1
     assert hits[0].unit_id == "faq-001"
     assert hits[0].score == 2.5
+    assert hits[0].source_record_id == "sr-001"
+    assert hits[0].import_batch_id == "ib-001"
+    assert hits[0].unit_version == 2
+    assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
+    assert hits[0].stale_after == "2026-07-01T00:00:00Z"
     assert len(es.calls) == 1
     request_body = es.calls[0]["body"]
     assert es.calls[0]["index"] == "knowledge_units_v1"
@@ -472,6 +482,11 @@ def test_vector_retriever_scores_and_orders_candidates_from_filtered_es_docs() -
                             "source_type": "manual_faq",
                             "access_scope": "internal",
                             "lifecycle_status": "active",
+                            "source_record_id": "sr-leave-001",
+                            "import_batch_id": "ib-leave-001",
+                            "unit_version": 4,
+                            "fresh_until": "2026-06-01T00:00:00Z",
+                            "stale_after": "2026-07-01T00:00:00Z",
                         }
                     },
                     {
@@ -500,10 +515,56 @@ def test_vector_retriever_scores_and_orders_candidates_from_filtered_es_docs() -
 
     assert [hit.unit_id for hit in hits] == [LEAVE_APPLY_ID, "faq-doc-001"]
     assert hits[0].score > hits[1].score
+    assert hits[0].source_record_id == "sr-leave-001"
+    assert hits[0].import_batch_id == "ib-leave-001"
+    assert hits[0].unit_version == 4
+    assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
+    assert hits[0].stale_after == "2026-07-01T00:00:00Z"
     assert es.calls[0]["body"]["query"]["bool"]["filter"] == [
         {"term": {"business_domain": "hr"}},
         {"term": {"lifecycle_status": "active"}},
     ]
+
+
+def test_hybrid_retriever_preserves_vector_only_provenance() -> None:
+    vector_hit = LexicalHit(
+        unit_id="unit-vector-only",
+        source_kind="faq",
+        question="如何请假？",
+        answer="在系统中提交申请。",
+        body_text="在系统中提交申请。",
+        source_label="HR FAQ",
+        source_locator="hr#leave",
+        score=0.8,
+        business_domain="hr",
+        document_type="faq",
+        source_type="manual_faq",
+        access_scope="internal",
+        lifecycle_status="active",
+        source_record_id="sr-vector-001",
+        import_batch_id="ib-vector-001",
+        unit_version=5,
+        fresh_until="2026-06-01T00:00:00Z",
+        stale_after="2026-07-01T00:00:00Z",
+    )
+    retriever = HybridRetriever(
+        _FakeLexicalRetriever([]),
+        _FakeLexicalRetriever([vector_hit]),
+    )
+
+    hits = retriever.search(
+        lexical_query="请假",
+        vector_query="请假",
+        business_domain="hr",
+        size=3,
+    )
+
+    assert len(hits) == 1
+    assert hits[0].source_record_id == "sr-vector-001"
+    assert hits[0].import_batch_id == "ib-vector-001"
+    assert hits[0].unit_version == 5
+    assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
+    assert hits[0].stale_after == "2026-07-01T00:00:00Z"
 
 
 def test_hybrid_retriever_fuses_lexical_and_vector_hits_with_rrf() -> None:

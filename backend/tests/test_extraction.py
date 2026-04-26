@@ -196,6 +196,7 @@ class TestCandidateReviewer:
                 "query_key": "leave_balance_test",
                 "resource_type": "leave_status",
                 "scope_type": "self",
+                "allowed_roles": ["hr_manager"],
                 "description": "假期余额查询",
                 "detect_patterns": [r"年假.{0,4}(余额|剩余)", r"剩余.{0,4}假期"],
             })
@@ -205,6 +206,7 @@ class TestCandidateReviewer:
         assert result is not None
         assert result.query_key == "leave_balance_test"
         assert result.source_record_id == "sr-test-001"
+        assert result.allowed_roles == ("hr_manager",)
         assert result.detect_patterns == (
             r"年假.{0,4}(余额|剩余)",
             r"剩余.{0,4}假期",
@@ -213,6 +215,7 @@ class TestCandidateReviewer:
         dq = dq_repo.get_by_query_key("leave_balance_test")
         assert dq is not None
         assert dq.source_record_id == "sr-test-001"
+        assert dq.allowed_roles == ("hr_manager",)
         assert dq.detect_patterns == (
             r"年假.{0,4}(余额|剩余)",
             r"剩余.{0,4}假期",

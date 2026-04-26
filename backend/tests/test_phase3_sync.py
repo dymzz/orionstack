@@ -400,11 +400,12 @@ class TestExtract:
         assert candidates[0].review_status == "pending"
 
     def test_publish_approved_faq(self) -> None:
-        sr = _make_source_record("sr-001", "ext-001")
+        sr = _make_source_record("sr-001", "ext-001", import_batch_id="ib-001")
         c = _make_candidate("ec-001", "sr-001", candidate_type="faq")
         unit = publish_approved_faq_candidate(c, sr)
         assert unit.source_record_id == "sr-001"
         assert unit.tenant_id == "default"
+        assert unit.import_batch_id == sr.import_batch_id
         assert unit.unit_version == 1
         assert unit.published_at is not None
 
@@ -453,6 +454,7 @@ class TestKnowledgeUnitPhase3Compat:
         assert "unit_version" in d
         assert "fresh_until" in d
         assert "stale_after" in d
+        assert "import_batch_id" in d
         assert "published_at" in d
 
 
@@ -466,6 +468,7 @@ def _make_source_record(
     ext_id: str = "ext-001",
     source_system: str = "dingtalk_hr",
     raw_content: str = "content",
+    import_batch_id: str | None = None,
 ) -> SourceRecord:
     return SourceRecord(
         source_record_id=sr_id,
@@ -482,6 +485,7 @@ def _make_source_record(
         access_scope="internal",
         status="active",
         synced_at="2026-01-01T00:00:00Z",
+        import_batch_id=import_batch_id,
     )
 
 

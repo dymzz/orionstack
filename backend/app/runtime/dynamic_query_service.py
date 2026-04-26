@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from typing import Any
 
 from app.runtime.system_adapter import SystemAdapter
 from app.schemas.response import DynamicQueryResultItem
+from app.storage.models.dynamic_query import DynamicQuery
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
+
+
+@dataclass(frozen=True)
+class RuntimePrincipal:
+    tenant_id: str = "default"
+    user_id: str | None = None
+    roles: tuple[str, ...] = ()
 
 
 class DynamicQueryService:
@@ -24,19 +33,28 @@ class DynamicQueryService:
                     return dq.query_key
         return None
 
-    def is_allowed(self, query_key: str) -> bool:
+    def is_allowed(
+        self,
+        query_key: str,
+        *,
+        principal: RuntimePrincipal | None = None,
+    ) -> bool:
         dq = self._repo.get_by_query_key(query_key)
-        return dq is not None and dq.status == "active" and dq.action == "read"
+        return self._is_allowed_query(dq, principal)
 
     def execute(
-        self, query_key: str, params: dict[str, Any] | None = None
+        self,
+        query_key: str,
+        params: dict[str, Any] | None = None,
+        *,
+        principal: RuntimePrincipal | None = None,
     ) -> DynamicQueryResultItem | None:
         dq = self._repo.get_by_query_key(query_key)
-        if dq is None:
+        if not self._is_allowed_query(dq, principal):
             return None
 
         resource_type = dq.resource_type
-        fetch_params = dict(params or {})
+        fetch_params = self._build_fetch_params(dq, principal, params)
 
         try:
             rows = self._adapter.fetch(resource_type, fetch_params)
@@ -49,6 +67,41 @@ class DynamicQueryService:
             description=dq.description,
             data=self._sanitize_rows(rows),
         )
+
+    def _is_allowed_query(
+        self,
+        dq: DynamicQuery | None,
+        principal: RuntimePrincipal | None,
+    ) -> bool:
+        if dq is None or dq.status != "active" or dq.action != "read":
+            return False
+        if principal is None:
+            return False
+        if dq.tenant_id != principal.tenant_id:
+            return False
+        if dq.scope_type == "self":
+            return bool(principal.user_id)
+        if dq.scope_type == "org":
+            return bool(principal.user_id)
+        if dq.scope_type == "role":
+            if not principal.user_id or not dq.allowed_roles:
+                return False
+            return bool(set(dq.allowed_roles) & set(principal.roles))
+        return False
+
+    def _build_fetch_params(
+        self,
+        dq: DynamicQuery,
+        principal: RuntimePrincipal,
+        params: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        fetch_params = dict(params or {})
+        fetch_params["tenant_id"] = principal.tenant_id
+        if dq.scope_type == "self":
+            fetch_params["user_id"] = principal.user_id
+        elif dq.scope_type == "role":
+            fetch_params["roles"] = list(principal.roles)
+        return fetch_params
 
     def _sanitize_rows(self, rows: list[dict[str, Any]]) -> list[dict]:
         sanitized: list[dict] = []

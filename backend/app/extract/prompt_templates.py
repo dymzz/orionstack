@@ -15,7 +15,7 @@ _EXTRACTION_SYSTEM_PROMPT = """\
    格式：{"candidate_type": "action_link", "label": "...", "url": "...", "resource_type": "..."}
 
 3. **dynamic_query** — 可查询的动态状态定义
-   格式：{"candidate_type": "dynamic_query", "query_key": "...", "resource_type": "...", "scope_type": "self|org|role", "description": "..."}
+   格式：{"candidate_type": "dynamic_query", "query_key": "...", "resource_type": "...", "scope_type": "self|org|role", "allowed_roles": ["..."], "description": "..."}
 
 已知的业务领域（business_domain）：hr / finance / admin / it / ops / legal / product / sales
 
@@ -54,6 +54,7 @@ DYNAMIC_QUERY_EXTRACTION_HINT = """\
 - query_key: snake_case 查询标识，如 leave_status / expense_status
 - resource_type: 对应的资源类型
 - scope_type: self（仅自己）/ org（组织）/ role（角色）
+- allowed_roles: 当 scope_type 为 role 时填写允许执行的角色；其他范围可为空数组
 - description: 中文说明
 """
 

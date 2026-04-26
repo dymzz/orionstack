@@ -68,6 +68,9 @@ def _build_unit(unit_id: str = "faq-001") -> KnowledgeUnit:
         valid_until=None,
         version="v1",
         created_at="2026-04-17T00:00:00Z",
+        source_record_id="sr-001",
+        import_batch_id="ib-001",
+        unit_version=2,
     )
 
 
@@ -87,6 +90,10 @@ def test_elastic_indexer_ensure_index_uses_ik_mapping_when_requested() -> None:
     indexer.ensure_index(use_ik_analyzer=True)
 
     assert es.indices.created == [{"index": "knowledge_units_v1", "body": MAPPING}]
+    assert MAPPING["mappings"]["properties"]["import_batch_id"] == {"type": "keyword"}
+    assert MAPPING_FALLBACK["mappings"]["properties"]["import_batch_id"] == {
+        "type": "keyword"
+    }
 
 
 def test_elastic_indexer_indexes_units_and_refreshes_index() -> None:
@@ -98,6 +105,9 @@ def test_elastic_indexer_indexes_units_and_refreshes_index() -> None:
     assert indexed == 2
     assert [item["id"] for item in es.indexed] == ["faq-001", "faq-002"]
     assert es.indexed[0]["body"]["unit_id"] == "faq-001"
+    assert es.indexed[0]["body"]["source_record_id"] == "sr-001"
+    assert es.indexed[0]["body"]["import_batch_id"] == "ib-001"
+    assert es.indexed[0]["body"]["unit_version"] == 2
     assert es.indices.refreshed == ["knowledge_units_v1"]
 
 

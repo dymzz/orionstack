@@ -9,7 +9,7 @@ from app.storage.models.dynamic_query import DynamicQuery
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 from app.runtime.system_adapter import SystemAdapter
 from app.runtime.mock_adapter import MockAdapter
-from app.runtime.dynamic_query_service import DynamicQueryService
+from app.runtime.dynamic_query_service import DynamicQueryService, RuntimePrincipal
 from app.schemas.response import DynamicQueryResultItem
 
 
@@ -36,9 +36,16 @@ def _make_dq(**overrides) -> DynamicQuery:
         status="active",
         description="请假状态",
         detect_patterns=(r"请假.{0,4}(状态|进度|审批|情况|记录)", r"(我的|查).{0,4}请假"),
+        allowed_roles=(),
     )
     defaults.update(overrides)
     return DynamicQuery(**defaults)
+
+
+def _self_principal(**overrides) -> RuntimePrincipal:
+    defaults = dict(tenant_id="default", user_id="u-1", roles=())
+    defaults.update(overrides)
+    return RuntimePrincipal(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +62,7 @@ class TestDynamicQueryModel:
         assert d["action"] == "read"
         assert len(d["detect_patterns"]) == 2
         assert d["source_record_id"] is None
+        assert d["allowed_roles"] == []
 
     def test_frozen_dataclass_rejects_mutation(self) -> None:
         dq = _make_dq()
@@ -340,19 +348,117 @@ class TestDynamicQueryService:
         assert service.match_query_key("病假需要提交什么材料") is None
 
     def test_is_allowed_for_active_query(self, service: DynamicQueryService) -> None:
-        assert service.is_allowed("leave_status") is True
+        assert service.is_allowed("leave_status", principal=_self_principal()) is True
+
+    def test_is_not_allowed_without_principal(
+        self, service: DynamicQueryService
+    ) -> None:
+        assert service.is_allowed("leave_status") is False
+
+    def test_self_scope_requires_user_id(self, service: DynamicQueryService) -> None:
+        assert (
+            service.is_allowed(
+                "leave_status",
+                principal=_self_principal(user_id=None),
+            )
+            is False
+        )
+
+    def test_tenant_mismatch_is_not_allowed(
+        self, service: DynamicQueryService
+    ) -> None:
+        assert (
+            service.is_allowed(
+                "leave_status",
+                principal=_self_principal(tenant_id="other"),
+            )
+            is False
+        )
+
+    def test_org_scope_requires_user_in_same_tenant(
+        self, service: DynamicQueryService
+    ) -> None:
+        assert service.is_allowed("crm_pipeline", principal=_self_principal()) is True
+        assert (
+            service.is_allowed(
+                "crm_pipeline",
+                principal=_self_principal(user_id=None),
+            )
+            is False
+        )
+
+    def test_role_scope_requires_matching_role(self, tmp_path: Path) -> None:
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-role")
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-role",
+                query_key="payroll_status",
+                resource_type="payroll_status",
+                scope_type="role",
+                allowed_roles=("finance_manager",),
+            )
+        )
+        svc = DynamicQueryService(adapter=MockAdapter(), repo=repo)
+
+        assert (
+            svc.is_allowed(
+                "payroll_status",
+                principal=_self_principal(roles=("finance_manager",)),
+            )
+            is True
+        )
+        assert (
+            svc.is_allowed(
+                "payroll_status",
+                principal=_self_principal(roles=("employee",)),
+            )
+            is False
+        )
+
+    def test_role_scope_without_allowed_roles_is_denied(
+        self, tmp_path: Path
+    ) -> None:
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-role-empty")
+        repo.create(
+            _make_dq(
+                dynamic_query_id="dq-role-empty",
+                query_key="payroll_status",
+                resource_type="payroll_status",
+                scope_type="role",
+            )
+        )
+        svc = DynamicQueryService(adapter=MockAdapter(), repo=repo)
+
+        assert (
+            svc.is_allowed(
+                "payroll_status",
+                principal=_self_principal(roles=("finance_manager",)),
+            )
+            is False
+        )
 
     def test_is_not_allowed_for_unknown_key(self, service: DynamicQueryService) -> None:
-        assert service.is_allowed("unknown") is False
+        assert service.is_allowed("unknown", principal=_self_principal()) is False
 
     def test_execute_returns_result(self, service: DynamicQueryService) -> None:
-        result = service.execute("leave_status")
+        result = service.execute("leave_status", principal=_self_principal())
         assert result is not None
         assert result.query_key == "leave_status"
         assert len(result.data) == 1
 
     def test_execute_returns_none_for_unknown(self, service: DynamicQueryService) -> None:
-        assert service.execute("unknown") is None
+        assert service.execute("unknown", principal=_self_principal()) is None
+
+    def test_execute_without_principal_does_not_call_adapter(
+        self, tmp_path: Path
+    ) -> None:
+        adapter = _CapturingAdapter()
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-no-principal")
+        repo.create(_make_dq())
+        svc = DynamicQueryService(adapter=adapter, repo=repo)
+
+        assert svc.execute("leave_status") is None
+        assert adapter.calls == []
 
     def test_execute_sanitizes_id_field(self, tmp_path: Path) -> None:
         adapter = MockAdapter(
@@ -361,7 +467,7 @@ class TestDynamicQueryService:
         repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-sanitize")
         repo.create(_make_dq())
         svc = DynamicQueryService(adapter=adapter, repo=repo)
-        result = svc.execute("leave_status")
+        result = svc.execute("leave_status", principal=_self_principal())
         assert result is not None
         assert "id" not in result.data[0]
         assert result.data[0]["name"] == "test"
@@ -374,10 +480,15 @@ class TestDynamicQueryService:
         repo.create(_make_dq())
         svc = DynamicQueryService(adapter=adapter, repo=repo)
 
-        result = svc.execute("leave_status")
+        result = svc.execute("leave_status", principal=_self_principal())
 
         assert result is not None
-        assert adapter.calls == [{"resource_type": "leave_status", "params": {}}]
+        assert adapter.calls == [
+            {
+                "resource_type": "leave_status",
+                "params": {"tenant_id": "default", "user_id": "u-1"},
+            }
+        ]
 
     def test_execute_copies_params_before_adapter_fetch(self, tmp_path: Path) -> None:
         adapter = _CapturingAdapter()
@@ -386,12 +497,33 @@ class TestDynamicQueryService:
         svc = DynamicQueryService(adapter=adapter, repo=repo)
         params = {"limit": 3}
 
-        result = svc.execute("leave_status", params=params)
+        result = svc.execute("leave_status", params=params, principal=_self_principal())
 
         assert result is not None
         assert params == {"limit": 3}
         assert adapter.calls == [
-            {"resource_type": "leave_status", "params": {"limit": 3}}
+            {
+                "resource_type": "leave_status",
+                "params": {"limit": 3, "tenant_id": "default", "user_id": "u-1"},
+            }
+        ]
+
+    def test_execute_principal_overrides_identity_params(self, tmp_path: Path) -> None:
+        adapter = _CapturingAdapter()
+        repo = DynamicQueryRepo(storage_dir=tmp_path / "dq-param-override")
+        repo.create(_make_dq())
+        svc = DynamicQueryService(adapter=adapter, repo=repo)
+        params = {"tenant_id": "other", "user_id": "attacker", "limit": 3}
+
+        result = svc.execute("leave_status", params=params, principal=_self_principal())
+
+        assert result is not None
+        assert params == {"tenant_id": "other", "user_id": "attacker", "limit": 3}
+        assert adapter.calls == [
+            {
+                "resource_type": "leave_status",
+                "params": {"tenant_id": "default", "user_id": "u-1", "limit": 3},
+            }
         ]
 
 

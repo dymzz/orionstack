@@ -78,6 +78,7 @@ def _publish_faq(
         unit,
         tenant_id=candidate.tenant_id,
         source_record_id=source_record.source_record_id,
+        import_batch_id=source_record.import_batch_id,
         unit_version=1,
         published_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -129,6 +130,7 @@ def _publish_dynamic_query(
         description=payload.get("description", ""),
         detect_patterns=tuple(payload.get("detect_patterns", [])),
         source_record_id=source_record.source_record_id,
+        allowed_roles=tuple(payload.get("allowed_roles", [])),
     )
     repo = dynamic_query_repo or DynamicQueryRepo()
     repo.upsert(dq)

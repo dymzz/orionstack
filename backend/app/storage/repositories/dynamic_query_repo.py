@@ -119,4 +119,5 @@ class DynamicQueryRepo:
             description=d.get("description", ""),
             detect_patterns=tuple(d.get("detect_patterns", [])),
             source_record_id=d.get("source_record_id"),
+            allowed_roles=tuple(d.get("allowed_roles", [])),
         )

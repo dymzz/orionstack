@@ -5,6 +5,8 @@
 > 审计依据：`docs/designs/3_system_design.md`、`docs/3_1_progress.md`、`docs/3_2_file_responsibilities.md`、`docs/3_3_field_definitions.md`
 > 非依据：`HANDOFF.md` 只作为交接摘要，不作为本审计的目标定义来源
 > P3.1 更新：已补齐 SourceRecord tombstone 到 ActionLink / DynamicQuery 的运行时入口层传播；KnowledgeUnit / ES 清理仍保留为后续 provenance / sync 闭环
+> P3.2 更新：已补齐 DynamicQuery 最小运行时判权；无 principal、租户不匹配、用户/角色不满足时不会触发 adapter
+> P3.3 更新：已补齐 provenance 字段从 KnowledgeUnit / ES / lexical / vector / hybrid hit 到 trace / hard case 的最小穿透链路
 
 ---
 
@@ -20,8 +22,8 @@
 |---|---|---|
 | 新鲜度 | 静态知识允许延迟同步，过期内容不应强确定回答 | 部分满足 |
 | 删除与撤权传播 | 原系统删除/撤权后，本系统不可继续答、引、跳 | 部分闭环 |
-| 权限漂移 | 问答层最小权限裁剪，动态查询运行时二次判权 | 未闭环 |
-| 可追溯与版本 | 答案、trace、hard case 能追到来源与版本 | 部分满足 |
+| 权限漂移 | 问答层最小权限裁剪，动态查询运行时二次判权 | 动态查询已闭环 |
+| 可追溯与版本 | 答案、trace、hard case 能追到来源与版本 | 基本闭环 |
 | 抽取漂移 | LLM 只产候选，审核后才发布 | 基本满足 |
 
 ---
@@ -33,9 +35,9 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 但当前实现仍是**最小骨架闭环**，不是完整契约闭环。下一步不应直接扩展更多外部系统，也不应先做完整认证系统或生产数据库，而应优先补齐安全边界：
 
 1. **删除/撤权传播闭环**：P3.1 已先补 ActionLink / DynamicQuery 运行时入口层
-2. **动态查询最小运行时判权**：仍是下一优先级
+2. **动态查询最小运行时判权**：P3.2 已补 principal + scope 判权
 
-这两个问题一旦不闭环，系统会出现“来源已撤权但发布层仍可见”或“动态查询不看当前用户/角色”的风险。
+接下来应转向 stale / sync 到发布层的闭环，避免过期知识仍强答或 SourceRecord 状态没有真正传播到知识发布层。
 
 ---
 
@@ -113,7 +115,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 
 ---
 
-### 3.3 权限漂移契约：未闭环
+### 3.3 权限漂移契约：动态查询已闭环
 
 设计要求：
 
@@ -124,30 +126,30 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 当前实现：
 
 - ES lexical/vector 检索支持按 `access_scope` 过滤
-- 动态查询 repo 保存了 `tenant_id / scope_type / status / action`
-- `DynamicQueryService.is_allowed()` 会拒绝未知 query 或非 active/read query
+- 动态查询 repo 保存了 `tenant_id / scope_type / status / action / allowed_roles`
+- `DynamicQueryService.is_allowed(query_key, principal)` 会拒绝未知 query、非 active/read query、无 principal、租户不匹配、用户上下文缺失或角色不匹配
+- `DynamicQueryService.execute()` 会在 adapter fetch 前重复判权，未授权时直接返回 `None`
+- `ChatAskRequest` 透传最小运行时上下文：`tenant_id / user_id / roles`
+- adapter 收到的是通用 `tenant_id / user_id / roles` 参数，不接收通用层拼出的 Odoo domain
 - 默认 adapter 是 `mock`，显式 `odoo` 才进入 Odoo adapter 分支
 
 缺口：
 
-- `DynamicQueryService.is_allowed()` 只判断 `active + read`
-- `is_allowed()` 不接收当前用户上下文
-- `execute()` 不校验 `tenant_id / user_id / role / scope_type`
-- `self` 查询不会强制绑定当前用户
-- `org / role` 查询没有角色上下文时仍可能被允许
 - 静态知识当前主要是 `access_scope` 字段过滤，还不是基于用户上下文的权限判断
+- 当前 `RuntimePrincipal` 来自请求 payload，后续接入真实认证中间件时需要替换为可信身份来源
 
 证据：
 
 - `backend/app/runtime/dynamic_query_service.py`
 - `backend/app/storage/repositories/dynamic_query_repo.py`
 - `backend/tests/test_dynamic_query.py`
+- `backend/tests/test_dynamic_query_adapter_modes.py`
 
-结论：**P0 修正**。动态查询面对的是运行时状态数据，必须先有最小判权上下文。
+结论：**P0 已修正 DynamicQuery 部分**。动态查询面对运行时状态数据，当前已先做到最小 principal 判权；静态知识的用户级权限仍留在后续权限体系阶段。
 
 ---
 
-### 3.4 可追溯与版本契约：部分满足
+### 3.4 可追溯与版本契约：基本闭环
 
 设计要求：
 
@@ -160,27 +162,29 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `DebugInfo` 支持 `source_record_id / import_batch_id / unit_version / dynamic_query_key / freshness_status`
 - retrieval trace 会写入这些字段
 - hard case item 会携带 provenance 字段与 `issue_category`
-- lexical hit 会从 ES `_source` 读取 `source_record_id / unit_version / fresh_until / stale_after`
+- `KnowledgeUnit` 和 ES doc/mapping 已包含 `import_batch_id`
+- lexical / vector / hybrid hit 会从 ES `_source` 透传 `source_record_id / import_batch_id / unit_version / fresh_until / stale_after`
+- `ChatService` 对选中命中始终写入 `unit_version`，包括 `unit_version = 1`
+- hard case 分类优先看 `fallback_reason / reject_reason`，不再仅凭 `source_record_id` 归类为 `extraction_drift`
 
-缺口：
+剩余缺口：
 
-- ES mapping 当前没有 `import_batch_id`
-- `KnowledgeUnit.to_elasticsearch_doc()` 当前没有 `import_batch_id`
-- `LexicalHit / HybridHit` 没有 `import_batch_id`
-- `VectorRetriever` 没有透传 `source_record_id / unit_version / fresh_until / stale_after`
-- `ChatService` 只有在 `unit_version > 1` 时才写入 `unit_version`，但设计要求最终答案可追到版本
-- hard case 分类里，只要有 `source_record_id` 就归为 `extraction_drift`，这对来源问题、权限问题、同步问题区分过粗
+- `source_updated_at` 仍主要保留在 SourceRecord，尚未进入 KnowledgeUnit / ES hit
+- hard case 的 source/sync/revocation 子分类还没有真实 SourceRecord 状态反查
+- 本地检索链只透传已有 item 字段，不做 SourceRecord 反查
 
 证据：
 
 - `backend/app/api/routes/chat.py`
+- `backend/app/storage/repositories/knowledge_unit_repo.py`
 - `backend/app/retrieval/lexical_retriever.py`
 - `backend/app/retrieval/vector_retriever.py`
 - `backend/app/retrieval/hybrid_retriever.py`
 - `backend/app/indexing/elastic_indexer.py`
+- `backend/tests/test_phase2_retrieval.py`
 - `backend/tests/test_phase3_trace_hard_cases.py`
 
-结论：**P1 修正**。基础字段已经铺好，但链路还不完整。
+结论：**P1 已修正最小闭环**。答案 trace 已能追到单元版本、来源记录和导入批次；更深的 SourceRecord 状态反查留到 sync/发布层闭环。
 
 ---
 
@@ -266,15 +270,17 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 关联 dynamic query 不再被执行
 - 测试覆盖 `revoked / deleted`
 
-### P3.2：DynamicQuery 最小运行时判权（P0）
+### P3.2：DynamicQuery 最小运行时判权（P0，已完成）
 
-目标：
+已完成：
 
-- 引入最小 `RuntimePrincipal` 或等价上下文
+- 引入最小 `RuntimePrincipal`
 - `is_allowed(query_key, principal)` 按 `tenant_id / scope_type / role` 判定
 - `self` 查询必须有当前用户标识
 - `role` 查询必须命中角色
-- 无上下文时仅允许安全 mock/demo 路径，或直接拒绝动态查询
+- 无上下文时直接拒绝动态查询
+- `execute()` 在 adapter fetch 前重复判权
+- adapter 只接收通用身份参数，不接收通用层拼出的外部系统方言参数
 
 验收：
 
@@ -282,10 +288,11 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - tenant 不匹配不执行
 - role 不匹配不执行
 - adapter 不收到未授权请求
+- 调用方传入的 `tenant_id / user_id / roles` 参数不能覆盖 principal
 
-### P3.3：provenance 链路补齐（P1）
+### P3.3：provenance 链路补齐（P1，已完成最小闭环）
 
-目标：
+已完成：
 
 - ES doc/mapping 增加 `import_batch_id`
 - Lexical/Vector/Hybrid hit 都透传 `source_record_id / import_batch_id / unit_version / freshness`
@@ -296,7 +303,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 
 - vector-only 命中也能带 provenance
 - trace 可追到 `source_record_id / import_batch_id / unit_version`
-- hard case 能区分 extraction、source、sync/revocation、retrieval/evidence
+- hard case 会优先按 fallback/evidence/retrieval 分类；source/sync/revocation 子分类留到 SourceRecord 状态反查阶段
 
 ### P3.4：stale 不强答（P1）
 

@@ -307,19 +307,22 @@ def _build_hard_case_item(
 
 
 def _infer_issue_category(retrieval_trace: dict[str, Any]) -> str:
-    if retrieval_trace.get("source_record_id"):
-        return "extraction_drift"
     fallback_reason = retrieval_trace.get("fallback_reason")
-    if fallback_reason == "no_evidence":
-        return "retrieval_miss"
+    reject_reason = str(retrieval_trace.get("reject_reason") or "")
     if fallback_reason == "evidence_below_threshold":
         return "evidence_weak"
+    if fallback_reason == "no_evidence":
+        return "retrieval_miss"
     if fallback_reason == "conflict_requires_clarification":
         return "retrieval_ambiguous"
     if fallback_reason in ("retrieval_no_hit", "retrieval_score_below_threshold"):
         return "retrieval_miss"
     if fallback_reason in ("route_not_confident_enough",):
         return "routing_mismatch"
+    if "evidence_below_threshold" in reject_reason:
+        return "evidence_weak"
+    if retrieval_trace.get("source_record_id"):
+        return "extraction_drift"
     return "unknown"
 
 

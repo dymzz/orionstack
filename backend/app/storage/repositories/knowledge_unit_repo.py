@@ -31,6 +31,7 @@ class KnowledgeUnit:
     unit_version: int = 1
     fresh_until: str | None = None
     stale_after: str | None = None
+    import_batch_id: str | None = None
     published_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class KnowledgeUnit:
             "unit_version": self.unit_version,
             "fresh_until": self.fresh_until,
             "stale_after": self.stale_after,
+            "import_batch_id": self.import_batch_id,
             "published_at": self.published_at,
         }
 
@@ -84,6 +86,7 @@ class KnowledgeUnit:
             "unit_version": self.unit_version,
             "fresh_until": self.fresh_until or "",
             "stale_after": self.stale_after or "",
+            "import_batch_id": self.import_batch_id or "",
             "published_at": self.published_at or "",
         }
 
@@ -109,6 +112,13 @@ def map_faq_item_to_knowledge_unit(
         valid_until=item.get("valid_until") or None,
         version=item.get("version", "v1"),
         created_at=item.get("created_at", ""),
+        tenant_id=item.get("tenant_id", "default"),
+        source_record_id=item.get("source_record_id"),
+        unit_version=int(item.get("unit_version") or 1),
+        fresh_until=item.get("fresh_until"),
+        stale_after=item.get("stale_after"),
+        import_batch_id=item.get("import_batch_id"),
+        published_at=item.get("published_at"),
     )
 
 
@@ -131,6 +141,13 @@ def map_chunk_to_knowledge_unit(chunk: dict[str, Any]) -> KnowledgeUnit:
         valid_until=None,
         version="v1",
         created_at=chunk.get("created_at", ""),
+        tenant_id=chunk.get("tenant_id", "default"),
+        source_record_id=chunk.get("source_record_id"),
+        unit_version=int(chunk.get("unit_version") or 1),
+        fresh_until=chunk.get("fresh_until"),
+        stale_after=chunk.get("stale_after"),
+        import_batch_id=chunk.get("import_batch_id"),
+        published_at=chunk.get("published_at"),
     )
 
 

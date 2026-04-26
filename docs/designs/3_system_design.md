@@ -235,6 +235,7 @@ LLM 从资料里抽 FAQ / action link / 动态查询候选时，可能抽偏、�
 |---|---|---|
 | `tenant_id` | string | 租户 |
 | `source_record_id` | string | 对应来源记录 |
+| `import_batch_id` | string | 对应导入批次 |
 | `unit_version` | integer | 单元版本 |
 | `fresh_until` | datetime | 正常可答上限 |
 | `stale_after` | datetime | 过期阈值 |
@@ -289,13 +290,14 @@ LLM 从资料里抽 FAQ / action link / 动态查询候选时，可能抽偏、�
 | `resource_type` | string | 是 | 资源类型 |
 | `action` | string | 是 | 允许动作，如 `read` |
 | `scope_type` | string | 是 | `self / org / role` |
+| `allowed_roles` | list[string] | 否 | `role` 查询允许的角色集合 |
 | `status` | enum | 是 | `active / revoked` |
 | `description` | text | 是 | 说明 |
 
 约束：
 
 - 不长期作为静态知识单元进入索引
-- 运行时必须二次判权
+- 运行时必须按 `tenant_id / user_id / roles / scope_type` 二次判权
 - 只开放少量高价值查询
 
 ### 5.5 `ExtractionCandidate`
@@ -560,7 +562,7 @@ hard case 必须能反查：
 
 1. FAQ 路由低置信度时，尝试动态查询检测
 2. `DynamicQueryService.match_query_key()` 正则识别查询意图
-3. `DynamicQueryService.is_allowed()` 通过 repo 判权
+3. `DynamicQueryService.is_allowed()` 使用运行时 principal 判权
 4. `DynamicQueryService.execute()` 通过 `SystemAdapter.fetch()` 获取实时数据
 5. 返回 `DynamicQueryResultItem` + 关联 `ActionLink`
 

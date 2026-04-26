@@ -87,11 +87,12 @@
 - `DynamicQuery` 的 CRUD
 - 按 `query_key` / `status` 查询
 - 按 `source_record_id` 传播撤权 / 删除导致的失效
-- 运行时判定某查询是否允许执行
+- 保存 `tenant_id / scope_type / allowed_roles` 等判权所需字段
 
 不负责：
 
 - 不负责实际的状态查询调用
+- 不负责运行时判权（由 `DynamicQueryService` 负责）
 - 不负责缓存
 
 ---
@@ -154,8 +155,9 @@
 职责：
 
 - `match_query_key(query)` — 正则识别动态查询意图
-- `is_allowed(query_key)` — 通过 repo 判权
-- `execute(query_key, params)` — 调用 `SystemAdapter.fetch()` 获取实时数据并返回 `DynamicQueryResultItem`
+- `is_allowed(query_key, principal)` — 按 `tenant_id / user_id / roles / scope_type` 做最小运行时判权
+- `execute(query_key, params, principal)` — 判权通过后调用 `SystemAdapter.fetch()` 获取实时数据并返回 `DynamicQueryResultItem`
+- `_build_fetch_params()` — 注入通用身份参数，不解释具体外部系统查询方言
 - `_sanitize_rows()` — 清洗原始行数据（去除 `id`、序列化复杂类型）
 
 不负责：
@@ -311,6 +313,7 @@
 - ES mapping 新增 Phase 3 字段
 - `ensure_index()` 升级 mapping 版本
 - 写入时包含新字段
+- `import_batch_id / source_record_id / unit_version / fresh_until / stale_after` 必须进入 ES doc，供检索命中回传 provenance
 
 不改变：
 
@@ -322,6 +325,7 @@
 扩展方向：
 
 - 检索结果的新鲜度判定（调用 `freshness_checker`）
+- 从 lexical/vector/hybrid 命中透传 `source_record_id / import_batch_id / unit_version / freshness`
 - 回答中附带 action link
 - stale 区间的提示文案
 - 动态查询集成：FAQ 路由低置信度时尝试 `_try_dynamic_query()`

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.config.settings import settings
 from app.guardrails.normalize import normalize_query
 from app.query.query_planner import PlannerOutput, QueryPlanner
@@ -20,6 +22,9 @@ from app.schemas.response import (
 from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.faq_repo import FAQRepository
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
+
+if TYPE_CHECKING:
+    from app.runtime.dynamic_query_service import RuntimePrincipal
 
 
 class ChatService:
@@ -160,7 +165,10 @@ class ChatService:
             or decision.confidence < settings.route_confidence_threshold
         ):
             dq_result = self._try_dynamic_query(
-                normalized_query, trace_id, debug_enabled
+                normalized_query,
+                trace_id,
+                debug_enabled,
+                principal=self._build_dynamic_query_principal(payload),
             )
             if dq_result is not None:
                 return dq_result
@@ -380,6 +388,11 @@ class ChatService:
                                 backend_warning,
                             ),
                         ),
+                        **(
+                            {}
+                            if top_reranked is None
+                            else self._hit_provenance_kwargs(top_reranked.hit)
+                        ),
                     ),
                 )
             best = reranked.hit
@@ -430,7 +443,8 @@ class ChatService:
                     reject_reason=self._format_backend_warning(backend_warning),
                 ),
                 source_record_id=best.source_record_id or None,
-                unit_version=best.unit_version if best.unit_version > 1 else None,
+                import_batch_id=best.import_batch_id or None,
+                unit_version=best.unit_version,
                 freshness_status=freshness_result.status if freshness_result else None,
             ),
         )
@@ -557,6 +571,7 @@ class ChatService:
                     top_candidate,
                     reject_reason=rerank_reject_reason,
                 ),
+                **self._hit_provenance_kwargs(top_candidate.hit),
             ),
         )
 
@@ -720,6 +735,11 @@ class ChatService:
                     if hit is not None
                     else "retrieval_no_hit",
                     planner_output=planner_output,
+                    **(
+                        {}
+                        if hit is None
+                        else self._item_provenance_kwargs(hit.item)
+                    ),
                 ),
             )
 
@@ -738,6 +758,7 @@ class ChatService:
                 route_confidence=decision.confidence,
                 retrieval_score=float(hit.score),
                 planner_output=planner_output,
+                **self._item_provenance_kwargs(hit.item),
             ),
         )
 
@@ -870,16 +891,37 @@ class ChatService:
             freshness_status=freshness_status,
         )
 
+    @staticmethod
+    def _hit_provenance_kwargs(hit) -> dict[str, Any]:
+        return {
+            "source_record_id": getattr(hit, "source_record_id", "") or None,
+            "import_batch_id": getattr(hit, "import_batch_id", "") or None,
+            "unit_version": int(getattr(hit, "unit_version", 1) or 1),
+        }
+
+    @staticmethod
+    def _item_provenance_kwargs(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "source_record_id": item.get("source_record_id") or None,
+            "import_batch_id": item.get("import_batch_id") or None,
+            "unit_version": int(item.get("unit_version") or 1),
+        }
+
     def _try_dynamic_query(
-        self, normalized_query: str, trace_id: str, debug_enabled: bool
+        self,
+        normalized_query: str,
+        trace_id: str,
+        debug_enabled: bool,
+        *,
+        principal: RuntimePrincipal,
     ) -> ChatAskResponse | None:
         svc = self._dynamic_query_service
         query_key = svc.match_query_key(normalized_query)
         if query_key is None:
             return None
-        if not svc.is_allowed(query_key):
+        if not svc.is_allowed(query_key, principal=principal):
             return None
-        result = svc.execute(query_key)
+        result = svc.execute(query_key, principal=principal)
         if result is None:
             return None
 
@@ -904,6 +946,16 @@ class ChatService:
                 retrieval_mode=None,
                 dynamic_query_key=query_key,
             ),
+        )
+
+    @staticmethod
+    def _build_dynamic_query_principal(payload: ChatAskRequest) -> RuntimePrincipal:
+        from app.runtime.dynamic_query_service import RuntimePrincipal
+
+        return RuntimePrincipal(
+            tenant_id=payload.tenant_id,
+            user_id=payload.user_id,
+            roles=tuple(payload.roles),
         )
 
     @staticmethod

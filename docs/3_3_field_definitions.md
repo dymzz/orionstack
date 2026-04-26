@@ -71,6 +71,7 @@ Phase 2 已有的 `KnowledgeUnit` 字段不变（见 `2_3_field_definitions.md`�
 |---|---|---:|---|---|
 | `tenant_id` | string | 是 | `"default"` | 租户标识 |
 | `source_record_id` | string | 否 | `None` | 对应来源记录。`None` 表示当前由 manual_faq / seed 直接生成，不经过 SourceRecord |
+| `import_batch_id` | string | 否 | `None` | 本单元对应的导入批次。用于从答案追到本系统导入批次 |
 | `unit_version` | integer | 是 | `1` | 单元版本。每次从同一 SourceRecord 重新发布时 +1 |
 | `fresh_until` | datetime | 否 | `None` | 正常可答上限。`None` 表示永不过期 |
 | `stale_after` | datetime | 否 | `None` | 过期阈值。`None` 表示永不过期 |
@@ -78,7 +79,7 @@ Phase 2 已有的 `KnowledgeUnit` 字段不变（见 `2_3_field_definitions.md`�
 
 ### 3.2 兼容性约束
 
-- 现有 `manual_faq` / seed 生成的 KnowledgeUnit：`source_record_id = None`，`unit_version = 1`，`fresh_until = None`，`stale_after = None`
+- 现有 `manual_faq` / seed 生成的 KnowledgeUnit：`source_record_id = None`，`import_batch_id = None`，`unit_version = 1`，`fresh_until = None`，`stale_after = None`
 - 新字段默认值保证 Phase 2 已有数据和测试零回归
 
 ### 3.3 新鲜度判定规则
@@ -132,6 +133,7 @@ Phase 2 已有的 `KnowledgeUnit` 字段不变（见 `2_3_field_definitions.md`�
 | `resource_type` | string | 是 | — | 资源类型。如 `leave` / `payroll` / `approval` |
 | `action` | string | 是 | `"read"` | 允许动作。当前只支持 `read` |
 | `scope_type` | string | 是 | `"self"` | 查询范围。`self / org / role` |
+| `allowed_roles` | list[string] | 否 | `[]` | `scope_type = role` 时允许执行该查询的角色集合 |
 | `status` | enum | 是 | `"active"` | `active / revoked` |
 | `description` | text | 是 | — | 说明 |
 
@@ -139,6 +141,7 @@ Phase 2 已有的 `KnowledgeUnit` 字段不变（见 `2_3_field_definitions.md`�
 
 - `(query_key, tenant_id)` 联合唯一
 - `scope_type = self` 时，运行时只允许查当前用户自己的状态
+- `scope_type = role` 时，运行时必须命中 `allowed_roles`
 - 当前阶段 `action` 只支持 `read`，不支持 `write / delete`
 
 ---
@@ -180,7 +183,7 @@ pending → rejected   (审核拒绝)
 
 - `faq`：`{"question": "...", "answer": "...", "keywords": [...]}`
 - `action_link`：`{"label": "...", "url": "...", "resource_type": "..."}`
-- `dynamic_query`：`{"query_key": "...", "resource_type": "...", "scope_type": "...", "description": "..."}`
+- `dynamic_query`：`{"query_key": "...", "resource_type": "...", "scope_type": "...", "allowed_roles": [...], "description": "..."}`
 
 ---
 
@@ -268,7 +271,7 @@ running → failed           (全部失败)
 |---|---|
 | `self` | 只查当前用户自己的状态 |
 | `org` | 查组织范围内 |
-| `role` | 按角色限定 |
+| `role` | 按角色限定，必须配置并命中 `allowed_roles` |
 
 ---
 

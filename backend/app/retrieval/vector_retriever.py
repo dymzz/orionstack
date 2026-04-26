@@ -88,6 +88,11 @@ class VectorRetriever:
                     source_type=source.get("source_type", ""),
                     access_scope=source.get("access_scope", ""),
                     lifecycle_status=source.get("lifecycle_status", ""),
+                    source_record_id=source.get("source_record_id", ""),
+                    import_batch_id=source.get("import_batch_id", ""),
+                    unit_version=int(source.get("unit_version") or 1),
+                    fresh_until=source.get("fresh_until", ""),
+                    stale_after=source.get("stale_after", ""),
                 )
             )
 

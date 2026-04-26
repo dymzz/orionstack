@@ -51,7 +51,7 @@ def test_trace_captures_phase3_provenance_fields(tmp_path) -> None:
     assert "dynamic_query_key" in record
     assert record["source_record_id"] is None
     assert record["import_batch_id"] is None
-    assert record["unit_version"] is None
+    assert record["unit_version"] == 1
     assert record["dynamic_query_key"] is None
 
 
@@ -230,11 +230,13 @@ def test_hard_case_issue_category_evidence_weak(monkeypatch, tmp_path) -> None:
     assert hard_cases[0]["issue_category"] == "evidence_weak"
 
 
-def test_hard_case_issue_category_extraction_drift(monkeypatch, tmp_path) -> None:
+def test_hard_case_issue_category_uses_fallback_before_source_record(
+    monkeypatch, tmp_path
+) -> None:
     _configure_trace_storage(tmp_path)
     monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
 
-    def return_extraction_drift(payload, *, trace_id: str, debug_enabled: bool):
+    def return_source_backed_no_evidence(payload, *, trace_id: str, debug_enabled: bool):
         return ChatAskResponse(
             response_status="fallback",
             trace_id=trace_id,
@@ -261,7 +263,7 @@ def test_hard_case_issue_category_extraction_drift(monkeypatch, tmp_path) -> Non
             ),
         )
 
-    monkeypatch.setattr(chat_route.service, "ask", return_extraction_drift)
+    monkeypatch.setattr(chat_route.service, "ask", return_source_backed_no_evidence)
 
     response = chat_route.ask_chat(ChatAskRequest(raw_query="差旅报销", debug=True))
 
@@ -271,7 +273,7 @@ def test_hard_case_issue_category_extraction_drift(monkeypatch, tmp_path) -> Non
     assert hc["source_record_id"] == "sr-travel-policy-002"
     assert hc["import_batch_id"] == "batch-2026-04-21"
     assert hc["unit_version"] == 2
-    assert hc["issue_category"] == "extraction_drift"
+    assert hc["issue_category"] == "retrieval_miss"
 
 
 def test_hard_case_not_created_for_ok_response(tmp_path) -> None:

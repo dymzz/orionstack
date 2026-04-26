@@ -54,6 +54,7 @@ MAPPING = {
             },
             "tenant_id": {"type": "keyword"},
             "source_record_id": {"type": "keyword"},
+            "import_batch_id": {"type": "keyword"},
             "unit_version": {"type": "integer"},
             "fresh_until": {
                 "type": "date",
@@ -94,6 +95,13 @@ MAPPING_FALLBACK = {
             "valid_until": {"type": "keyword"},
             "version": {"type": "keyword"},
             "created_at": {"type": "keyword"},
+            "tenant_id": {"type": "keyword"},
+            "source_record_id": {"type": "keyword"},
+            "import_batch_id": {"type": "keyword"},
+            "unit_version": {"type": "integer"},
+            "fresh_until": {"type": "keyword"},
+            "stale_after": {"type": "keyword"},
+            "published_at": {"type": "keyword"},
         }
     }
 }

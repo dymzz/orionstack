@@ -46,6 +46,28 @@ def test_map_faq_item_to_knowledge_unit_applies_defaults() -> None:
     assert unit.version == "v1"
 
 
+def test_map_faq_item_to_knowledge_unit_preserves_provenance_fields() -> None:
+    unit = map_faq_item_to_knowledge_unit(
+        {
+            "id": "faq-001",
+            "question": "如何请假？",
+            "answer": "在系统中提交申请。",
+            "keywords": ["请假"],
+            "source_record_id": "sr-001",
+            "import_batch_id": "ib-001",
+            "unit_version": 2,
+            "fresh_until": "2026-06-01T00:00:00Z",
+            "stale_after": "2026-07-01T00:00:00Z",
+        }
+    )
+
+    assert unit.source_record_id == "sr-001"
+    assert unit.import_batch_id == "ib-001"
+    assert unit.unit_version == 2
+    assert unit.fresh_until == "2026-06-01T00:00:00Z"
+    assert unit.stale_after == "2026-07-01T00:00:00Z"
+
+
 def test_map_chunk_to_knowledge_unit_preserves_chunk_locator() -> None:
     unit = map_chunk_to_knowledge_unit(
         {
@@ -70,6 +92,22 @@ def test_map_chunk_to_knowledge_unit_preserves_chunk_locator() -> None:
     assert unit.lifecycle_status == "active"
     assert unit.valid_until is None
     assert unit.version == "v1"
+
+
+def test_map_chunk_to_knowledge_unit_preserves_provenance_fields() -> None:
+    unit = map_chunk_to_knowledge_unit(
+        {
+            "chunk_id": "doc-001-chunk-1",
+            "text": "预算审批规则位于预算制度说明第二节。",
+            "source_record_id": "sr-doc-001",
+            "import_batch_id": "ib-doc-001",
+            "unit_version": 3,
+        }
+    )
+
+    assert unit.source_record_id == "sr-doc-001"
+    assert unit.import_batch_id == "ib-doc-001"
+    assert unit.unit_version == 3
 
 
 def test_knowledge_unit_repository_lists_faq_and_chunk_units_in_single_view() -> None:

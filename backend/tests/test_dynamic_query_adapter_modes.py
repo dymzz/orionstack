@@ -94,7 +94,7 @@ def test_chat_dynamic_query_default_mock_mode_smoke(monkeypatch) -> None:
     service = _build_chat_service(monkeypatch, "mock")
 
     response = service.ask(
-        ChatAskRequest(raw_query="我的请假进度", debug=True),
+        ChatAskRequest(raw_query="我的请假进度", debug=True, user_id="u-1"),
         trace_id="trace-dq-mock",
         debug_enabled=True,
     )
@@ -106,6 +106,22 @@ def test_chat_dynamic_query_default_mock_mode_smoke(monkeypatch) -> None:
     assert response.debug_info is not None
     assert response.debug_info.router_used == "dynamic_query"
     assert response.debug_info.dynamic_query_key == "leave_status"
+
+
+def test_chat_dynamic_query_requires_runtime_user(monkeypatch) -> None:
+    adapter = _StaticAdapter("mock", [{"name": "事假"}])
+    monkeypatch.setitem(adapter_factory._ADAPTER_FACTORIES, "mock", lambda: adapter)
+    service = _build_chat_service(monkeypatch, "mock")
+
+    response = service.ask(
+        ChatAskRequest(raw_query="我的请假进度", debug=True),
+        trace_id="trace-dq-no-user",
+        debug_enabled=True,
+    )
+
+    assert adapter.calls == []
+    assert response.response_status == "fallback"
+    assert response.dynamic_query_result is None
 
 
 def test_chat_dynamic_query_explicit_odoo_mode_uses_configured_adapter(
@@ -120,12 +136,17 @@ def test_chat_dynamic_query_explicit_odoo_mode_uses_configured_adapter(
     service = _build_chat_service(monkeypatch, "odoo")
 
     response = service.ask(
-        ChatAskRequest(raw_query="我的请假进度", debug=True),
+        ChatAskRequest(raw_query="我的请假进度", debug=True, user_id="u-1"),
         trace_id="trace-dq-odoo",
         debug_enabled=True,
     )
 
-    assert adapter.calls == [{"resource_type": "leave_status", "params": {}}]
+    assert adapter.calls == [
+        {
+            "resource_type": "leave_status",
+            "params": {"tenant_id": "default", "user_id": "u-1"},
+        }
+    ]
     assert response.response_status == "ok"
     assert response.dynamic_query_result is not None
     assert response.dynamic_query_result.query_key == "leave_status"
