@@ -9,6 +9,7 @@
 > P3.3 更新：已补齐 provenance 字段从 KnowledgeUnit / ES / lexical / vector / hybrid hit 到 trace / hard case 的最小穿透链路
 > P3.4 更新：stale 命中已改为安全 fallback，不再返回原答案正文；warning 仍可答但带提示
 > P3.5.1 更新：SourceRecord tombstone 已可传播到 KnowledgeUnit 发布层与 ES `lifecycle_status`，保证运行时先不可见
+> P3.5.2 更新：内容 hash 变化时，旧 SourceRecord 关联的 KnowledgeUnit / ES 文档会标为 `deprecated`，避免旧版本继续 active
 
 ---
 
@@ -107,7 +108,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 
 剩余缺口：
 
-- `SyncService` 仍未在内容更新时驱动候选重抽或发布层版本更新
+- `SyncService` 尚未自动生成新版候选或自动发布新版 KnowledgeUnit
 - ES / 向量物理删除仍只是最小入口，尚未接后台清理编排
 - `ImportBatch.record_count/status` 尚未表达 partial failure
 
@@ -120,7 +121,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `backend/app/indexing/elastic_indexer.py`
 - `backend/tests/test_phase3_sync.py`
 
-结论：**P0/P1 安全闭环已推进到发布层逻辑失效**。运行时泄露风险进一步下降；下一步应处理内容更新后的版本更新与 partial failure。
+结论：**P0/P1 安全闭环已推进到发布层逻辑失效与旧版本退役**。运行时泄露和旧答案复用风险进一步下降；下一步应处理新版候选生成与 partial failure。
 
 ---
 
@@ -330,19 +331,20 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - freshness_status 写入 trace
 - 有 action link 时返回跳转入口
 
-### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1）
+### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2）
 
 目标：
 
 - 已完成：删除/撤权与 KnowledgeUnit/ES 逻辑失效形成最小可测试入口
-- 待完成：`SyncService` 不只停在 SourceRecord/ImportBatch
-- 待完成：内容变更后能驱动候选重抽或发布层版本更新
+- 已完成：内容变更后，旧 SourceRecord 关联的 KnowledgeUnit/ES 标为 `deprecated`
+- 待完成：内容变更后能驱动候选重抽或新版发布
 - 待完成：ES/向量物理清理接后台编排
 
 验收：
 
 - 已验收：删除/撤权后发布层或索引侧不再以 active 内容参与运行时检索
-- 待验收：新增/更新/删除三类同步结果都有发布层或索引侧可见效果
+- 已验收：更新后旧版本发布单元不再以 active 内容参与运行时检索
+- 待验收：新增/更新/删除三类同步结果都有完整发布层或索引侧可见效果
 - 待验收：`ImportBatch.record_count` 与状态能反映 partial failure
 
 ---

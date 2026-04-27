@@ -176,6 +176,7 @@
 
 - 编排一次完整的同步流程（`ImportBatch` → `SourceRecord` → 判定变更 → 更新发布层）
 - 对比 `content_hash` 判定新增 / 更新 / 删除 / 不变
+- 内容更新时将旧 `SourceRecord` 关联的 KnowledgeUnit / ES 文档标为 `deprecated`
 - 触发 tombstone 处理
 - 触发 ES / 向量写入
 

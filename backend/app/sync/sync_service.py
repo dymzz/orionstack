@@ -5,11 +5,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.sync.sync_parser import parse_export_file
-from app.sync.tombstone_handler import handle_tombstone
-from app.storage.models.source_record import SourceRecord
 from app.storage.models.import_batch import ImportBatch
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
+
+
+_SUPERSEDED_KNOWLEDGE_UNIT_STATUS = "deprecated"
 
 
 class SyncService:
@@ -17,9 +19,14 @@ class SyncService:
         self,
         source_record_repo: SourceRecordRepo,
         import_batch_repo: ImportBatchRepo,
+        *,
+        knowledge_unit_repo: KnowledgeUnitRepository | None = None,
+        elastic_indexer=None,
     ) -> None:
         self._sr_repo = source_record_repo
         self._ib_repo = import_batch_repo
+        self._ku_repo = knowledge_unit_repo
+        self._elastic_indexer = elastic_indexer
 
     def sync_file(
         self,
@@ -46,7 +53,7 @@ class SyncService:
         unchanged = 0
 
         for record in records:
-            existing = self._sr_repo._find_by_system_and_external(
+            existing = self._sr_repo._find_active_by_system_and_external(
                 record.source_system, record.external_id
             )
             if existing is None:
@@ -58,6 +65,7 @@ class SyncService:
                 from dataclasses import replace
                 record = replace(record, import_batch_id=batch_id)
                 self._sr_repo.update_status(existing.source_record_id, "superseded")
+                self._deprecate_published_units(existing.source_record_id)
                 self._sr_repo.upsert(record)
                 updated += 1
             else:
@@ -73,3 +81,16 @@ class SyncService:
         )
         self._ib_repo.update(batch)
         return batch
+
+    def _deprecate_published_units(self, source_record_id: str) -> None:
+        if self._ku_repo is not None:
+            self._ku_repo.update_status_by_source_record(
+                source_record_id,
+                _SUPERSEDED_KNOWLEDGE_UNIT_STATUS,
+            )
+
+        if self._elastic_indexer is not None:
+            self._elastic_indexer.update_status_by_source_record(
+                source_record_id,
+                _SUPERSEDED_KNOWLEDGE_UNIT_STATUS,
+            )

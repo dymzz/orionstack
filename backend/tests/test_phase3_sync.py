@@ -280,6 +280,68 @@ class TestSyncService:
         superseded = sr_repo.list_by_status("superseded")
         assert len(superseded) == 1
 
+    def test_sync_file_update_deprecates_old_published_units(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001", raw_content="v1"))
+        faq_repo = _make_faq_repo(tmp_path / "faq.json")
+        chunk_repo = _make_chunk_repo(tmp_path / "chunks.jsonl")
+        ku_repo = KnowledgeUnitRepository(faq_repo=faq_repo, chunk_repo=chunk_repo)
+        fake_es = _FakeElasticsearch()
+        svc = SyncService(
+            sr_repo,
+            ib_repo,
+            knowledge_unit_repo=ku_repo,
+            elastic_indexer=ElasticIndexer(fake_es),
+        )
+
+        f = tmp_path / "v2.json"
+        f.write_text(
+            json.dumps([{"external_id": "ext-001", "raw_content": "v2"}]),
+            encoding="utf-8",
+        )
+
+        batch = svc.sync_file(f, "dingtalk_hr")
+
+        assert batch.status == "success"
+        assert sr_repo.get("sr-001").status == "superseded"
+        assert ku_repo.list_by_source_record("sr-001") == []
+        old_units = ku_repo.list_by_source_record("sr-001", active_only=False)
+        assert {unit.lifecycle_status for unit in old_units} == {"deprecated"}
+        assert fake_es.updated_by_query[0]["body"]["query"] == {
+            "term": {"source_record_id": "sr-001"}
+        }
+        assert fake_es.updated_by_query[0]["body"]["script"]["params"] == {
+            "lifecycle_status": "deprecated"
+        }
+
+    def test_sync_file_compares_against_active_record_after_update(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
+        svc = SyncService(sr_repo, ib_repo)
+
+        f1 = tmp_path / "v1.json"
+        f1.write_text(
+            json.dumps([{"external_id": "ext-001", "raw_content": "v1"}]),
+            encoding="utf-8",
+        )
+        svc.sync_file(f1, "dingtalk_hr")
+
+        f2 = tmp_path / "v2.json"
+        f2.write_text(
+            json.dumps([{"external_id": "ext-001", "raw_content": "v2"}]),
+            encoding="utf-8",
+        )
+        svc.sync_file(f2, "dingtalk_hr")
+        svc.sync_file(f2, "dingtalk_hr")
+
+        assert len(sr_repo.list_by_status("active")) == 1
+        assert len(sr_repo.list_by_status("superseded")) == 1
+
 
 # ---------------------------------------------------------------------------
 # Tombstone
