@@ -20,6 +20,7 @@ BAD_TRACE_FALLBACK_REASONS = {
     "retrieval_no_hit",
     "retrieval_score_below_threshold",
     "evidence_below_threshold",
+    "stale_knowledge",
     "lexical_backend_error",
     "vector_backend_error",
     "ConnectionTimeout",
@@ -35,6 +36,7 @@ ISSUE_TO_AUDIT_CATEGORY = {
     "extraction_drift": "extraction_drift",
     "retrieval_ambiguous": "clarification_boundary",
     "routing_mismatch": "planner_boundary",
+    "freshness_stale": "freshness_stale",
 }
 
 
@@ -101,6 +103,8 @@ def audit_category(record: dict[str, Any]) -> str:
         return "clarification_boundary"
     if fallback_reason == "route_not_confident_enough":
         return "planner_boundary"
+    if fallback_reason == "stale_knowledge":
+        return "freshness_stale"
     if fallback_reason in {
         "ConnectionTimeout",
         "PlannerTimeout",

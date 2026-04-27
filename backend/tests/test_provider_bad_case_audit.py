@@ -43,6 +43,13 @@ def test_audit_category_maps_core_failure_layers() -> None:
         audit_category({"fallback_reason": "route_not_confident_enough"})
         == "planner_boundary"
     )
+    assert audit_category({"fallback_reason": "stale_knowledge"}) == "freshness_stale"
+    assert (
+        audit_category(
+            {"issue_category": "freshness_stale", "source_record_id": "sr-001"}
+        )
+        == "freshness_stale"
+    )
     assert audit_category({"source_record_id": "sr-001"}) == "extraction_drift"
     assert audit_category({"user_feedback": "down"}) == "negative_feedback_review"
 

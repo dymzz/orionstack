@@ -327,7 +327,8 @@
 - 检索结果的新鲜度判定（调用 `freshness_checker`）
 - 从 lexical/vector/hybrid 命中透传 `source_record_id / import_batch_id / unit_version / freshness`
 - 回答中附带 action link
-- stale 区间的提示文案
+- warning 区间返回原答案并提示
+- stale 区间不返回原答案正文，转为安全 fallback 并优先带 action link
 - 动态查询集成：FAQ 路由低置信度时尝试 `_try_dynamic_query()`
 - `_find_action_links_by_resource_type()` 按 resource_type 查找关联 action link
 

@@ -84,7 +84,7 @@ def test_freshness_result_properties() -> None:
     assert stale.is_stale
 
 
-def test_freshness_stale_appends_warning_to_answer() -> None:
+def test_freshness_stale_detected() -> None:
     from app.retrieval.hybrid_retriever import HybridHit
     from app.services.chat_service import ChatService
 
@@ -198,6 +198,47 @@ def test_stale_elastic_hit_returns_safe_fallback_with_action_link(
     assert response.debug_info.source_record_id == "sr-stale-001"
     assert response.debug_info.import_batch_id == "ib-stale-001"
     assert response.debug_info.unit_version == 2
+
+
+def test_stale_fallback_trace_records_freshness_hard_case(
+    monkeypatch, tmp_path
+) -> None:
+    _configure_trace_storage(tmp_path)
+    monkeypatch.setattr(chat_route, "settings", Settings(app_mode="demo"))
+
+    def return_stale(payload, *, trace_id: str, debug_enabled: bool):
+        return ChatAskResponse(
+            response_status="fallback",
+            trace_id=trace_id,
+            answer="命中的知识内容已过期，我先不直接给出原答案。",
+            citations=[],
+            debug_info=DebugInfo(
+                normalized_query=payload.raw_query.strip(),
+                route_result="faq_qa_elastic",
+                router_used="query_planner_local",
+                retrieved_chunks=["unit-stale-001"],
+                route_confidence=None,
+                retrieval_score=2.5,
+                fallback_reason="stale_knowledge",
+                freshness_status="stale",
+                source_record_id="sr-stale-001",
+                import_batch_id="ib-stale-001",
+                unit_version=2,
+            ),
+        )
+
+    monkeypatch.setattr(chat_route.service, "ask", return_stale)
+
+    response = chat_route.ask_chat(ChatAskRequest(raw_query="如何上传文档？", debug=True))
+
+    assert response.response_status == "fallback"
+    trace = _load_jsonl(tmp_path / "retrieval_traces.jsonl")
+    assert trace[0]["fallback_reason"] == "stale_knowledge"
+    assert trace[0]["freshness_status"] == "stale"
+    hard_cases = _load_jsonl(tmp_path / "hard_cases.jsonl")
+    assert len(hard_cases) == 1
+    assert hard_cases[0]["issue_category"] == "freshness_stale"
+    assert hard_cases[0]["source_record_id"] == "sr-stale-001"
 
 
 def test_freshness_warning_detected() -> None:

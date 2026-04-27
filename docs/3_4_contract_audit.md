@@ -7,6 +7,7 @@
 > P3.1 更新：已补齐 SourceRecord tombstone 到 ActionLink / DynamicQuery 的运行时入口层传播；KnowledgeUnit / ES 清理仍保留为后续 provenance / sync 闭环
 > P3.2 更新：已补齐 DynamicQuery 最小运行时判权；无 principal、租户不匹配、用户/角色不满足时不会触发 adapter
 > P3.3 更新：已补齐 provenance 字段从 KnowledgeUnit / ES / lexical / vector / hybrid hit 到 trace / hard case 的最小穿透链路
+> P3.4 更新：stale 命中已改为安全 fallback，不再返回原答案正文；warning 仍可答但带提示
 
 ---
 
@@ -55,12 +56,13 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 
 - `check_freshness()` 已实现三态判定：`fresh / warning / stale`
 - `ChatService._check_hit_freshness()` 已在 ES 命中后读取 `fresh_until / stale_after`
-- 命中 warning/stale 时，当前会在答案后追加提示
+- 命中 warning 时仍返回答案并追加提示
+- 命中 stale 时返回 `fallback_reason = stale_knowledge`，不返回原答案正文或 citation snippet
+- stale fallback 会优先带回按 `source_record_id` 或业务域找到的 action link
+- trace / hard case 会记录 `freshness_status = stale`，hard case 分类为 `freshness_stale`
 
-缺口：
+剩余缺口：
 
-- 当前 stale 仍然会返回原答案，只追加“已过期，建议核实最新版本”的后缀
-- 这弱于设计中的“不直接给强确定答案”
 - 本地链路 `_search_local()` 没有 freshness 判定
 
 证据：
@@ -69,7 +71,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `backend/app/services/chat_service.py`
 - `backend/tests/test_phase3_freshness.py`
 
-结论：**P1 修正**。它不是最高风险的泄露问题，但会让过期知识仍被当成答案返回。
+结论：**P1 已修正 ES 检索链路**。过期知识不再被当成强确定答案返回；本地链路 freshness 仍是后续补齐项。
 
 ---
 
@@ -305,13 +307,15 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - trace 可追到 `source_record_id / import_batch_id / unit_version`
 - hard case 会优先按 fallback/evidence/retrieval 分类；source/sync/revocation 子分类留到 SourceRecord 状态反查阶段
 
-### P3.4：stale 不强答（P1）
+### P3.4：stale 不强答（P1，已完成 ES 链路）
 
-目标：
+已完成：
 
 - `stale` 命中不直接返回原答案
 - 优先返回 action link、刷新提示或 clarification
 - `warning` 仍可回答但必须提示
+- stale trace / hard case 记录 `freshness_status = stale`
+- stale hard case 分类为 `freshness_stale`
 
 验收：
 
