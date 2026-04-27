@@ -127,6 +127,33 @@ class ElasticIndexer:
         self._es.indices.refresh(index=self._index_name)
         return indexed
 
+    def update_status_by_source_record(
+        self, source_record_id: str, lifecycle_status: str
+    ) -> dict[str, Any]:
+        body = {
+            "script": {
+                "source": "ctx._source.lifecycle_status = params.lifecycle_status",
+                "lang": "painless",
+                "params": {"lifecycle_status": lifecycle_status},
+            },
+            "query": {"term": {"source_record_id": source_record_id}},
+        }
+        return self._es.update_by_query(
+            index=self._index_name,
+            body=body,
+            refresh=True,
+            conflicts="proceed",
+        )
+
+    def delete_by_source_record(self, source_record_id: str) -> dict[str, Any]:
+        body = {"query": {"term": {"source_record_id": source_record_id}}}
+        return self._es.delete_by_query(
+            index=self._index_name,
+            body=body,
+            refresh=True,
+            conflicts="proceed",
+        )
+
     def delete_index(self) -> None:
         if self._es.indices.exists(index=self._index_name):
             self._es.indices.delete(index=self._index_name)

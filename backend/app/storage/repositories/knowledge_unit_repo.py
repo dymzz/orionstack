@@ -136,7 +136,7 @@ def map_chunk_to_knowledge_unit(chunk: dict[str, Any]) -> KnowledgeUnit:
         source_label=chunk.get("source_label", chunk.get("filename", "Document")),
         source_locator=chunk.get("source_locator", chunk.get("chunk_id", "")),
         access_scope="internal",
-        lifecycle_status="active",
+        lifecycle_status=chunk.get("lifecycle_status", "active"),
         valid_from="",
         valid_until=None,
         version="v1",
@@ -187,6 +187,39 @@ class KnowledgeUnitRepository:
 
         return units
 
+    def list_by_source_record(
+        self, source_record_id: str, *, active_only: bool = True
+    ) -> list[KnowledgeUnit]:
+        units = [
+            unit
+            for unit in self.list_all()
+            if unit.source_record_id == source_record_id
+        ]
+        if active_only:
+            return [unit for unit in units if unit.lifecycle_status == "active"]
+        return units
+
+    def update_status_by_source_record(
+        self, source_record_id: str, lifecycle_status: str
+    ) -> list[str]:
+        target_status = _normalize_knowledge_unit_status(lifecycle_status)
+        updated_ids: list[str] = []
+        updated_ids.extend(
+            _update_repo_status_by_source_record(
+                self._faq_repo,
+                source_record_id,
+                target_status,
+            )
+        )
+        updated_ids.extend(
+            _update_repo_status_by_source_record(
+                self._chunk_repo,
+                source_record_id,
+                target_status,
+            )
+        )
+        return updated_ids
+
     def list_faq_units(self) -> list[KnowledgeUnit]:
         units: list[KnowledgeUnit] = []
         known_faq_ids: set[str] = set()
@@ -235,3 +268,21 @@ def _parse_seed_markdown_faq_items(path: Path) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         return []
     return [item for item in payload if isinstance(item, dict)]
+
+
+def _normalize_knowledge_unit_status(status: str) -> str:
+    # KnowledgeUnit.lifecycle_status does not have a "deleted" value; deleted
+    # source records are made runtime-invisible by revoking their published units.
+    if status == "deleted":
+        return "revoked"
+    return status
+
+
+def _update_repo_status_by_source_record(
+    repo: Any | None, source_record_id: str, lifecycle_status: str
+) -> list[str]:
+    if repo is None or not hasattr(repo, "update_status_by_source_record"):
+        return []
+
+    updated = repo.update_status_by_source_record(source_record_id, lifecycle_status)
+    return [str(unit_id) for unit_id in updated]

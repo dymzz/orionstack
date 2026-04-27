@@ -8,6 +8,7 @@
 > P3.2 更新：已补齐 DynamicQuery 最小运行时判权；无 principal、租户不匹配、用户/角色不满足时不会触发 adapter
 > P3.3 更新：已补齐 provenance 字段从 KnowledgeUnit / ES / lexical / vector / hybrid hit 到 trace / hard case 的最小穿透链路
 > P3.4 更新：stale 命中已改为安全 fallback，不再返回原答案正文；warning 仍可答但带提示
+> P3.5.1 更新：SourceRecord tombstone 已可传播到 KnowledgeUnit 发布层与 ES `lifecycle_status`，保证运行时先不可见
 
 ---
 
@@ -90,6 +91,9 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `handle_tombstone()` 会更新 SourceRecord 状态
 - P3.1 已补：`handle_tombstone()` 可传播到 `ActionLinkRepo`
 - P3.1 已补：`handle_tombstone()` 可传播到 `DynamicQueryRepo`
+- P3.5.1 已补：`handle_tombstone()` 可注入 `KnowledgeUnitRepository`，按 `source_record_id` 将关联发布单元置为 `revoked`
+- P3.5.1 已补：`ElasticIndexer.update_status_by_source_record()` 可按 `source_record_id` 更新 ES 文档 `lifecycle_status`
+- P3.5.1 已补：本地检索链会跳过非 `active` 的 FAQ / chunk
 - 检索侧默认过滤 `lifecycle_status == active`
 - `ActionLinkRepo` 与 `DynamicQueryRepo` 都有 `update_status()`
 
@@ -98,12 +102,14 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - SourceRecord 撤权 / 删除后，关联 action link 不再被 `list_by_source_record()` 返回
 - SourceRecord 撤权 / 删除后，关联 dynamic query 不再 match，也不会触发 adapter fetch
 - `deleted` SourceRecord 对 DynamicQuery 映射为 `revoked`，因为 DynamicQuery 当前枚举只支持 `active / revoked`
+- SourceRecord 撤权 / 删除后，关联 KnowledgeUnit 在本地发布视图和 ES 查询过滤字段上不再作为 active 内容暴露
+- `deleted` SourceRecord 对 KnowledgeUnit 映射为 `revoked`，因为 KnowledgeUnit 生命周期枚举不包含 `deleted`
 
 剩余缺口：
 
-- 当前 `KnowledgeUnitRepository` 没有持久化发布层 repo，也没有按 `source_record_id` 批量失效 KnowledgeUnit 的能力
-- ES 索引没有按 `source_record_id` 失效或清理的入口
-- 现有检索链仍依赖 `lifecycle_status == active`，还没有接 SourceRecord tombstone 反查
+- `SyncService` 仍未在内容更新时驱动候选重抽或发布层版本更新
+- ES / 向量物理删除仍只是最小入口，尚未接后台清理编排
+- `ImportBatch.record_count/status` 尚未表达 partial failure
 
 证据：
 
@@ -111,9 +117,10 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `backend/app/storage/repositories/action_link_repo.py`
 - `backend/app/storage/repositories/dynamic_query_repo.py`
 - `backend/app/storage/repositories/knowledge_unit_repo.py`
+- `backend/app/indexing/elastic_indexer.py`
 - `backend/tests/test_phase3_sync.py`
 
-结论：**P0 已部分修正**。运行时入口层已先阻断，KnowledgeUnit / ES 清理进入 P3.3 / P3.5。
+结论：**P0/P1 安全闭环已推进到发布层逻辑失效**。运行时泄露风险进一步下降；下一步应处理内容更新后的版本更新与 partial failure。
 
 ---
 
@@ -323,18 +330,20 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - freshness_status 写入 trace
 - 有 action link 时返回跳转入口
 
-### P3.5：sync 到发布层/索引闭环（P1）
+### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1）
 
 目标：
 
-- `SyncService` 不只停在 SourceRecord/ImportBatch
-- 内容变更后能驱动候选重抽或发布层版本更新
-- 删除/撤权与 ES/向量索引清理形成最小可测试入口
+- 已完成：删除/撤权与 KnowledgeUnit/ES 逻辑失效形成最小可测试入口
+- 待完成：`SyncService` 不只停在 SourceRecord/ImportBatch
+- 待完成：内容变更后能驱动候选重抽或发布层版本更新
+- 待完成：ES/向量物理清理接后台编排
 
 验收：
 
-- 新增/更新/删除三类同步结果都有发布层或索引侧可见效果
-- `ImportBatch.record_count` 与状态能反映 partial failure
+- 已验收：删除/撤权后发布层或索引侧不再以 active 内容参与运行时检索
+- 待验收：新增/更新/删除三类同步结果都有发布层或索引侧可见效果
+- 待验收：`ImportBatch.record_count` 与状态能反映 partial failure
 
 ---
 

@@ -36,11 +36,21 @@ class _FakeElasticsearch:
     def __init__(self) -> None:
         self.indices = _FakeIndices()
         self.indexed = []
+        self.updated_by_query = []
+        self.deleted_by_query = []
         self.ping_value = True
         self.count_value = {"count": 0}
 
     def index(self, *, index: str, id: str, body: dict) -> None:
         self.indexed.append({"index": index, "id": id, "body": body})
+
+    def update_by_query(self, **kwargs) -> dict:
+        self.updated_by_query.append(kwargs)
+        return {"updated": 1}
+
+    def delete_by_query(self, **kwargs) -> dict:
+        self.deleted_by_query.append(kwargs)
+        return {"deleted": 1}
 
     def ping(self) -> bool:
         return self.ping_value
@@ -109,6 +119,47 @@ def test_elastic_indexer_indexes_units_and_refreshes_index() -> None:
     assert es.indexed[0]["body"]["import_batch_id"] == "ib-001"
     assert es.indexed[0]["body"]["unit_version"] == 2
     assert es.indices.refreshed == ["knowledge_units_v1"]
+
+
+def test_elastic_indexer_updates_status_by_source_record() -> None:
+    es = _FakeElasticsearch()
+    indexer = ElasticIndexer(es)
+
+    result = indexer.update_status_by_source_record("sr-001", "revoked")
+
+    assert result == {"updated": 1}
+    assert es.updated_by_query == [
+        {
+            "index": "knowledge_units_v1",
+            "body": {
+                "script": {
+                    "source": "ctx._source.lifecycle_status = params.lifecycle_status",
+                    "lang": "painless",
+                    "params": {"lifecycle_status": "revoked"},
+                },
+                "query": {"term": {"source_record_id": "sr-001"}},
+            },
+            "refresh": True,
+            "conflicts": "proceed",
+        }
+    ]
+
+
+def test_elastic_indexer_deletes_by_source_record() -> None:
+    es = _FakeElasticsearch()
+    indexer = ElasticIndexer(es)
+
+    result = indexer.delete_by_source_record("sr-001")
+
+    assert result == {"deleted": 1}
+    assert es.deleted_by_query == [
+        {
+            "index": "knowledge_units_v1",
+            "body": {"query": {"term": {"source_record_id": "sr-001"}}},
+            "refresh": True,
+            "conflicts": "proceed",
+        }
+    ]
 
 
 def test_index_health_checker_reports_connected_existing_index_and_count() -> None:

@@ -64,6 +64,9 @@ class Retriever:
         best_score = 0
 
         for item in self._chunk_repo.list_all():
+            if item.get("lifecycle_status", "active") != "active":
+                continue
+
             document_id = str(item.get("document_id", ""))
             if (
                 allowed_document_ids is not None
@@ -198,6 +201,9 @@ class Retriever:
         best_score = 0
 
         for item in self._faq_repo.list_all():
+            if item.get("lifecycle_status", "active") != "active":
+                continue
+
             question = str(item["question"]).lower()
             keywords = [str(keyword).lower() for keyword in item.get("keywords", [])]
             haystack = " ".join(

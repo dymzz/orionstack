@@ -3,9 +3,11 @@ from __future__ import annotations
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.action_link_repo import ActionLinkRepo
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 
 _DYNAMIC_QUERY_TOMBSTONE_STATUS = "revoked"
+_KNOWLEDGE_UNIT_TOMBSTONE_STATUS = "revoked"
 
 
 def handle_tombstone(
@@ -14,6 +16,8 @@ def handle_tombstone(
     source_record_repo: SourceRecordRepo,
     action_link_repo: ActionLinkRepo | None = None,
     dynamic_query_repo: DynamicQueryRepo | None = None,
+    knowledge_unit_repo: KnowledgeUnitRepository | None = None,
+    elastic_indexer=None,
 ) -> list[str]:
     source_record_repo.update_status(source_record_id, new_status)
     affected_ids = [source_record_id]
@@ -34,6 +38,20 @@ def handle_tombstone(
                 source_record_id,
                 _DYNAMIC_QUERY_TOMBSTONE_STATUS,
             )
+        )
+
+    if knowledge_unit_repo is not None:
+        affected_ids.extend(
+            knowledge_unit_repo.update_status_by_source_record(
+                source_record_id,
+                _KNOWLEDGE_UNIT_TOMBSTONE_STATUS,
+            )
+        )
+
+    if elastic_indexer is not None:
+        elastic_indexer.update_status_by_source_record(
+            source_record_id,
+            _KNOWLEDGE_UNIT_TOMBSTONE_STATUS,
         )
 
     return affected_ids

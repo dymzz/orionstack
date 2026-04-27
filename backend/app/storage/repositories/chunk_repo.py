@@ -5,8 +5,10 @@ from typing import Any
 
 
 class ChunkRepository:
-    def __init__(self) -> None:
-        self._path = Path(__file__).resolve().parents[1] / "chunks" / "chunks.jsonl"
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = path or (
+            Path(__file__).resolve().parents[1] / "chunks" / "chunks.jsonl"
+        )
 
     def list_all(self) -> list[dict[str, Any]]:
         if not self._path.exists():
@@ -74,3 +76,32 @@ class ChunkRepository:
             self._path.unlink()
 
         return deleted_count
+
+    def update_status_by_source_record(
+        self, source_record_id: str, lifecycle_status: str
+    ) -> list[str]:
+        records = self.list_all()
+        updated_ids: list[str] = []
+
+        for record in records:
+            if record.get("source_record_id") != source_record_id:
+                continue
+            if record.get("lifecycle_status", "active") == lifecycle_status:
+                continue
+
+            record["lifecycle_status"] = lifecycle_status
+            chunk_id = str(record.get("chunk_id") or "")
+            if chunk_id:
+                updated_ids.append(chunk_id)
+
+        if updated_ids:
+            serialized = (
+                "\n".join(
+                    json.dumps(record, ensure_ascii=False) for record in records
+                )
+                + "\n"
+            )
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(serialized, encoding="utf-8")
+
+        return updated_ids

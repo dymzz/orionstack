@@ -8,13 +8,18 @@ from typing import Any
 import pytest
 
 from app.runtime.dynamic_query_service import DynamicQueryService
+from app.indexing.elastic_indexer import ElasticIndexer
+from app.retrieval.retriever import Retriever
 from app.storage.models.action_link import ActionLink
 from app.storage.models.dynamic_query import DynamicQuery
 from app.storage.models.source_record import SourceRecord
 from app.storage.models.import_batch import ImportBatch
 from app.storage.models.extraction_candidate import ExtractionCandidate
 from app.storage.repositories.action_link_repo import ActionLinkRepo
+from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
+from app.storage.repositories.faq_repo import FAQRepository
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
@@ -381,6 +386,69 @@ class TestTombstone:
         assert sr_repo.get("sr-001").status == "deleted"
         assert dq_repo.get("dq-1").status == "revoked"
 
+    def test_tombstone_revokes_knowledge_units_by_source_record(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        faq_repo = _make_faq_repo(tmp_path / "faq.json")
+        chunk_repo = _make_chunk_repo(tmp_path / "chunks.jsonl")
+        ku_repo = KnowledgeUnitRepository(faq_repo=faq_repo, chunk_repo=chunk_repo)
+
+        assert [unit.unit_id for unit in ku_repo.list_by_source_record("sr-001")] == [
+            "ku-faq-1",
+            "doc-1-chunk-1",
+        ]
+
+        affected = handle_tombstone(
+            "sr-001",
+            "deleted",
+            sr_repo,
+            knowledge_unit_repo=ku_repo,
+        )
+
+        assert affected == ["sr-001", "ku-faq-1", "doc-1-chunk-1"]
+        assert sr_repo.get("sr-001").status == "deleted"
+        assert ku_repo.list_by_source_record("sr-001") == []
+        inactive_units = ku_repo.list_by_source_record("sr-001", active_only=False)
+        assert {unit.lifecycle_status for unit in inactive_units} == {"revoked"}
+
+    def test_tombstone_updates_elastic_index_by_source_record(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        fake_es = _FakeElasticsearch()
+        indexer = ElasticIndexer(fake_es)
+
+        affected = handle_tombstone(
+            "sr-001",
+            "revoked",
+            sr_repo,
+            elastic_indexer=indexer,
+        )
+
+        assert affected == ["sr-001"]
+        assert fake_es.updated_by_query[0]["body"]["query"] == {
+            "term": {"source_record_id": "sr-001"}
+        }
+        assert fake_es.updated_by_query[0]["body"]["script"]["params"] == {
+            "lifecycle_status": "revoked"
+        }
+
+    def test_local_retriever_skips_revoked_published_units(
+        self, tmp_path: Path
+    ) -> None:
+        faq_repo = _make_faq_repo(tmp_path / "faq.json")
+        chunk_repo = ChunkRepository(path=tmp_path / "chunks.jsonl")
+        retriever = Retriever(faq_repo, chunk_repo)
+
+        assert retriever.search("上传 文档", min_score=1) is not None
+
+        faq_repo.update_status_by_source_record("sr-001", "revoked")
+
+        assert retriever.search("上传 文档", min_score=1) is None
+
 
 # ---------------------------------------------------------------------------
 # Extract / Publish
@@ -574,3 +642,73 @@ class _CapturingAdapter:
     def fetch(self, resource_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         self.calls.append({"resource_type": resource_type, "params": dict(params)})
         return [{"name": "ok"}]
+
+
+def _make_faq_repo(path: Path) -> FAQRepository:
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "ku-faq-1",
+                    "question": "如何上传文档？",
+                    "answer": "请在文档页上传。",
+                    "keywords": ["上传", "文档"],
+                    "source_record_id": "sr-001",
+                    "lifecycle_status": "active",
+                },
+                {
+                    "id": "ku-faq-2",
+                    "question": "如何查看报销？",
+                    "answer": "请打开报销页面。",
+                    "keywords": ["报销"],
+                    "source_record_id": "sr-002",
+                    "lifecycle_status": "active",
+                },
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return FAQRepository(path=path)
+
+
+def _make_chunk_repo(path: Path) -> ChunkRepository:
+    path.write_text(
+        json.dumps(
+            {
+                "chunk_id": "doc-1-chunk-1",
+                "document_id": "doc-1",
+                "filename": "guide.txt",
+                "text": "文档上传说明。",
+                "source_record_id": "sr-001",
+                "lifecycle_status": "active",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ChunkRepository(path=path)
+
+
+class _FakeIndices:
+    def __init__(self) -> None:
+        self.refreshed: list[str] = []
+
+    def refresh(self, *, index: str) -> None:
+        self.refreshed.append(index)
+
+
+class _FakeElasticsearch:
+    def __init__(self) -> None:
+        self.indices = _FakeIndices()
+        self.updated_by_query: list[dict[str, Any]] = []
+        self.deleted_by_query: list[dict[str, Any]] = []
+
+    def update_by_query(self, **kwargs) -> dict[str, int]:
+        self.updated_by_query.append(kwargs)
+        return {"updated": 1}
+
+    def delete_by_query(self, **kwargs) -> dict[str, int]:
+        self.deleted_by_query.append(kwargs)
+        return {"deleted": 1}

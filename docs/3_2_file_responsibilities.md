@@ -217,6 +217,7 @@
 - 接收 `SourceRecord` 的状态变更（`revoked / deleted`）
 - 传播到关联 `KnowledgeUnit` / `ActionLink` / `DynamicQuery`
 - 触发异步 ES / 向量清理
+- `deleted` SourceRecord 对 KnowledgeUnit 传播为 `revoked`，保证运行时先不可见
 
 不负责：
 
@@ -299,6 +300,7 @@
 - `map_faq_item_to_knowledge_unit()` 补全新字段映射
 - `list_all()` / `list_faq_units()` 支持 `tenant_id` 和 freshness 过滤
 - 新增 `publish_from_candidate()` 方法：从审核通过的 `ExtractionCandidate` 生成 `KnowledgeUnit`
+- 新增 `list_by_source_record()` / `update_status_by_source_record()`，支撑 tombstone 到发布层的逻辑失效
 
 不改变：
 
@@ -314,6 +316,8 @@
 - `ensure_index()` 升级 mapping 版本
 - 写入时包含新字段
 - `import_batch_id / source_record_id / unit_version / fresh_until / stale_after` 必须进入 ES doc，供检索命中回传 provenance
+- 提供按 `source_record_id` 更新 `lifecycle_status` 的入口，支撑撤权 / 删除后的运行时不可见
+- 提供按 `source_record_id` 物理删除入口，供后续后台清理编排调用
 
 不改变：
 
