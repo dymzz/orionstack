@@ -259,6 +259,13 @@ class TestSyncService:
         batch = svc.sync_file(f, "dingtalk_hr")
         assert batch.status == "success"
         assert batch.record_count == 1
+        assert json.loads(batch.error_summary or "{}") == {
+            "added": 1,
+            "updated": 0,
+            "unchanged": 0,
+            "failed": 0,
+            "errors": [],
+        }
         assert sr_repo.get is not None
 
     def test_sync_file_detects_update(self, tmp_path: Path) -> None:
@@ -341,6 +348,58 @@ class TestSyncService:
 
         assert len(sr_repo.list_by_status("active")) == 1
         assert len(sr_repo.list_by_status("superseded")) == 1
+
+    def test_sync_file_partial_success_when_one_record_fails(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = _FailingSourceRecordRepo(
+            storage_dir=tmp_path / "sr",
+            failing_external_id="ext-bad",
+        )
+        ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
+        svc = SyncService(sr_repo, ib_repo)
+
+        f = tmp_path / "mixed.json"
+        f.write_text(
+            json.dumps(
+                [
+                    {"external_id": "ext-ok", "raw_content": "ok"},
+                    {"external_id": "ext-bad", "raw_content": "bad"},
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        batch = svc.sync_file(f, "dingtalk_hr")
+
+        assert batch.status == "partial_success"
+        assert batch.record_count == 2
+        assert [record.external_id for record in sr_repo.list_by_status("active")] == [
+            "ext-ok"
+        ]
+        summary = json.loads(batch.error_summary or "{}")
+        assert summary["added"] == 1
+        assert summary["updated"] == 0
+        assert summary["unchanged"] == 0
+        assert summary["failed"] == 1
+        assert "external_id=ext-bad" in summary["errors"][0]
+
+    def test_sync_file_failed_when_parse_fails(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
+        svc = SyncService(sr_repo, ib_repo)
+
+        f = tmp_path / "broken.json"
+        f.write_text("{not-json", encoding="utf-8")
+
+        batch = svc.sync_file(f, "dingtalk_hr")
+
+        assert batch.status == "failed"
+        assert batch.record_count == 0
+        assert sr_repo.list_by_status("active") == []
+        summary = json.loads(batch.error_summary or "{}")
+        assert summary["failed"] == 1
+        assert "parse: JSONDecodeError" in summary["errors"][0]
 
 
 # ---------------------------------------------------------------------------
@@ -704,6 +763,17 @@ class _CapturingAdapter:
     def fetch(self, resource_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         self.calls.append({"resource_type": resource_type, "params": dict(params)})
         return [{"name": "ok"}]
+
+
+class _FailingSourceRecordRepo(SourceRecordRepo):
+    def __init__(self, *, storage_dir: Path, failing_external_id: str) -> None:
+        super().__init__(storage_dir=storage_dir)
+        self._failing_external_id = failing_external_id
+
+    def upsert(self, record: SourceRecord) -> None:
+        if record.external_id == self._failing_external_id:
+            raise RuntimeError("simulated source record write failure")
+        super().upsert(record)
 
 
 def _make_faq_repo(path: Path) -> FAQRepository:
