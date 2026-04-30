@@ -777,11 +777,44 @@ class ChatService:
                 ),
             )
 
+        freshness_result = self._check_item_freshness(hit.item)
+        if freshness_result is not None and freshness_result.is_stale:
+            action_links = self._find_action_links_for_source_record(
+                hit.item.get("source_record_id")
+            ) or self._find_action_links_for_domain(hit.item.get("business_domain"))
+            return ChatAskResponse(
+                response_status="fallback",
+                trace_id=trace_id,
+                answer=(
+                    "命中的知识内容已过期，我先不直接给出原答案。"
+                    "请通过下方入口到原系统核实最新信息，或刷新知识后再查询。"
+                ),
+                citations=[],
+                action_links=action_links,
+                debug_info=self._build_debug_info(
+                    debug_enabled,
+                    normalized_query,
+                    route_result=decision.route,
+                    chunk_ids=[hit.item["id"]],
+                    router_used=router_used,
+                    route_confidence=decision.confidence,
+                    retrieval_score=float(hit.score),
+                    fallback_reason="stale_knowledge",
+                    planner_output=planner_output,
+                    **self._item_provenance_kwargs(hit.item),
+                    freshness_status=freshness_result.status,
+                ),
+            )
+
+        answer = hit.item["answer"]
+        if freshness_result is not None and freshness_result.is_warning:
+            answer = answer + "（提示：该知识内容可能即将过期，建议尽快核实。）"
+
         citation = map_citation(hit.item)
         return ChatAskResponse(
             response_status="ok",
             trace_id=trace_id,
-            answer=hit.item["answer"],
+            answer=answer,
             citations=[citation],
             debug_info=self._build_debug_info(
                 debug_enabled,
@@ -793,6 +826,7 @@ class ChatService:
                 retrieval_score=float(hit.score),
                 planner_output=planner_output,
                 **self._item_provenance_kwargs(hit.item),
+                freshness_status=freshness_result.status if freshness_result else None,
             ),
         )
 
@@ -1071,6 +1105,16 @@ class ChatService:
 
         fresh_until = hit.fresh_until if hasattr(hit, "fresh_until") else ""
         stale_after = hit.stale_after if hasattr(hit, "stale_after") else ""
+        if not fresh_until and not stale_after:
+            return None
+        return check_freshness(fresh_until or None, stale_after or None)
+
+    @staticmethod
+    def _check_item_freshness(item: dict[str, Any]):
+        from app.sync.freshness import check_freshness
+
+        fresh_until = item.get("fresh_until") or ""
+        stale_after = item.get("stale_after") or ""
         if not fresh_until and not stale_after:
             return None
         return check_freshness(fresh_until or None, stale_after or None)

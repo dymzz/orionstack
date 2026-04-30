@@ -1,6 +1,6 @@
 [project]
 name = "orionstack"
-version = "0.3.27"
+version = "0.3.31"
 description = "Minimal FAQ and document QA demo for OrionStack"
 readme = "README.md"
 requires-python = ">=3.14"

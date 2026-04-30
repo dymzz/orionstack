@@ -8,6 +8,7 @@
 > P3.2 更新：已补齐 DynamicQuery 最小运行时判权；无 principal、租户不匹配、用户/角色不满足时不会触发 adapter
 > P3.3 更新：已补齐 provenance 字段从 KnowledgeUnit / ES / lexical / vector / hybrid hit 到 trace / hard case 的最小穿透链路
 > P3.4 更新：stale 命中已改为安全 fallback，不再返回原答案正文；warning 仍可答但带提示
+> P3.4.1 更新：本地 `_search_local()` 链路已补齐 freshness 判定；本地 FAQ / document chunk stale 不强答，warning 带提示，并写入 trace / hard case
 > P3.5.1 更新：SourceRecord tombstone 已可传播到 KnowledgeUnit 发布层与 ES `lifecycle_status`，保证运行时先不可见
 > P3.5.2 更新：内容 hash 变化时，旧 SourceRecord 关联的 KnowledgeUnit / ES 文档会标为 `deprecated`，避免旧版本继续 active
 > P3.5.3 更新：ImportBatch 会区分 `success / partial_success / failed`，并在 `error_summary` 中记录 added/updated/unchanged/failed 统计与错误摘要
@@ -28,7 +29,7 @@
 
 | 契约 | 设计要求 | 本轮结论 |
 |---|---|---|
-| 新鲜度 | 静态知识允许延迟同步，过期内容不应强确定回答 | 部分满足 |
+| 新鲜度 | 静态知识允许延迟同步，过期内容不应强确定回答 | 基本闭环 |
 | 删除与撤权传播 | 原系统删除/撤权后，本系统不可继续答、引、跳 | 部分闭环 |
 | 权限漂移 | 问答层最小权限裁剪，动态查询运行时二次判权 | 动态查询已闭环 |
 | 可追溯与版本 | 答案、trace、hard case 能追到来源与版本 | 基本闭环 |
@@ -51,7 +52,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 
 ## 3. 契约审计明细
 
-### 3.1 新鲜度契约：部分满足
+### 3.1 新鲜度契约：基本闭环
 
 设计要求：
 
@@ -67,18 +68,22 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 命中 stale 时返回 `fallback_reason = stale_knowledge`，不返回原答案正文或 citation snippet
 - stale fallback 会优先带回按 `source_record_id` 或业务域找到的 action link
 - trace / hard case 会记录 `freshness_status = stale`，hard case 分类为 `freshness_stale`
+- P3.4.1 已补：本地 `_search_local()` 对 FAQ / document chunk item 读取 `fresh_until / stale_after`
+- P3.4.1 已补：本地链路 stale 不返回原答案正文或 citation snippet，warning 仍可答但追加提示
+- P3.4.1 已补：本地 document chunk candidate 会保留 `source_record_id / import_batch_id / unit_version / fresh_until / stale_after`
 
 剩余缺口：
 
-- 本地链路 `_search_local()` 没有 freshness 判定
+- 无本轮 P1 阻断项
 
 证据：
 
 - `backend/app/sync/freshness.py`
 - `backend/app/services/chat_service.py`
+- `backend/app/retrieval/retriever.py`
 - `backend/tests/test_phase3_freshness.py`
 
-结论：**P1 已修正 ES 检索链路**。过期知识不再被当成强确定答案返回；本地链路 freshness 仍是后续补齐项。
+结论：**P1 已修正 ES 与本地检索链路**。过期知识不再被当成强确定答案返回；warning 知识仍可答但会明确提示核实。
 
 ---
 
@@ -328,7 +333,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - trace 可追到 `source_record_id / import_batch_id / unit_version`
 - hard case 会优先按 fallback/evidence/retrieval 分类；source/sync/revocation 子分类留到 SourceRecord 状态反查阶段
 
-### P3.4：stale 不强答（P1，已完成 ES 链路）
+### P3.4：stale 不强答（P1，已完成 ES / 本地链路）
 
 已完成：
 
@@ -337,12 +342,15 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - `warning` 仍可回答但必须提示
 - stale trace / hard case 记录 `freshness_status = stale`
 - stale hard case 分类为 `freshness_stale`
+- 本地 FAQ / document chunk stale 同样不返回原答案正文或 citation snippet
+- 本地 document chunk 会保留 freshness/provenance 元数据，避免本地 fallback 绕开安全边界
 
 验收：
 
 - stale hit 的 response 不包含原答案正文
 - freshness_status 写入 trace
 - 有 action link 时返回跳转入口
+- 本地链路 stale fallback 会进入 hard case，issue_category 为 `freshness_stale`
 
 ### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2 / P3.5.3 / P3.5.4 / P3.5.5 / P3.5.6 / P3.5.7）
 

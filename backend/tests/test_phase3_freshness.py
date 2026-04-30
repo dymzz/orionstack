@@ -22,6 +22,10 @@ class _FakeLexicalRetriever:
         return list(self._hits)
 
 
+def _write_local_faq(path: Path, items: list[dict]) -> None:
+    path.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+
+
 def _configure_trace_storage(tmp_path: Path) -> None:
     chat_route.feedback_repository._path = tmp_path / "feedback_records.jsonl"
     chat_route.chat_record_repository._path = tmp_path / "chat_records.jsonl"
@@ -239,6 +243,210 @@ def test_stale_fallback_trace_records_freshness_hard_case(
     assert len(hard_cases) == 1
     assert hard_cases[0]["issue_category"] == "freshness_stale"
     assert hard_cases[0]["source_record_id"] == "sr-stale-001"
+
+
+def test_local_stale_faq_returns_safe_fallback_and_records_hard_case(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from app.services import chat_service as chat_service_module
+    from app.services.chat_service import ChatService
+    from app.storage.models.action_link import ActionLink
+    from app.storage.repositories.action_link_repo import ActionLinkRepo
+
+    _configure_trace_storage(tmp_path)
+    local_settings = Settings(
+        app_mode="demo",
+        search_backend="local",
+        enable_query_planner=False,
+    )
+    monkeypatch.setattr(chat_route, "settings", local_settings)
+    monkeypatch.setattr(chat_service_module, "settings", local_settings)
+    monkeypatch.setattr(
+        "app.storage.repositories.action_link_repo._STORAGE_DIR",
+        tmp_path / "action_links",
+    )
+
+    past = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    stale_answer = "年假需要提前三天申请。"
+    faq_path = tmp_path / "faq.json"
+    _write_local_faq(
+        faq_path,
+        [
+            {
+                "id": "local-stale-001",
+                "question": "年假怎么申请？",
+                "answer": stale_answer,
+                "keywords": ["年假"],
+                "source_label": "HR FAQ",
+                "source_locator": "hr#local-stale-001",
+                "business_domain": "hr",
+                "source_record_id": "sr-local-stale-001",
+                "import_batch_id": "ib-local-stale-001",
+                "unit_version": 3,
+                "fresh_until": past,
+                "stale_after": past,
+                "lifecycle_status": "active",
+            }
+        ],
+    )
+    action_repo = ActionLinkRepo(storage_dir=tmp_path / "action_links")
+    action_repo.create(
+        ActionLink(
+            action_link_id="al-local-stale-001",
+            tenant_id="default",
+            source_record_id="sr-local-stale-001",
+            label="去原系统核实",
+            system_type="manual_export",
+            url="https://example.com/source",
+            resource_type="policy_doc",
+            access_scope="internal",
+            status="active",
+            published_at="2026-01-01T00:00:00Z",
+            business_domains=("hr",),
+        )
+    )
+    service = ChatService()
+    service._faq_repo._path = faq_path
+    service._chunk_repo._path = tmp_path / "chunks.jsonl"
+    monkeypatch.setattr(chat_route, "service", service)
+
+    response = chat_route.ask_chat(
+        ChatAskRequest(raw_query="年假怎么申请？", debug=True)
+    )
+
+    assert response.response_status == "fallback"
+    assert stale_answer not in response.answer
+    assert "过期" in response.answer
+    assert response.citations == []
+    assert [link.label for link in response.action_links] == ["去原系统核实"]
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "stale_knowledge"
+    assert response.debug_info.freshness_status == "stale"
+    assert response.debug_info.source_record_id == "sr-local-stale-001"
+    assert response.debug_info.import_batch_id == "ib-local-stale-001"
+    assert response.debug_info.unit_version == 3
+
+    trace = _load_jsonl(tmp_path / "retrieval_traces.jsonl")
+    assert trace[0]["fallback_reason"] == "stale_knowledge"
+    assert trace[0]["freshness_status"] == "stale"
+    hard_cases = _load_jsonl(tmp_path / "hard_cases.jsonl")
+    assert hard_cases[0]["issue_category"] == "freshness_stale"
+    assert hard_cases[0]["source_record_id"] == "sr-local-stale-001"
+
+
+def test_local_warning_faq_still_answers_with_freshness_notice(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from app.services import chat_service as chat_service_module
+    from app.services.chat_service import ChatService
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(search_backend="local", enable_query_planner=False),
+    )
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    warning_answer = "年假需要提前三天申请。"
+    faq_path = tmp_path / "faq.json"
+    _write_local_faq(
+        faq_path,
+        [
+            {
+                "id": "local-warning-001",
+                "question": "年假怎么申请？",
+                "answer": warning_answer,
+                "keywords": ["年假"],
+                "source_label": "HR FAQ",
+                "source_locator": "hr#local-warning-001",
+                "source_record_id": "sr-local-warning-001",
+                "import_batch_id": "ib-local-warning-001",
+                "unit_version": 2,
+                "fresh_until": past,
+                "stale_after": future,
+                "lifecycle_status": "active",
+            }
+        ],
+    )
+    service = ChatService()
+    service._faq_repo._path = faq_path
+    service._chunk_repo._path = tmp_path / "chunks.jsonl"
+
+    response = service.ask(
+        ChatAskRequest(raw_query="年假怎么申请？", debug=True),
+        trace_id="trace-local-warning",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "ok"
+    assert warning_answer in response.answer
+    assert "可能即将过期" in response.answer
+    assert response.citations[0].citation_id == "local-warning-001"
+    assert response.debug_info is not None
+    assert response.debug_info.freshness_status == "warning"
+    assert response.debug_info.source_record_id == "sr-local-warning-001"
+
+
+def test_local_stale_document_chunk_preserves_metadata_and_falls_back(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from app.services import chat_service as chat_service_module
+    from app.services.chat_service import ChatService
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "settings",
+        Settings(search_backend="local", enable_query_planner=False),
+    )
+    past = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    stale_answer = "预算模板位于财务手册第一节。"
+    faq_path = tmp_path / "faq.json"
+    _write_local_faq(faq_path, [])
+    chunk_path = tmp_path / "chunks.jsonl"
+    chunk_path.write_text(
+        json.dumps(
+            {
+                "chunk_id": "doc-budget-chunk-1",
+                "document_id": "doc-budget",
+                "filename": "budget.txt",
+                "text": stale_answer,
+                "source_label": "Budget Guide",
+                "source_locator": "document_id: doc-budget · chunk: 1",
+                "snippet": stale_answer,
+                "source_record_id": "sr-budget-stale-001",
+                "import_batch_id": "ib-budget-stale-001",
+                "unit_version": 4,
+                "fresh_until": past,
+                "stale_after": past,
+                "lifecycle_status": "active",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    service = ChatService()
+    service._faq_repo._path = faq_path
+    service._chunk_repo._path = chunk_path
+
+    response = service.ask(
+        ChatAskRequest(raw_query="预算模板在哪里？", debug=True),
+        trace_id="trace-local-stale-document",
+        debug_enabled=True,
+    )
+
+    assert response.response_status == "fallback"
+    assert stale_answer not in response.answer
+    assert response.citations == []
+    assert response.debug_info is not None
+    assert response.debug_info.fallback_reason == "stale_knowledge"
+    assert response.debug_info.freshness_status == "stale"
+    assert response.debug_info.source_record_id == "sr-budget-stale-001"
+    assert response.debug_info.import_batch_id == "ib-budget-stale-001"
+    assert response.debug_info.unit_version == 4
 
 
 def test_freshness_warning_detected() -> None:

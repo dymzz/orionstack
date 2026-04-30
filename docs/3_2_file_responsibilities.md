@@ -393,6 +393,7 @@
 
 - 检索结果的新鲜度判定（调用 `freshness_checker`）
 - 从 lexical/vector/hybrid 命中透传 `source_record_id / import_batch_id / unit_version / freshness`
+- 从本地 FAQ / document chunk item 读取 `fresh_until / stale_after`，保持本地链路与 ES 链路一致
 - 回答中附带 action link
 - warning 区间返回原答案并提示
 - stale 区间不返回原答案正文，转为安全 fallback 并优先带 action link

@@ -6,6 +6,15 @@ from typing import Any
 from app.storage.repositories.faq_repo import FAQRepository
 from app.storage.repositories.chunk_repo import ChunkRepository
 
+_PHASE3_LOCAL_METADATA_FIELDS = (
+    "business_domain",
+    "source_record_id",
+    "import_batch_id",
+    "unit_version",
+    "fresh_until",
+    "stale_after",
+)
+
 
 @dataclass(frozen=True)
 class RetrievalHit:
@@ -120,6 +129,7 @@ class Retriever:
                     ),
                     "source_locator": item.get("source_locator", item["chunk_id"]),
                     "snippet": snippet,
+                    **_phase3_local_metadata(item),
                 },
                 search_text=search_text,
                 compact_text=search_text.lower().replace(" ", ""),
@@ -145,6 +155,7 @@ class Retriever:
                     or item.get("source_locator", item["chunk_id"])
                 ),
                 "snippet": answer[:160],
+                **_phase3_local_metadata(item),
             },
             search_text=search_text or answer,
             compact_text=(search_text or answer).lower().replace(" ", ""),
@@ -285,3 +296,11 @@ class Retriever:
             .replace(" ", "")
             .strip()
         )
+
+
+def _phase3_local_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        field: item[field]
+        for field in _PHASE3_LOCAL_METADATA_FIELDS
+        if field in item
+    }
