@@ -23,6 +23,7 @@ from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
+from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
 from app.sync.freshness import check_freshness
 from app.sync.sync_parser import parse_export_file
 from app.sync.tombstone_handler import handle_tombstone
@@ -181,6 +182,34 @@ class TestExtractionCandidateRepo:
 
 
 # ---------------------------------------------------------------------------
+# ExtractionTaskRepo
+# ---------------------------------------------------------------------------
+
+
+class TestExtractionTaskRepo:
+    def test_enqueue_for_source_record_creates_pending_task(
+        self, tmp_path: Path
+    ) -> None:
+        repo = ExtractionTaskRepo(storage_dir=tmp_path)
+        record = _make_source_record("sr-001", "ext-001", import_batch_id="ib-001")
+
+        task = repo.enqueue_for_source_record(
+            record,
+            reason="source_record_updated",
+            supersedes_source_record_id="sr-old",
+        )
+
+        got = repo.get(task.extraction_task_id)
+        assert got is not None
+        assert got.status == "pending"
+        assert got.source_record_id == "sr-001"
+        assert got.import_batch_id == "ib-001"
+        assert got.reason == "source_record_updated"
+        assert got.supersedes_source_record_id == "sr-old"
+        assert repo.list_by_status("pending") == [got]
+
+
+# ---------------------------------------------------------------------------
 # Freshness
 # ---------------------------------------------------------------------------
 
@@ -250,7 +279,8 @@ class TestSyncService:
     def test_sync_file_creates_batch(self, tmp_path: Path) -> None:
         sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
         ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
-        svc = SyncService(sr_repo, ib_repo)
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        svc = SyncService(sr_repo, ib_repo, extraction_task_repo=task_repo)
 
         items = [{"external_id": "ext-001", "title": "FAQ", "raw_content": "c"}]
         f = tmp_path / "export.json"
@@ -267,6 +297,12 @@ class TestSyncService:
             "errors": [],
         }
         assert sr_repo.get is not None
+        tasks = task_repo.list_by_status("pending")
+        assert len(tasks) == 1
+        assert tasks[0].reason == "new_source_record"
+        assert tasks[0].source_record_id in {
+            record.source_record_id for record in sr_repo.list_by_status("active")
+        }
 
     def test_sync_file_detects_update(self, tmp_path: Path) -> None:
         sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
@@ -297,10 +333,12 @@ class TestSyncService:
         chunk_repo = _make_chunk_repo(tmp_path / "chunks.jsonl")
         ku_repo = KnowledgeUnitRepository(faq_repo=faq_repo, chunk_repo=chunk_repo)
         fake_es = _FakeElasticsearch()
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
         svc = SyncService(
             sr_repo,
             ib_repo,
             knowledge_unit_repo=ku_repo,
+            extraction_task_repo=task_repo,
             elastic_indexer=ElasticIndexer(fake_es),
         )
 
@@ -323,6 +361,31 @@ class TestSyncService:
         assert fake_es.updated_by_query[0]["body"]["script"]["params"] == {
             "lifecycle_status": "deprecated"
         }
+        tasks = task_repo.list_by_status("pending")
+        assert len(tasks) == 1
+        assert tasks[0].reason == "source_record_updated"
+        assert tasks[0].supersedes_source_record_id == "sr-001"
+        assert tasks[0].source_record_id != "sr-001"
+
+    def test_sync_file_unchanged_record_does_not_enqueue_extraction_task(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        ib_repo = ImportBatchRepo(storage_dir=tmp_path / "ib")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        svc = SyncService(sr_repo, ib_repo, extraction_task_repo=task_repo)
+
+        f = tmp_path / "v1.json"
+        f.write_text(
+            json.dumps([{"external_id": "ext-001", "raw_content": "v1"}]),
+            encoding="utf-8",
+        )
+        svc.sync_file(f, "dingtalk_hr")
+        svc.sync_file(f, "dingtalk_hr")
+
+        tasks = task_repo.list_by_status("pending")
+        assert len(tasks) == 1
+        assert tasks[0].reason == "new_source_record"
 
     def test_sync_file_compares_against_active_record_after_update(
         self, tmp_path: Path

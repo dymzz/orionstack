@@ -67,6 +67,19 @@
 - 不负责 LLM 抽取逻辑
 - 不负责审核后的发布动作
 
+#### `backend/app/storage/repositories/extraction_task_repo.py`
+
+职责：
+
+- `ExtractionTask` 的 CRUD
+- 在 SourceRecord 新增或内容更新后记录待抽取任务
+- 按 `source_record_id` / `status` 查询待处理任务
+
+不负责：
+
+- 不负责调用抽取 provider
+- 不负责创建 `ExtractionCandidate`
+
 #### `backend/app/storage/repositories/action_link_repo.py`
 
 职责：
@@ -177,6 +190,8 @@
 - 编排一次完整的同步流程（`ImportBatch` → `SourceRecord` → 判定变更 → 更新发布层）
 - 对比 `content_hash` 判定新增 / 更新 / 删除 / 不变
 - 内容更新时将旧 `SourceRecord` 关联的 KnowledgeUnit / ES 文档标为 `deprecated`
+- SourceRecord 新增或内容更新时可选写入 `ExtractionTask`，标记需要重抽
+- 记录同步统计与局部失败：`success / partial_success / failed`，并写入 `error_summary`
 - 触发 tombstone 处理
 - 触发 ES / 向量写入
 

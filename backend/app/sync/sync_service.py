@@ -9,12 +9,16 @@ from uuid import uuid4
 
 from app.sync.sync_parser import parse_export_file
 from app.storage.models.import_batch import ImportBatch
+from app.storage.models.source_record import SourceRecord
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
+from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
 
 
 _SUPERSEDED_KNOWLEDGE_UNIT_STATUS = "deprecated"
+_NEW_SOURCE_EXTRACTION_REASON = "new_source_record"
+_UPDATED_SOURCE_EXTRACTION_REASON = "source_record_updated"
 _SyncResult: TypeAlias = Literal["added", "updated", "unchanged"]
 
 
@@ -25,11 +29,13 @@ class SyncService:
         import_batch_repo: ImportBatchRepo,
         *,
         knowledge_unit_repo: KnowledgeUnitRepository | None = None,
+        extraction_task_repo: ExtractionTaskRepo | None = None,
         elastic_indexer=None,
     ) -> None:
         self._sr_repo = source_record_repo
         self._ib_repo = import_batch_repo
         self._ku_repo = knowledge_unit_repo
+        self._extraction_task_repo = extraction_task_repo
         self._elastic_indexer = elastic_indexer
 
     def sync_file(
@@ -95,7 +101,7 @@ class SyncService:
             errors=errors,
         )
 
-    def _sync_record(self, record, batch_id: str) -> _SyncResult:
+    def _sync_record(self, record: SourceRecord, batch_id: str) -> _SyncResult:
         existing = self._sr_repo._find_active_by_system_and_external(
             record.source_system, record.external_id
         )
@@ -103,6 +109,7 @@ class SyncService:
 
         if existing is None:
             self._sr_repo.upsert(record)
+            self._enqueue_extraction_task(record, reason=_NEW_SOURCE_EXTRACTION_REASON)
             return "added"
 
         if existing.content_hash == record.content_hash:
@@ -111,6 +118,11 @@ class SyncService:
         self._deprecate_published_units(existing.source_record_id)
         self._sr_repo.update_status(existing.source_record_id, "superseded")
         self._sr_repo.upsert(record)
+        self._enqueue_extraction_task(
+            record,
+            reason=_UPDATED_SOURCE_EXTRACTION_REASON,
+            supersedes_source_record_id=existing.source_record_id,
+        )
         return "updated"
 
     def _finish_batch(
@@ -153,6 +165,22 @@ class SyncService:
                 source_record_id,
                 _SUPERSEDED_KNOWLEDGE_UNIT_STATUS,
             )
+
+    def _enqueue_extraction_task(
+        self,
+        record: SourceRecord,
+        *,
+        reason: str,
+        supersedes_source_record_id: str | None = None,
+    ) -> None:
+        if self._extraction_task_repo is None:
+            return
+
+        self._extraction_task_repo.enqueue_for_source_record(
+            record,
+            reason=reason,
+            supersedes_source_record_id=supersedes_source_record_id,
+        )
 
 
 def _resolve_batch_status(record_count: int, failed: int) -> str:
