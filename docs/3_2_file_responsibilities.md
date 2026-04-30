@@ -288,6 +288,7 @@
 职责：
 
 - 读取 pending `ExtractionTask`
+- 按 `limit` 批量消费 pending 任务并返回 `processed / completed / failed / skipped`
 - 根据任务中的 `source_record_id` 查找 SourceRecord
 - 调用 `ExtractionService.extract_from_record()` 生成 `ExtractionCandidate`
 - 将任务状态写回 `processing / completed / failed`
@@ -295,7 +296,7 @@
 不负责：
 
 - 不负责自动审核或发布候选
-- 不负责后台调度循环
+- 不负责常驻后台 worker / 定时器
 
 #### `backend/app/extract/candidate_reviewer.py`
 

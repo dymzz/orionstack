@@ -13,6 +13,7 @@
 > P3.5.3 更新：ImportBatch 会区分 `success / partial_success / failed`，并在 `error_summary` 中记录 added/updated/unchanged/failed 统计与错误摘要
 > P3.5.4 更新：SourceRecord 新增或内容更新时可写入 pending `ExtractionTask`，把重抽需求交给抽取层
 > P3.5.5 更新：`ExtractionTaskService` 可消费 pending task，调用抽取层生成新版 `ExtractionCandidate`，并写回 completed / failed 状态
+> P3.5.6 更新：`ExtractionTaskService.run_pending(limit=...)` 可批量消费 pending task，单个失败不拖垮队列，并返回 processed/completed/failed/skipped 统计
 
 ---
 
@@ -111,10 +112,11 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - ImportBatch 能表达解析失败、单条失败和部分成功；单条失败不会拖垮整批成功记录
 - SourceRecord 新增或内容更新后可产生 pending ExtractionTask，标记抽取层需要处理的新版本
 - ExtractionTask 可被消费并生成 ExtractionCandidate；失败会记录到 task 状态，不自动审核或发布
+- ExtractionTask 可按 limit 批量消费；单个失败不会阻塞后续 pending task
 
 剩余缺口：
 
-- ExtractionTask 尚未接后台调度 / 自动循环 worker
+- ExtractionTask 尚未接常驻后台 worker / 定时器
 - ES / 向量物理删除仍只是最小入口，尚未接后台清理编排
 
 证据：
@@ -336,7 +338,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - freshness_status 写入 trace
 - 有 action link 时返回跳转入口
 
-### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2 / P3.5.3 / P3.5.4 / P3.5.5）
+### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2 / P3.5.3 / P3.5.4 / P3.5.5 / P3.5.6）
 
 目标：
 
@@ -345,7 +347,8 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 已完成：`ImportBatch.record_count/status/error_summary` 能表达 success / partial_success / failed
 - 已完成：内容变更后能产生待重抽任务信号
 - 已完成：ExtractionTask 可被消费并生成新版候选
-- 待完成：ExtractionTask 后台调度 / 自动循环 worker
+- 已完成：ExtractionTask 可批量消费并返回队列处理统计
+- 待完成：ExtractionTask 常驻后台 worker / 定时器
 - 待完成：ES/向量物理清理接后台编排
 
 验收：
@@ -355,6 +358,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 已验收：`ImportBatch.record_count` 与状态能反映 partial failure
 - 已验收：新增 / 更新 SourceRecord 可产生 pending ExtractionTask，unchanged 不重复入队
 - 已验收：pending ExtractionTask 可生成 ExtractionCandidate，并写回 completed / failed
+- 已验收：批量消费 pending task 时，单个失败不影响后续任务
 - 待验收：新增/更新/删除三类同步结果都有完整发布层或索引侧可见效果
 
 ---

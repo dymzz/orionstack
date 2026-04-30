@@ -17,6 +17,15 @@ class ExtractionTaskResult:
     candidates: list[ExtractionCandidate]
 
 
+@dataclass(frozen=True)
+class ExtractionTaskBatchResult:
+    processed: int
+    completed: int
+    failed: int
+    skipped: int
+    results: list[ExtractionTaskResult]
+
+
 class ExtractionTaskService:
     def __init__(
         self,
@@ -38,6 +47,47 @@ class ExtractionTaskService:
         return self.run_task(
             pending_tasks[0].extraction_task_id,
             candidate_types=candidate_types,
+        )
+
+    def run_pending(
+        self,
+        *,
+        limit: int = 10,
+        candidate_types: list[str] | None = None,
+    ) -> ExtractionTaskBatchResult:
+        if limit <= 0:
+            return ExtractionTaskBatchResult(
+                processed=0,
+                completed=0,
+                failed=0,
+                skipped=0,
+                results=[],
+            )
+
+        results: list[ExtractionTaskResult] = []
+        completed = 0
+        failed = 0
+        skipped = 0
+
+        for _ in range(limit):
+            result = self.run_next(candidate_types=candidate_types)
+            if result is None:
+                break
+
+            results.append(result)
+            if result.task.status == "completed":
+                completed += 1
+            elif result.task.status == "failed":
+                failed += 1
+            else:
+                skipped += 1
+
+        return ExtractionTaskBatchResult(
+            processed=len(results),
+            completed=completed,
+            failed=failed,
+            skipped=skipped,
+            results=results,
         )
 
     def run_task(

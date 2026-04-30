@@ -251,6 +251,28 @@ class _FailingExtractionProvider(ExtractionProvider):
         raise RuntimeError("provider unavailable")
 
 
+class _SourceAwareExtractionProvider(ExtractionProvider):
+    name = "source-aware"
+
+    def complete(self, messages: list[dict[str, str]]) -> str:
+        user_content = messages[-1]["content"]
+        if "broken provider" in user_content:
+            raise RuntimeError("provider unavailable")
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "candidate_type": "faq",
+                        "question": "如何处理？",
+                        "answer": "按来源内容处理",
+                        "keywords": ["处理"],
+                        "business_domain": "hr",
+                    }
+                ]
+            }
+        )
+
+
 class TestExtractionService:
     def test_extract_from_record_uses_injected_provider(self, tmp_path: Path) -> None:
         repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
@@ -366,6 +388,116 @@ class TestExtractionTaskService:
         assert result is not None
         assert result.task.status == "completed"
         assert result.candidates == []
+
+    def test_run_pending_processes_tasks_up_to_limit(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        candidate_repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=ExtractionService(
+                candidate_repo=candidate_repo,
+                provider=_FakeExtractionProvider(),
+            ),
+        )
+        records = [
+            _make_source_record(
+                source_record_id=f"sr-test-{index}",
+                external_id=f"ext-{index}",
+                source_system="manual_export",
+            )
+            for index in range(3)
+        ]
+        for record in records:
+            sr_repo.upsert(record)
+            task_repo.enqueue_for_source_record(record, reason="new_source_record")
+
+        result = service.run_pending(limit=2, candidate_types=["faq"])
+
+        assert result.processed == 2
+        assert result.completed == 2
+        assert result.failed == 0
+        assert result.skipped == 0
+        assert len(task_repo.list_by_status("pending")) == 1
+        assert len(candidate_repo.list_by_review_status("pending")) == 2
+
+    def test_run_pending_continues_after_failed_task(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        candidate_repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=ExtractionService(
+                candidate_repo=candidate_repo,
+                provider=_SourceAwareExtractionProvider(),
+            ),
+        )
+        broken = _make_source_record(
+            source_record_id="sr-broken",
+            external_id="ext-broken",
+            source_system="manual_export",
+            raw_content="broken provider",
+        )
+        healthy = _make_source_record(
+            source_record_id="sr-healthy",
+            external_id="ext-healthy",
+            source_system="manual_export",
+            raw_content="healthy content",
+        )
+        sr_repo.upsert(broken)
+        sr_repo.upsert(healthy)
+        task_repo.enqueue_for_source_record(broken, reason="new_source_record")
+        task_repo.enqueue_for_source_record(healthy, reason="new_source_record")
+
+        result = service.run_pending(limit=10, candidate_types=["faq"])
+
+        assert result.processed == 2
+        assert result.completed == 1
+        assert result.failed == 1
+        assert result.skipped == 0
+        assert task_repo.list_by_status("pending") == []
+        assert len(task_repo.list_by_status("failed")) == 1
+        assert len(task_repo.list_by_status("completed")) == 1
+        assert len(candidate_repo.list_by_review_status("pending")) == 1
+
+    def test_run_pending_with_no_pending_tasks_returns_empty_result(
+        self, tmp_path: Path
+    ) -> None:
+        service = ExtractionTaskService(
+            task_repo=ExtractionTaskRepo(storage_dir=tmp_path / "tasks"),
+            source_record_repo=SourceRecordRepo(storage_dir=tmp_path / "source_records"),
+            extraction_service=ExtractionService(
+                candidate_repo=ExtractionCandidateRepo(storage_dir=tmp_path / "candidates"),
+                provider=_FakeExtractionProvider(),
+            ),
+        )
+
+        result = service.run_pending(limit=10)
+
+        assert result.processed == 0
+        assert result.completed == 0
+        assert result.failed == 0
+        assert result.skipped == 0
+        assert result.results == []
+
+    def test_run_pending_with_non_positive_limit_returns_empty_result(
+        self, tmp_path: Path
+    ) -> None:
+        service = ExtractionTaskService(
+            task_repo=ExtractionTaskRepo(storage_dir=tmp_path / "tasks"),
+            source_record_repo=SourceRecordRepo(storage_dir=tmp_path / "source_records"),
+            extraction_service=ExtractionService(
+                candidate_repo=ExtractionCandidateRepo(storage_dir=tmp_path / "candidates"),
+                provider=_FakeExtractionProvider(),
+            ),
+        )
+
+        result = service.run_pending(limit=0)
+
+        assert result.processed == 0
+        assert result.results == []
 
 
 # ---------------------------------------------------------------------------
