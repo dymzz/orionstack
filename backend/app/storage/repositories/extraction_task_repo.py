@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,33 @@ class ExtractionTaskRepo:
             if task.source_record_id == source_record_id
         ]
 
+    def update_status(
+        self,
+        extraction_task_id: str,
+        status: str,
+        *,
+        started_at: str | None = None,
+        finished_at: str | None = None,
+        error_summary: str | None = None,
+    ) -> ExtractionTask | None:
+        tasks = list(self._iter_all())
+        updated: ExtractionTask | None = None
+        self._file.write_text("", encoding="utf-8")
+        for task in tasks:
+            if task.extraction_task_id == extraction_task_id:
+                task = replace(
+                    task,
+                    status=status,
+                    started_at=started_at if started_at is not None else task.started_at,
+                    finished_at=(
+                        finished_at if finished_at is not None else task.finished_at
+                    ),
+                    error_summary=error_summary,
+                )
+                updated = task
+            self._append(task)
+        return updated
+
     def _append(self, task: ExtractionTask) -> None:
         with open(self._file, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(task.to_dict(), ensure_ascii=False) + "\n")
@@ -86,4 +114,7 @@ class ExtractionTaskRepo:
             created_at=d["created_at"],
             import_batch_id=d.get("import_batch_id"),
             supersedes_source_record_id=d.get("supersedes_source_record_id"),
+            started_at=d.get("started_at"),
+            finished_at=d.get("finished_at"),
+            error_summary=d.get("error_summary"),
         )

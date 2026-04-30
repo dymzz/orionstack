@@ -283,6 +283,20 @@
 - 不负责候选审核与发布
 - 不负责构造 prompt（由 `prompt_templates.py` 负责）
 
+#### `backend/app/extract/extraction_task_service.py`
+
+职责：
+
+- 读取 pending `ExtractionTask`
+- 根据任务中的 `source_record_id` 查找 SourceRecord
+- 调用 `ExtractionService.extract_from_record()` 生成 `ExtractionCandidate`
+- 将任务状态写回 `processing / completed / failed`
+
+不负责：
+
+- 不负责自动审核或发布候选
+- 不负责后台调度循环
+
 #### `backend/app/extract/candidate_reviewer.py`
 
 职责：

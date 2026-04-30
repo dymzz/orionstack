@@ -16,6 +16,9 @@ class ExtractionTask:
     created_at: str
     import_batch_id: str | None = None
     supersedes_source_record_id: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    error_summary: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -29,4 +32,7 @@ class ExtractionTask:
             "created_at": self.created_at,
             "import_batch_id": self.import_batch_id,
             "supersedes_source_record_id": self.supersedes_source_record_id,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "error_summary": self.error_summary,
         }

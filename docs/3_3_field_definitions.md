@@ -201,9 +201,12 @@ pending → rejected   (审核拒绝)
 | `source_system` | string | 是 | — | 来源系统 |
 | `external_id` | string | 是 | — | 原系统记录 ID |
 | `reason` | enum | 是 | — | `new_source_record / source_record_updated` |
-| `status` | enum | 是 | `"pending"` | `pending` |
+| `status` | enum | 是 | `"pending"` | `pending / processing / completed / failed` |
 | `import_batch_id` | string | 否 | `None` | 触发该任务的导入批次 |
 | `supersedes_source_record_id` | string | 否 | `None` | 若由更新触发，指向被替代的旧 SourceRecord |
+| `started_at` | datetime | 否 | `None` | 开始消费时间 |
+| `finished_at` | datetime | 否 | `None` | 消费完成时间 |
+| `error_summary` | text | 否 | `None` | 成功摘要或失败原因 |
 | `created_at` | datetime | 是 | — | 创建时间 |
 
 ---
@@ -286,7 +289,16 @@ running → failed           (全部失败)
 | `partial_success` | 部分成功 |
 | `failed` | 全部失败 |
 
-### 9.6 scope_type（DynamicQuery）
+### 9.6 extraction_task status
+
+| 值 | 说明 |
+|---|---|
+| `pending` | 等待消费 |
+| `processing` | 消费中 |
+| `completed` | 已生成候选 |
+| `failed` | 消费失败 |
+
+### 9.7 scope_type（DynamicQuery）
 
 | 值 | 说明 |
 |---|---|

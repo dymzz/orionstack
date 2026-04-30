@@ -9,9 +9,12 @@ import pytest
 from app.extract.prompt_templates import build_extraction_messages, parse_extraction_response
 from app.extract.llm_extractor import extract_candidates
 from app.extract.candidate_reviewer import review_candidate, publish_candidate
+from app.extract.extraction_service import ExtractionService
+from app.extract.extraction_task_service import ExtractionTaskService
 from app.storage.models.source_record import SourceRecord
 from app.storage.models.extraction_candidate import ExtractionCandidate
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
+from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.action_link_repo import ActionLinkRepo
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
@@ -241,10 +244,15 @@ class _FakeExtractionProvider(ExtractionProvider):
         )
 
 
+class _FailingExtractionProvider(ExtractionProvider):
+    name = "failing"
+
+    def complete(self, messages: list[dict[str, str]]) -> str:
+        raise RuntimeError("provider unavailable")
+
+
 class TestExtractionService:
     def test_extract_from_record_uses_injected_provider(self, tmp_path: Path) -> None:
-        from app.extract.extraction_service import ExtractionService
-
         repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
         service = ExtractionService(candidate_repo=repo, provider=_FakeExtractionProvider())
 
@@ -255,6 +263,109 @@ class TestExtractionService:
         assert candidates[0].extractor_model == "fake"
         payload = json.loads(candidates[0].payload_json)
         assert payload["question"] == "如何请假？"
+
+
+class TestExtractionTaskService:
+    def test_run_next_extracts_candidates_and_completes_task(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        candidate_repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+        extraction_service = ExtractionService(
+            candidate_repo=candidate_repo,
+            provider=_FakeExtractionProvider(),
+        )
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=extraction_service,
+        )
+        sr = _make_source_record(source_system="manual_export")
+        sr_repo.upsert(sr)
+        task = task_repo.enqueue_for_source_record(sr, reason="new_source_record")
+
+        result = service.run_next(candidate_types=["faq"])
+
+        assert result is not None
+        assert result.task.extraction_task_id == task.extraction_task_id
+        assert result.task.status == "completed"
+        assert result.task.started_at is not None
+        assert result.task.finished_at is not None
+        assert json.loads(result.task.error_summary or "{}") == {"extracted_count": 1}
+        assert len(result.candidates) == 1
+        assert len(candidate_repo.list_by_source_record(sr.source_record_id)) == 1
+        assert task_repo.list_by_status("pending") == []
+
+    def test_run_task_fails_when_source_record_missing(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=ExtractionService(
+                candidate_repo=ExtractionCandidateRepo(storage_dir=tmp_path / "candidates"),
+                provider=_FakeExtractionProvider(),
+            ),
+        )
+        sr = _make_source_record(source_system="manual_export")
+        task = task_repo.enqueue_for_source_record(sr, reason="new_source_record")
+
+        result = service.run_task(task.extraction_task_id)
+
+        assert result is not None
+        assert result.task.status == "failed"
+        assert result.candidates == []
+        assert "source_record_not_found" in (result.task.error_summary or "")
+
+    def test_run_task_fails_when_provider_fails(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        candidate_repo = ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=ExtractionService(
+                candidate_repo=candidate_repo,
+                provider=_FailingExtractionProvider(),
+            ),
+        )
+        sr = _make_source_record(source_system="manual_export")
+        sr_repo.upsert(sr)
+        task = task_repo.enqueue_for_source_record(sr, reason="new_source_record")
+
+        result = service.run_task(task.extraction_task_id)
+
+        assert result is not None
+        assert result.task.status == "failed"
+        assert result.candidates == []
+        assert "RuntimeError: provider unavailable" in (
+            result.task.error_summary or ""
+        )
+        assert candidate_repo.list_by_source_record(sr.source_record_id) == []
+
+    def test_run_task_does_not_reprocess_completed_task(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+        task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        service = ExtractionTaskService(
+            task_repo=task_repo,
+            source_record_repo=sr_repo,
+            extraction_service=ExtractionService(
+                candidate_repo=ExtractionCandidateRepo(storage_dir=tmp_path / "candidates"),
+                provider=_FakeExtractionProvider(),
+            ),
+        )
+        sr = _make_source_record(source_system="manual_export")
+        task = task_repo.enqueue_for_source_record(sr, reason="new_source_record")
+        task_repo.update_status(task.extraction_task_id, "completed")
+
+        result = service.run_task(task.extraction_task_id)
+
+        assert result is not None
+        assert result.task.status == "completed"
+        assert result.candidates == []
 
 
 # ---------------------------------------------------------------------------
