@@ -14,6 +14,7 @@
 > P3.5.4 更新：SourceRecord 新增或内容更新时可写入 pending `ExtractionTask`，把重抽需求交给抽取层
 > P3.5.5 更新：`ExtractionTaskService` 可消费 pending task，调用抽取层生成新版 `ExtractionCandidate`，并写回 completed / failed 状态
 > P3.5.6 更新：`ExtractionTaskService.run_pending(limit=...)` 可批量消费 pending task，单个失败不拖垮队列，并返回 processed/completed/failed/skipped 统计
+> P3.5.7 更新：`CleanupTask` / `TombstoneCleanupService.run_pending(limit=...)` 可把 deleted/revoked/superseded SourceRecord 的 ES 物理删除接入可测试后台编排；向量清理保留 adapter 边界，未配置时显式 no-op
 
 ---
 
@@ -113,22 +114,27 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - SourceRecord 新增或内容更新后可产生 pending ExtractionTask，标记抽取层需要处理的新版本
 - ExtractionTask 可被消费并生成 ExtractionCandidate；失败会记录到 task 状态，不自动审核或发布
 - ExtractionTask 可按 limit 批量消费；单个失败不会阻塞后续 pending task
+- SourceRecord 删除 / 撤权 / 被新版本替代后可产生 pending CleanupTask
+- TombstoneCleanupService 可批量消费 CleanupTask，按 source_record_id 调用 ES 物理删除入口
+- 向量物理清理已预留可替换 backend；当前无独立向量库时以显式 skipped/no-op 写入任务结果
 
 剩余缺口：
 
 - ExtractionTask 尚未接常驻后台 worker / 定时器
-- ES / 向量物理删除仍只是最小入口，尚未接后台清理编排
+- CleanupTask 尚未接常驻后台 worker / 定时器
 
 证据：
 
 - `backend/app/sync/tombstone_handler.py`
+- `backend/app/sync/tombstone_cleanup.py`
+- `backend/app/storage/repositories/cleanup_task_repo.py`
 - `backend/app/storage/repositories/action_link_repo.py`
 - `backend/app/storage/repositories/dynamic_query_repo.py`
 - `backend/app/storage/repositories/knowledge_unit_repo.py`
 - `backend/app/indexing/elastic_indexer.py`
 - `backend/tests/test_phase3_sync.py`
 
-结论：**P0/P1 安全闭环已推进到发布层逻辑失效与旧版本退役**。运行时泄露和旧答案复用风险进一步下降；下一步应处理新版候选生成与 partial failure。
+结论：**P0/P1 安全闭环已推进到发布层逻辑失效、旧版本退役和物理清理任务编排**。运行时泄露和旧答案复用风险进一步下降；常驻后台调度仍留给部署形态处理。
 
 ---
 
@@ -338,7 +344,7 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - freshness_status 写入 trace
 - 有 action link 时返回跳转入口
 
-### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2 / P3.5.3 / P3.5.4 / P3.5.5 / P3.5.6）
+### P3.5：sync 到发布层/索引闭环（P1，已完成 P3.5.1 / P3.5.2 / P3.5.3 / P3.5.4 / P3.5.5 / P3.5.6 / P3.5.7）
 
 目标：
 
@@ -348,8 +354,10 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 已完成：内容变更后能产生待重抽任务信号
 - 已完成：ExtractionTask 可被消费并生成新版候选
 - 已完成：ExtractionTask 可批量消费并返回队列处理统计
+- 已完成：CleanupTask 可把 tombstone / superseded 记录接入 ES 物理删除编排
+- 已完成：向量物理清理具备 adapter 边界；当前无独立向量库时显式 no-op
 - 待完成：ExtractionTask 常驻后台 worker / 定时器
-- 待完成：ES/向量物理清理接后台编排
+- 待完成：CleanupTask 常驻后台 worker / 定时器
 
 验收：
 
@@ -359,7 +367,10 @@ Phase 3 第一轮不是没有落地；对象、repo、adapter、抽取、trace �
 - 已验收：新增 / 更新 SourceRecord 可产生 pending ExtractionTask，unchanged 不重复入队
 - 已验收：pending ExtractionTask 可生成 ExtractionCandidate，并写回 completed / failed
 - 已验收：批量消费 pending task 时，单个失败不影响后续任务
-- 待验收：新增/更新/删除三类同步结果都有完整发布层或索引侧可见效果
+- 已验收：删除 / 撤权 / 更新替代后可产生 pending CleanupTask
+- 已验收：CleanupTask 可触发 ES 物理删除；active SourceRecord 会被安全跳过
+- 已验收：批量消费 CleanupTask 时，单个失败不影响后续任务
+- 已验收：新增/更新/删除三类同步结果都有发布层或索引侧可见效果
 
 ---
 

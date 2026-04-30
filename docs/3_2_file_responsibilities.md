@@ -80,6 +80,19 @@
 - 不负责调用抽取 provider
 - 不负责创建 `ExtractionCandidate`
 
+#### `backend/app/storage/repositories/cleanup_task_repo.py`
+
+职责：
+
+- `CleanupTask` 的 CRUD
+- 在 SourceRecord 删除、撤权或被新版本替代后记录待物理清理任务
+- 按 `source_record_id` / `status` 查询待处理任务
+
+不负责：
+
+- 不负责直接调用 ES / 向量存储
+- 不负责决定 SourceRecord 是否应该逻辑失效
+
 #### `backend/app/storage/repositories/action_link_repo.py`
 
 职责：
@@ -191,6 +204,7 @@
 - 对比 `content_hash` 判定新增 / 更新 / 删除 / 不变
 - 内容更新时将旧 `SourceRecord` 关联的 KnowledgeUnit / ES 文档标为 `deprecated`
 - SourceRecord 新增或内容更新时可选写入 `ExtractionTask`，标记需要重抽
+- SourceRecord 内容更新导致旧版本 `superseded` 时可选写入 `CleanupTask`
 - 记录同步统计与局部失败：`success / partial_success / failed`，并写入 `error_summary`
 - 触发 tombstone 处理
 - 触发 ES / 向量写入
@@ -232,13 +246,31 @@
 
 - 接收 `SourceRecord` 的状态变更（`revoked / deleted`）
 - 传播到关联 `KnowledgeUnit` / `ActionLink` / `DynamicQuery`
-- 触发异步 ES / 向量清理
+- 写入待异步消费的 `CleanupTask`
 - `deleted` SourceRecord 对 KnowledgeUnit 传播为 `revoked`，保证运行时先不可见
 
 不负责：
 
 - 不负责同步流程编排
 - 不负责候选审核
+- 不负责直接执行物理删除
+
+#### `backend/app/sync/tombstone_cleanup.py`
+
+职责：
+
+- 读取 pending `CleanupTask`
+- 按 `limit` 批量消费 pending 任务并返回 `processed / completed / failed / skipped`
+- 删除前校验 SourceRecord 当前状态，active 记录必须跳过
+- 调用 ES `delete_by_source_record()` 执行物理删除
+- 通过可选 `vector_cleanup_backend` 预留向量库物理删除边界，未配置时显式 no-op
+- 将任务状态写回 `processing / completed / failed / skipped`
+
+不负责：
+
+- 不负责逻辑失效传播
+- 不负责常驻后台 worker / 定时器
+- 不绑定具体向量数据库实现
 
 ---
 
@@ -348,7 +380,7 @@
 - 写入时包含新字段
 - `import_batch_id / source_record_id / unit_version / fresh_until / stale_after` 必须进入 ES doc，供检索命中回传 provenance
 - 提供按 `source_record_id` 更新 `lifecycle_status` 的入口，支撑撤权 / 删除后的运行时不可见
-- 提供按 `source_record_id` 物理删除入口，供后续后台清理编排调用
+- 提供按 `source_record_id` 物理删除入口，供 `TombstoneCleanupService` 调用
 
 不改变：
 

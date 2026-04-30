@@ -211,13 +211,39 @@ pending → rejected   (审核拒绝)
 
 ---
 
-## 8. ImportBatch
+## 8. CleanupTask
 
 ### 8.1 语义
 
-一次同步 / 导入任务。记录批次级元信息、状态与追溯。
+SourceRecord 删除、撤权或被新版本替代后产生的物理清理任务。它不负责逻辑失效，只把已经不可见的来源记录交给后台清理编排。
 
 ### 8.2 字段定义
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---:|---|---|
+| `cleanup_task_id` | string | 是 | — | 清理任务 ID |
+| `tenant_id` | string | 是 | `"default"` | 租户标识 |
+| `source_record_id` | string | 是 | — | 需要物理清理的来源记录 |
+| `source_system` | string | 是 | — | 来源系统 |
+| `external_id` | string | 是 | — | 原系统记录 ID |
+| `reason` | enum | 是 | — | `source_record_deleted / source_record_revoked / source_record_superseded` |
+| `status` | enum | 是 | `"pending"` | `pending / processing / completed / failed / skipped` |
+| `source_status` | enum | 是 | — | 触发清理时的 SourceRecord 状态：`deleted / revoked / superseded` |
+| `import_batch_id` | string | 否 | `None` | 关联导入批次 |
+| `started_at` | datetime | 否 | `None` | 开始消费时间 |
+| `finished_at` | datetime | 否 | `None` | 消费完成时间 |
+| `error_summary` | text | 否 | `None` | ES / 向量 backend 的处理摘要或失败原因 |
+| `created_at` | datetime | 是 | — | 创建时间 |
+
+---
+
+## 9. ImportBatch
+
+### 9.1 语义
+
+一次同步 / 导入任务。记录批次级元信息、状态与追溯。
+
+### 9.2 字段定义
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
@@ -231,7 +257,7 @@ pending → rejected   (审核拒绝)
 | `record_count` | integer | 否 | `0` | 处理记录数 |
 | `error_summary` | text | 否 | `None` | JSON 摘要：`added / updated / unchanged / failed / errors` |
 
-### 8.3 状态流转
+### 9.3 状态流转
 
 ```text
 running → success          (全部成功)
@@ -241,9 +267,9 @@ running → failed           (全部失败)
 
 ---
 
-## 9. 枚举值汇总
+## 10. 枚举值汇总
 
-### 9.1 source_system
+### 10.1 source_system
 
 | 值 | 说明 |
 |---|---|
@@ -253,7 +279,7 @@ running → failed           (全部失败)
 | `confluence` | Confluence 知识库导出 |
 | `manual_export` | 手动导出 / 上传 |
 
-### 9.2 source_object_type
+### 10.2 source_object_type
 
 | 值 | 说明 |
 |---|---|
@@ -263,7 +289,7 @@ running → failed           (全部失败)
 | `policy_doc` | 制度文档 |
 | `process_doc` | 流程文档 |
 
-### 9.3 status（SourceRecord / ActionLink）
+### 10.3 status（SourceRecord / ActionLink）
 
 | 值 | 说明 |
 |---|---|
@@ -272,7 +298,7 @@ running → failed           (全部失败)
 | `deleted` | 已删除 |
 | `superseded` | 被新版本替代 |
 
-### 9.4 review_status（ExtractionCandidate）
+### 10.4 review_status（ExtractionCandidate）
 
 | 值 | 说明 |
 |---|---|
@@ -280,7 +306,7 @@ running → failed           (全部失败)
 | `approved` | 已通过 |
 | `rejected` | 已拒绝 |
 
-### 9.5 import_batch status
+### 10.5 import_batch status
 
 | 值 | 说明 |
 |---|---|
@@ -289,7 +315,7 @@ running → failed           (全部失败)
 | `partial_success` | 部分成功 |
 | `failed` | 全部失败 |
 
-### 9.6 extraction_task status
+### 10.6 extraction_task status
 
 | 值 | 说明 |
 |---|---|
@@ -298,7 +324,17 @@ running → failed           (全部失败)
 | `completed` | 已生成候选 |
 | `failed` | 消费失败 |
 
-### 9.7 scope_type（DynamicQuery）
+### 10.7 cleanup_task status
+
+| 值 | 说明 |
+|---|---|
+| `pending` | 等待消费 |
+| `processing` | 消费中 |
+| `completed` | 已完成物理清理 |
+| `failed` | 清理失败 |
+| `skipped` | 因安全边界或 backend 未配置而跳过 |
+
+### 10.8 scope_type（DynamicQuery）
 
 | 值 | 说明 |
 |---|---|
@@ -308,13 +344,13 @@ running → failed           (全部失败)
 
 ---
 
-## 10. SystemAdapter Protocol（运行时适配器接口）
+## 11. SystemAdapter Protocol（运行时适配器接口）
 
-### 10.1 语义
+### 11.1 语义
 
 `SystemAdapter` 是所有外部系统适配器的抽象协议（Protocol）。动态查询不直连具体外部系统，而是通过此协议解耦。任何新系统只需实现此协议即可接入。当前仓库已实现 `OdooAdapter` / `MockAdapter`，但它们是现有实现，不是架构边界本身。
 
-### 10.2 接口定义
+### 11.2 接口定义
 
 ```python
 class SystemAdapter(Protocol):
@@ -338,14 +374,14 @@ class SystemAdapter(Protocol):
         ...
 ```
 
-### 10.3 已实现适配器
+### 11.3 已实现适配器
 
 | 适配器 | 文件 | 传输方式 | 可配置项 |
 |---|---|---|---|
 | `OdooAdapter` | `runtime/odoo_adapter.py` | XML-RPC | `url` / `db` / `uid` / `password` / `model_fields_map` |
 | `MockAdapter` | `runtime/mock_adapter.py` | 内存 fixture | `fixtures` |
 
-### 10.4 OdooAdapter model_fields_map 格式
+### 11.4 OdooAdapter model_fields_map 格式
 
 ```python
 {
@@ -360,7 +396,7 @@ class SystemAdapter(Protocol):
 | `attendance_balance` | `hr.attendance` | `check_in, check_out, worked_hours` |
 | `crm_pipeline` | `crm.lead` | `name, expected_revenue, stage_id, probability` |
 
-### 10.5 如何新增适配器
+### 11.5 如何新增适配器
 
 1. 在 `backend/app/runtime/` 下新建文件（如 `dingtalk_adapter.py`）
 2. 实现 `SystemAdapter` Protocol 的 `name` 属性和 `fetch()` 方法
@@ -368,7 +404,7 @@ class SystemAdapter(Protocol):
 4. 在 `backend/app/config/settings.py` 添加该适配器所需环境变量（如有）
 5. 在种子数据中注册该适配器支持的 `resource_type`
 
-### 10.6 适配器选择配置
+### 11.6 适配器选择配置
 
 | 环境变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -380,7 +416,7 @@ class SystemAdapter(Protocol):
 
 ---
 
-## 11. Phase 2 → Phase 3 字段迁移说明
+## 12. Phase 2 → Phase 3 字段迁移说明
 
 | Phase 2 已有字段 | Phase 3 变化 | 说明 |
 |---|---|---|
@@ -392,6 +428,6 @@ class SystemAdapter(Protocol):
 
 ---
 
-## 12. 一句话收口
+## 13. 一句话收口
 
 Phase 3 的字段设计遵循：**新字段默认值保证 Phase 2 零回归，枚举值优先复用，新对象以 SourceRecord 为来源锚点，外部系统通过 Protocol 解耦。**

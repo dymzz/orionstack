@@ -14,11 +14,13 @@ from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.import_batch_repo import ImportBatchRepo
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
+from app.storage.repositories.cleanup_task_repo import CleanupTaskRepo
 
 
 _SUPERSEDED_KNOWLEDGE_UNIT_STATUS = "deprecated"
 _NEW_SOURCE_EXTRACTION_REASON = "new_source_record"
 _UPDATED_SOURCE_EXTRACTION_REASON = "source_record_updated"
+_SUPERSEDED_CLEANUP_REASON = "source_record_superseded"
 _SyncResult: TypeAlias = Literal["added", "updated", "unchanged"]
 
 
@@ -30,12 +32,14 @@ class SyncService:
         *,
         knowledge_unit_repo: KnowledgeUnitRepository | None = None,
         extraction_task_repo: ExtractionTaskRepo | None = None,
+        cleanup_task_repo: CleanupTaskRepo | None = None,
         elastic_indexer=None,
     ) -> None:
         self._sr_repo = source_record_repo
         self._ib_repo = import_batch_repo
         self._ku_repo = knowledge_unit_repo
         self._extraction_task_repo = extraction_task_repo
+        self._cleanup_task_repo = cleanup_task_repo
         self._elastic_indexer = elastic_indexer
 
     def sync_file(
@@ -117,6 +121,11 @@ class SyncService:
 
         self._deprecate_published_units(existing.source_record_id)
         self._sr_repo.update_status(existing.source_record_id, "superseded")
+        self._enqueue_cleanup_task(
+            existing,
+            reason=_SUPERSEDED_CLEANUP_REASON,
+            source_status="superseded",
+        )
         self._sr_repo.upsert(record)
         self._enqueue_extraction_task(
             record,
@@ -180,6 +189,22 @@ class SyncService:
             record,
             reason=reason,
             supersedes_source_record_id=supersedes_source_record_id,
+        )
+
+    def _enqueue_cleanup_task(
+        self,
+        record: SourceRecord,
+        *,
+        reason: str,
+        source_status: str,
+    ) -> None:
+        if self._cleanup_task_repo is None:
+            return
+
+        self._cleanup_task_repo.enqueue_for_source_record(
+            record,
+            reason=reason,
+            source_status=source_status,
         )
 
 

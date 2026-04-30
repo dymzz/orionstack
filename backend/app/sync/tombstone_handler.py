@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 from app.storage.repositories.action_link_repo import ActionLinkRepo
+from app.storage.repositories.cleanup_task_repo import CleanupTaskRepo
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 
 _DYNAMIC_QUERY_TOMBSTONE_STATUS = "revoked"
 _KNOWLEDGE_UNIT_TOMBSTONE_STATUS = "revoked"
+_CLEANUP_TASK_REASONS = {
+    "deleted": "source_record_deleted",
+    "revoked": "source_record_revoked",
+}
 
 
 def handle_tombstone(
@@ -17,6 +22,7 @@ def handle_tombstone(
     action_link_repo: ActionLinkRepo | None = None,
     dynamic_query_repo: DynamicQueryRepo | None = None,
     knowledge_unit_repo: KnowledgeUnitRepository | None = None,
+    cleanup_task_repo: CleanupTaskRepo | None = None,
     elastic_indexer=None,
 ) -> list[str]:
     source_record_repo.update_status(source_record_id, new_status)
@@ -53,5 +59,14 @@ def handle_tombstone(
             source_record_id,
             _KNOWLEDGE_UNIT_TOMBSTONE_STATUS,
         )
+
+    if cleanup_task_repo is not None and new_status in _CLEANUP_TASK_REASONS:
+        record = source_record_repo.get(source_record_id)
+        if record is not None:
+            cleanup_task_repo.enqueue_for_source_record(
+                record,
+                reason=_CLEANUP_TASK_REASONS[new_status],
+                source_status=new_status,
+            )
 
     return affected_ids

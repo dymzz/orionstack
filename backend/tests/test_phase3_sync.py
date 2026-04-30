@@ -17,6 +17,7 @@ from app.storage.models.import_batch import ImportBatch
 from app.storage.models.extraction_candidate import ExtractionCandidate
 from app.storage.repositories.action_link_repo import ActionLinkRepo
 from app.storage.repositories.chunk_repo import ChunkRepository
+from app.storage.repositories.cleanup_task_repo import CleanupTaskRepo
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
 from app.storage.repositories.faq_repo import FAQRepository
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
@@ -26,6 +27,7 @@ from app.storage.repositories.extraction_candidate_repo import ExtractionCandida
 from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
 from app.sync.freshness import check_freshness
 from app.sync.sync_parser import parse_export_file
+from app.sync.tombstone_cleanup import TombstoneCleanupService
 from app.sync.tombstone_handler import handle_tombstone
 from app.sync.sync_service import SyncService
 from app.extract.llm_extractor import extract_candidates
@@ -210,6 +212,34 @@ class TestExtractionTaskRepo:
 
 
 # ---------------------------------------------------------------------------
+# CleanupTaskRepo
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupTaskRepo:
+    def test_enqueue_for_source_record_creates_pending_task(
+        self, tmp_path: Path
+    ) -> None:
+        repo = CleanupTaskRepo(storage_dir=tmp_path)
+        record = _make_source_record("sr-001", "ext-001", import_batch_id="ib-001")
+
+        task = repo.enqueue_for_source_record(
+            record,
+            reason="source_record_deleted",
+            source_status="deleted",
+        )
+
+        got = repo.get(task.cleanup_task_id)
+        assert got is not None
+        assert got.status == "pending"
+        assert got.source_record_id == "sr-001"
+        assert got.import_batch_id == "ib-001"
+        assert got.reason == "source_record_deleted"
+        assert got.source_status == "deleted"
+        assert repo.list_by_status("pending") == [got]
+
+
+# ---------------------------------------------------------------------------
 # Freshness
 # ---------------------------------------------------------------------------
 
@@ -334,11 +364,13 @@ class TestSyncService:
         ku_repo = KnowledgeUnitRepository(faq_repo=faq_repo, chunk_repo=chunk_repo)
         fake_es = _FakeElasticsearch()
         task_repo = ExtractionTaskRepo(storage_dir=tmp_path / "tasks")
+        cleanup_task_repo = CleanupTaskRepo(storage_dir=tmp_path / "cleanup_tasks")
         svc = SyncService(
             sr_repo,
             ib_repo,
             knowledge_unit_repo=ku_repo,
             extraction_task_repo=task_repo,
+            cleanup_task_repo=cleanup_task_repo,
             elastic_indexer=ElasticIndexer(fake_es),
         )
 
@@ -366,6 +398,11 @@ class TestSyncService:
         assert tasks[0].reason == "source_record_updated"
         assert tasks[0].supersedes_source_record_id == "sr-001"
         assert tasks[0].source_record_id != "sr-001"
+        cleanup_tasks = cleanup_task_repo.list_by_status("pending")
+        assert len(cleanup_tasks) == 1
+        assert cleanup_tasks[0].source_record_id == "sr-001"
+        assert cleanup_tasks[0].reason == "source_record_superseded"
+        assert cleanup_tasks[0].source_status == "superseded"
 
     def test_sync_file_unchanged_record_does_not_enqueue_extraction_task(
         self, tmp_path: Path
@@ -620,6 +657,24 @@ class TestTombstone:
             "lifecycle_status": "revoked"
         }
 
+    def test_tombstone_enqueues_cleanup_task(self, tmp_path: Path) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        cleanup_task_repo = CleanupTaskRepo(storage_dir=tmp_path / "cleanup_tasks")
+
+        handle_tombstone(
+            "sr-001",
+            "deleted",
+            sr_repo,
+            cleanup_task_repo=cleanup_task_repo,
+        )
+
+        tasks = cleanup_task_repo.list_by_status("pending")
+        assert len(tasks) == 1
+        assert tasks[0].source_record_id == "sr-001"
+        assert tasks[0].reason == "source_record_deleted"
+        assert tasks[0].source_status == "deleted"
+
     def test_local_retriever_skips_revoked_published_units(
         self, tmp_path: Path
     ) -> None:
@@ -632,6 +687,115 @@ class TestTombstone:
         faq_repo.update_status_by_source_record("sr-001", "revoked")
 
         assert retriever.search("上传 文档", min_score=1) is None
+
+
+# ---------------------------------------------------------------------------
+# Tombstone cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestTombstoneCleanupService:
+    def test_run_pending_deletes_elastic_and_marks_vector_noop(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        sr_repo.upsert(_make_source_record("sr-001", "ext-001"))
+        sr_repo.update_status("sr-001", "deleted")
+        cleanup_task_repo = CleanupTaskRepo(storage_dir=tmp_path / "cleanup_tasks")
+        cleanup_task_repo.enqueue_for_source_record(
+            sr_repo.get("sr-001"),
+            reason="source_record_deleted",
+        )
+        fake_es = _FakeElasticsearch()
+        service = TombstoneCleanupService(
+            cleanup_task_repo=cleanup_task_repo,
+            source_record_repo=sr_repo,
+            elastic_indexer=ElasticIndexer(fake_es),
+        )
+
+        result = service.run_pending(limit=10)
+
+        assert result.processed == 1
+        assert result.completed == 1
+        assert result.failed == 0
+        assert result.skipped == 0
+        assert fake_es.deleted_by_query[0]["body"]["query"] == {
+            "term": {"source_record_id": "sr-001"}
+        }
+        completed_task = cleanup_task_repo.list_by_status("completed")[0]
+        summary = json.loads(completed_task.error_summary or "{}")
+        assert summary["elastic"]["status"] == "completed"
+        assert summary["vector"] == {
+            "backend": "vector",
+            "status": "skipped",
+            "detail": {"reason": "vector_cleanup_backend_not_configured"},
+            "error_summary": None,
+        }
+
+    def test_run_pending_skips_active_source_record(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        record = _make_source_record("sr-001", "ext-001")
+        sr_repo.upsert(record)
+        cleanup_task_repo = CleanupTaskRepo(storage_dir=tmp_path / "cleanup_tasks")
+        cleanup_task_repo.enqueue_for_source_record(
+            record,
+            reason="source_record_deleted",
+            source_status="deleted",
+        )
+        fake_es = _FakeElasticsearch()
+        service = TombstoneCleanupService(
+            cleanup_task_repo=cleanup_task_repo,
+            source_record_repo=sr_repo,
+            elastic_indexer=ElasticIndexer(fake_es),
+        )
+
+        result = service.run_pending(limit=10)
+
+        assert result.processed == 1
+        assert result.completed == 0
+        assert result.failed == 0
+        assert result.skipped == 1
+        assert fake_es.deleted_by_query == []
+        skipped_task = cleanup_task_repo.list_by_status("skipped")[0]
+        summary = json.loads(skipped_task.error_summary or "{}")
+        assert summary["source_status"] == "active"
+        assert summary["elastic"]["detail"] == {
+            "reason": "source_status_not_cleanup_eligible"
+        }
+
+    def test_run_pending_continues_after_cleanup_failure(
+        self, tmp_path: Path
+    ) -> None:
+        sr_repo = SourceRecordRepo(storage_dir=tmp_path / "sr")
+        cleanup_task_repo = CleanupTaskRepo(storage_dir=tmp_path / "cleanup_tasks")
+        for record in [
+            _make_source_record("sr-bad", "ext-bad"),
+            _make_source_record("sr-ok", "ext-ok"),
+        ]:
+            sr_repo.upsert(record)
+            sr_repo.update_status(record.source_record_id, "deleted")
+            cleanup_task_repo.enqueue_for_source_record(
+                sr_repo.get(record.source_record_id),
+                reason="source_record_deleted",
+            )
+        backend = _SourceAwareCleanupBackend(fail_source_record_id="sr-bad")
+        service = TombstoneCleanupService(
+            cleanup_task_repo=cleanup_task_repo,
+            source_record_repo=sr_repo,
+            elastic_indexer=backend,
+        )
+
+        result = service.run_pending(limit=10)
+
+        assert result.processed == 2
+        assert result.completed == 1
+        assert result.failed == 1
+        assert result.skipped == 0
+        assert backend.deleted_source_record_ids == ["sr-ok"]
+        assert len(cleanup_task_repo.list_by_status("failed")) == 1
+        assert len(cleanup_task_repo.list_by_status("completed")) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -906,4 +1070,16 @@ class _FakeElasticsearch:
 
     def delete_by_query(self, **kwargs) -> dict[str, int]:
         self.deleted_by_query.append(kwargs)
+        return {"deleted": 1}
+
+
+class _SourceAwareCleanupBackend:
+    def __init__(self, *, fail_source_record_id: str | None = None) -> None:
+        self._fail_source_record_id = fail_source_record_id
+        self.deleted_source_record_ids: list[str] = []
+
+    def delete_by_source_record(self, source_record_id: str) -> dict[str, int]:
+        if source_record_id == self._fail_source_record_id:
+            raise RuntimeError("cleanup failed")
+        self.deleted_source_record_ids.append(source_record_id)
         return {"deleted": 1}
