@@ -152,9 +152,47 @@ python scripts/run-phase2-regression.py
 
 ## 生产部署
 
-### 1. 构建前端
+### 1. Docker Compose（推荐）
 
-> 以下步骤需要 Node.js 18+。构建完成后生产环境不再依赖 Node.js。
+生产 compose 会启动：
+
+- `frontend`：Nginx 静态站点 + `/api/*` 反代
+- `backend`：FastAPI / Uvicorn（`prod` 模式）
+- `elasticsearch`：单机 ES + IK 镜像
+
+先准备生产环境变量：
+
+```text
+cp .env.prod.example .env.prod
+```
+
+必须修改 `.env.prod` 中的：
+
+- `ORIONSTACK_ADMIN_PASSWORD`
+- `ORIONSTACK_ADMIN_TOKEN_SECRET`（至少 24 字符）
+- `ORIONSTACK_CORS_ORIGINS`（部署域名，例如 `https://app.example.com`）
+
+启动：
+
+```text
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+默认访问 `http://localhost:8080`，可通过 `ORIONSTACK_HTTP_PORT` 修改宿主机端口。
+
+检查：
+
+```text
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+```
+
+持久化数据使用 Docker named volumes，包括 ES 数据、问答记录、trace、hard case、上传文档、SourceRecord 与候选数据。首次启动时，后端会在 action link / dynamic query 持久卷为空时拷贝镜像内默认 JSONL 配置。
+
+### 2. 手动部署（可选）
+
+如不使用 Docker Compose，也可以手动构建前端并启动后端。
+
+构建前端：
 
 ```text
 npm --prefix frontend run build
@@ -162,7 +200,7 @@ npm --prefix frontend run build
 
 构建产物在 `frontend/dist/`，由 Nginx 或其他静态文件服务提供。
 
-### 2. 启动后端
+启动后端：
 
 ```text
 python scripts/start-backend.py
@@ -201,15 +239,15 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 当前抽取 provider 的模型名 |
 | `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 动态查询适配器：`mock` / `odoo` / 自定义 |
 | `ORIONSTACK_ADMIN_USERNAME` | `admin` | 管理入口用户名，生产必须覆盖 |
-| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖 |
-| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖；prod 使用默认值会拒绝启动 |
+| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖且至少 24 字符 |
 | `ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS` | `28800` | 管理 token 有效期（秒） |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 
 兼容说明：旧的 `ORIONSTACK_QWEN_API_*`、`ORIONSTACK_QWEN_API_KEY`、`DASHSCOPE_API_KEY` / `QWEN_API_KEY` 仍可作为回退配置读取，但不再是唯一入口。
 
-生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`，本地可在 `.env` 中写：
+生产环境必须设置 `ORIONSTACK_CORS_ORIGINS`，例如：
 
 ```text
 ORIONSTACK_CORS_ORIGINS=https://app.example.com
@@ -219,10 +257,11 @@ ORIONSTACK_CORS_ORIGINS=https://app.example.com
 
 - Debug 信息不返回前端
 - `/admin/*` 与对应管理 API 需要管理员登录
+- `prod` 模式会校验管理认证配置：默认密码、默认 token secret 或过短 secret 会导致后端拒绝启动
 - `prod` 模式下，即使管理员已登录，`/api/chat/records`、`/api/chat/feedback`、trace 与 hard case 调试接口仍按隐藏处理
 - 前端问答页不展示 Debug 面板与最近记录区
 
-### 5. Nginx 参考
+### 5. Nginx 参考（手动部署）
 
 最小 Nginx 配置示例：
 

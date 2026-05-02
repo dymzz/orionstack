@@ -70,6 +70,14 @@ def _resolve_bool(env_name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes"}
 
 
+_INSECURE_ADMIN_PASSWORDS = {"", "admin", "password", "changeme"}
+_INSECURE_ADMIN_TOKEN_SECRETS = {
+    "",
+    "orionstack-dev-secret",
+    "change-this-in-production",
+}
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = field(
@@ -248,6 +256,31 @@ class Settings:
     @property
     def chat_record_view_enabled(self) -> bool:
         return self.app_mode in {"demo", "dev"}
+
+    def production_config_errors(self) -> list[str]:
+        if self.app_mode != "prod":
+            return []
+
+        errors: list[str] = []
+        if self.admin_password.strip().lower() in _INSECURE_ADMIN_PASSWORDS:
+            errors.append(
+                "ORIONSTACK_ADMIN_PASSWORD must be changed for prod mode"
+            )
+        if self.admin_token_secret.strip() in _INSECURE_ADMIN_TOKEN_SECRETS:
+            errors.append(
+                "ORIONSTACK_ADMIN_TOKEN_SECRET must be changed for prod mode"
+            )
+        if len(self.admin_token_secret.strip()) < 24:
+            errors.append(
+                "ORIONSTACK_ADMIN_TOKEN_SECRET must be at least 24 characters in prod mode"
+            )
+        return errors
+
+    def assert_production_safe(self) -> None:
+        errors = self.production_config_errors()
+        if errors:
+            joined = "; ".join(errors)
+            raise RuntimeError(f"Unsafe production configuration: {joined}")
 
     @property
     def qwen_api_base(self) -> str:

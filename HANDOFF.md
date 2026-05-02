@@ -217,8 +217,8 @@ python scripts/dev-demo.py
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 是否启用 planner |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 是否启用 fast track |
 | `ORIONSTACK_ADMIN_USERNAME` | `admin` | 管理入口用户名，生产必须覆盖 |
-| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖 |
-| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖；prod 使用默认值会拒绝启动 |
+| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖且至少 24 字符 |
 | `ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS` | `28800` | 管理 token 有效期（秒） |
 | `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 当前实现可选 `mock` 或 `odoo`，后续可扩展更多 adapter |
 | `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | 当前 OdooAdapter 示例地址 |
@@ -238,7 +238,7 @@ python scripts/dev-demo.py
 python scripts/run-phase2-regression.py
 ```
 
-当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **407 passed, 21 skipped, 9 xfailed**。
+当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **410 passed, 21 skipped, 9 xfailed**。
 
 live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
@@ -317,6 +317,17 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 - 受保护 API：`/api/chat/records`、`/api/chat/feedback`、`/api/chat/traces/*`、`/api/chat/hard-cases`、`/api/extraction/*`
 - token 机制：HMAC 签名 Bearer token，本地存储在前端 `localStorage`
 - 默认账号密码：`admin` / `admin`，仅用于本地 demo；生产必须覆盖 `ORIONSTACK_ADMIN_PASSWORD` 与 `ORIONSTACK_ADMIN_TOKEN_SECRET`
+- prod 启动保护：`settings.assert_production_safe()` 会在 FastAPI lifespan 开始时校验默认密码、默认 token secret 和过短 secret；不安全时拒绝启动
+
+### 6.8 生产部署收口
+
+- 推荐入口：`docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build`
+- 示例环境文件：`.env.prod.example`
+- 后端镜像：`docker/backend.Dockerfile`
+- 前端镜像：`docker/frontend.Dockerfile`
+- Nginx SPA + API 反代配置：`docker/nginx/orionstack.conf`
+- 持久化：`docker-compose.prod.yml` 使用 named volumes 保存 ES、chat records、feedback、trace、hard case、uploads、SourceRecord、ExtractionCandidate、ActionLink、DynamicQuery 等数据
+- 首次部署保护：后端 entrypoint 会在 action link / dynamic query 持久卷为空时拷贝镜像内默认 JSONL 配置
 
 ---
 
@@ -406,7 +417,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 - 多系统适配器（钉钉、飞书、Zendesk、Confluence）
 - 生产数据库（替换 JSONL）
 - 前端 trace / hard case 管理 UX 改进
-- 生产部署配置（容器化、CI/CD、监控）
+- CI/CD 与监控
 
 ---
 
@@ -425,4 +436,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，管理入口已具备最小认证保护，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 407 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，管理入口已具备最小认证保护，生产部署已有 Docker Compose 收口，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 410 passed, 21 skipped, 9 xfailed），系统可一键启动（开发：`python scripts/dev-demo.py`；生产：`docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**

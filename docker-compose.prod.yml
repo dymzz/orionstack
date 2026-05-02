@@ -1,0 +1,88 @@
+services:
+  elasticsearch:
+    build:
+      context: ./docker/elasticsearch
+    image: orionstack-elasticsearch:8.17.0-ik
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: ${ORIONSTACK_ES_JAVA_OPTS:--Xms512m -Xmx512m}
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: orionstack-backend:prod
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    environment:
+      ORIONSTACK_APP_MODE: prod
+      ORIONSTACK_HOST: 0.0.0.0
+      ORIONSTACK_PORT: 8000
+      ORIONSTACK_CORS_ORIGINS: ${ORIONSTACK_CORS_ORIGINS:-http://localhost:8080}
+      ORIONSTACK_SEARCH_BACKEND: elasticsearch
+      ORIONSTACK_ELASTIC_URL: http://elasticsearch:9200
+      ORIONSTACK_ELASTIC_INDEX: ${ORIONSTACK_ELASTIC_INDEX:-knowledge_units_v1}
+      ORIONSTACK_ENABLE_QUERY_PLANNER: ${ORIONSTACK_ENABLE_QUERY_PLANNER:-true}
+      ORIONSTACK_ENABLE_FAST_TRACK: ${ORIONSTACK_ENABLE_FAST_TRACK:-true}
+      ORIONSTACK_PLANNER_PROVIDER: ${ORIONSTACK_PLANNER_PROVIDER:-local}
+      ORIONSTACK_PLANNER_API_BASE: ${ORIONSTACK_PLANNER_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ORIONSTACK_PLANNER_API_MODEL: ${ORIONSTACK_PLANNER_API_MODEL:-qwen-plus}
+      ORIONSTACK_PLANNER_API_KEY: ${ORIONSTACK_PLANNER_API_KEY:-}
+      ORIONSTACK_EXTRACTION_PROVIDER: ${ORIONSTACK_EXTRACTION_PROVIDER:-openai_compatible}
+      ORIONSTACK_EXTRACTION_API_BASE: ${ORIONSTACK_EXTRACTION_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ORIONSTACK_EXTRACTION_API_MODEL: ${ORIONSTACK_EXTRACTION_API_MODEL:-qwen-plus}
+      ORIONSTACK_EXTRACTION_API_KEY: ${ORIONSTACK_EXTRACTION_API_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      ORIONSTACK_DYNAMIC_QUERY_ADAPTER: ${ORIONSTACK_DYNAMIC_QUERY_ADAPTER:-mock}
+      ORIONSTACK_ADMIN_USERNAME: ${ORIONSTACK_ADMIN_USERNAME:-admin}
+      ORIONSTACK_ADMIN_PASSWORD: ${ORIONSTACK_ADMIN_PASSWORD:?Set ORIONSTACK_ADMIN_PASSWORD before production deployment}
+      ORIONSTACK_ADMIN_TOKEN_SECRET: ${ORIONSTACK_ADMIN_TOKEN_SECRET:?Set ORIONSTACK_ADMIN_TOKEN_SECRET before production deployment}
+      ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS: ${ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS:-28800}
+    volumes:
+      - backend_chat_records:/app/backend/app/storage/chat_records
+      - backend_feedback:/app/backend/app/storage/feedback
+      - backend_retrieval_traces:/app/backend/app/storage/retrieval_traces
+      - backend_hard_cases:/app/backend/app/storage/hard_cases
+      - backend_documents:/app/backend/app/storage/documents
+      - backend_chunks:/app/backend/app/storage/chunks
+      - backend_uploads:/app/backend/app/storage/uploads
+      - backend_source_records:/app/backend/app/storage/source_records
+      - backend_extraction_candidates:/app/backend/app/storage/extraction_candidates
+      - backend_action_links:/app/backend/app/storage/action_links
+      - backend_dynamic_queries:/app/backend/app/storage/dynamic_queries
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: orionstack-frontend:prod
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${ORIONSTACK_HTTP_PORT:-8080}:80"
+
+volumes:
+  es_data:
+  backend_chat_records:
+  backend_feedback:
+  backend_retrieval_traces:
+  backend_hard_cases:
+  backend_documents:
+  backend_chunks:
+  backend_uploads:
+  backend_source_records:
+  backend_extraction_candidates:
+  backend_action_links:
+  backend_dynamic_queries:

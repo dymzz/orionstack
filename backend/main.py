@@ -22,6 +22,8 @@ async def lifespan(app: FastAPI):
     app.state.elastic_indexed_count = 0
     app.state.elastic_indexing_error = None
 
+    settings.assert_production_safe()
+
     try:
         if settings.search_backend == "elasticsearch":
             es = Elasticsearch(
