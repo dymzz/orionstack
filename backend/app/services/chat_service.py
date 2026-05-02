@@ -924,6 +924,8 @@ class ChatService:
         source_record_id: str | None = None,
         import_batch_id: str | None = None,
         unit_version: int | None = None,
+        source_updated_at: str | None = None,
+        source_record_status: str | None = None,
         dynamic_query_key: str | None = None,
         freshness_status: str | None = None,
     ) -> DebugInfo | None:
@@ -955,6 +957,8 @@ class ChatService:
             source_record_id=source_record_id,
             import_batch_id=import_batch_id,
             unit_version=unit_version,
+            source_updated_at=source_updated_at,
+            source_record_status=source_record_status,
             dynamic_query_key=dynamic_query_key,
             freshness_status=freshness_status,
         )
@@ -965,6 +969,7 @@ class ChatService:
             "source_record_id": getattr(hit, "source_record_id", "") or None,
             "import_batch_id": getattr(hit, "import_batch_id", "") or None,
             "unit_version": int(getattr(hit, "unit_version", 1) or 1),
+            "source_updated_at": getattr(hit, "source_updated_at", "") or None,
         }
 
     @staticmethod
@@ -973,6 +978,7 @@ class ChatService:
             "source_record_id": item.get("source_record_id") or None,
             "import_batch_id": item.get("import_batch_id") or None,
             "unit_version": int(item.get("unit_version") or 1),
+            "source_updated_at": item.get("source_updated_at") or None,
         }
 
     def _try_dynamic_query(

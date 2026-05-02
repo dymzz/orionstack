@@ -72,6 +72,8 @@ class DebugInfo(BaseModel):
     source_record_id: str | None = None
     import_batch_id: str | None = None
     unit_version: int | None = None
+    source_updated_at: str | None = None
+    source_record_status: str | None = None
     dynamic_query_key: str | None = None
     freshness_status: str | None = None
 

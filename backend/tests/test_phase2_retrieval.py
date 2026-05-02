@@ -375,6 +375,7 @@ def test_lexical_retriever_builds_expected_filters_and_maps_hits() -> None:
                             "source_record_id": "sr-001",
                             "import_batch_id": "ib-001",
                             "unit_version": 2,
+                            "source_updated_at": "2026-05-01T00:00:00Z",
                             "fresh_until": "2026-06-01T00:00:00Z",
                             "stale_after": "2026-07-01T00:00:00Z",
                         },
@@ -399,6 +400,7 @@ def test_lexical_retriever_builds_expected_filters_and_maps_hits() -> None:
     assert hits[0].source_record_id == "sr-001"
     assert hits[0].import_batch_id == "ib-001"
     assert hits[0].unit_version == 2
+    assert hits[0].source_updated_at == "2026-05-01T00:00:00Z"
     assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
     assert hits[0].stale_after == "2026-07-01T00:00:00Z"
     assert len(es.calls) == 1
@@ -485,6 +487,7 @@ def test_vector_retriever_scores_and_orders_candidates_from_filtered_es_docs() -
                             "source_record_id": "sr-leave-001",
                             "import_batch_id": "ib-leave-001",
                             "unit_version": 4,
+                            "source_updated_at": "2026-05-02T00:00:00Z",
                             "fresh_until": "2026-06-01T00:00:00Z",
                             "stale_after": "2026-07-01T00:00:00Z",
                         }
@@ -518,6 +521,7 @@ def test_vector_retriever_scores_and_orders_candidates_from_filtered_es_docs() -
     assert hits[0].source_record_id == "sr-leave-001"
     assert hits[0].import_batch_id == "ib-leave-001"
     assert hits[0].unit_version == 4
+    assert hits[0].source_updated_at == "2026-05-02T00:00:00Z"
     assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
     assert hits[0].stale_after == "2026-07-01T00:00:00Z"
     assert es.calls[0]["body"]["query"]["bool"]["filter"] == [
@@ -544,6 +548,7 @@ def test_hybrid_retriever_preserves_vector_only_provenance() -> None:
         source_record_id="sr-vector-001",
         import_batch_id="ib-vector-001",
         unit_version=5,
+        source_updated_at="2026-05-03T00:00:00Z",
         fresh_until="2026-06-01T00:00:00Z",
         stale_after="2026-07-01T00:00:00Z",
     )
@@ -563,6 +568,7 @@ def test_hybrid_retriever_preserves_vector_only_provenance() -> None:
     assert hits[0].source_record_id == "sr-vector-001"
     assert hits[0].import_batch_id == "ib-vector-001"
     assert hits[0].unit_version == 5
+    assert hits[0].source_updated_at == "2026-05-03T00:00:00Z"
     assert hits[0].fresh_until == "2026-06-01T00:00:00Z"
     assert hits[0].stale_after == "2026-07-01T00:00:00Z"
 

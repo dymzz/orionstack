@@ -1,7 +1,7 @@
 # OrionStack 交接文档
 
 > 版本：v1
-> 日期：2026-04-26
+> 日期：2026-05-02
 > 目的：为下一任开发者/AI 提供项目全貌、当前状态、关键决策与上手路径
 
 ---
@@ -157,8 +157,8 @@ orionstack/
 │       └── types/
 │           ├── chat.ts                 #   问答类型
 │           └── admin.ts                #   管理类型
-├── scripts/                            # 16 个脚本（见 scripts/README.md）
-├── docs/                               # 设计 + 进度 + 字段文档
+├── scripts/                            # 19 个脚本（见 scripts/README.md）
+├── docs/                               # 设计 + 进度 + 职责 + 字段 + 契约审计文档
 ├── docker-compose.yml                  # Elasticsearch + Odoo 参考环境
 ├── .env.example                        # 环境变量参考
 └── HANDOFF.md                          # 本文件
@@ -234,7 +234,7 @@ python scripts/dev-demo.py
 python scripts/run-phase2-regression.py
 ```
 
-当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。全量后端测试基线：**353 passed, 21 skipped, 9 xfailed**（2026-04-26）。
+当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **402 passed, 21 skipped, 9 xfailed**。
 
 live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
@@ -356,6 +356,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 | Phase 3 推进状态 | `docs/3_1_progress.md` |
 | Phase 3 文件职责 | `docs/3_2_file_responsibilities.md` |
 | Phase 3 字段定义 | `docs/3_3_field_definitions.md` |
+| Phase 3 契约审计 | `docs/3_4_contract_audit.md` |
 | 文档接入边界 | `docs/designs/document_ingestion_boundary.md` |
 | 文档库标准 | `docs/designs/document_library/` |
 | 脚本用法 | `scripts/README.md` |
@@ -368,6 +369,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 3. `docs/designs/3_system_design.md`（当前阶段设计）
 4. `docs/3_1_progress.md`（推进状态）
 5. `docs/3_2_file_responsibilities.md`（文件边界）
+6. `docs/3_4_contract_audit.md`（契约审计）
 
 ---
 
@@ -384,7 +386,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 11. 后续方向（未排优先级）
 
-以下方向在 `3_system_design.md §4` 中标记为"暂缓"：
+以下方向在 `3_system_design.md §4` 中标记为"暂缓"，属于 Phase 3 第一轮完成后的产品化 / 生产化扩展，不是 Phase 3 未完成项：
 
 - 全自动发布（不经人工审核直接上线）
 - 多租户 RBAC / ABAC 权限
@@ -412,4 +414,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（全量后端：353 passed, 21 skipped, 9 xfailed；快速回归入口：`python scripts/run-phase2-regression.py`），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段四层），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 402 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**

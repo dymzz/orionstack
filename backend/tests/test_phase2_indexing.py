@@ -81,6 +81,7 @@ def _build_unit(unit_id: str = "faq-001") -> KnowledgeUnit:
         source_record_id="sr-001",
         import_batch_id="ib-001",
         unit_version=2,
+        source_updated_at="2026-05-01T00:00:00Z",
     )
 
 
@@ -104,6 +105,10 @@ def test_elastic_indexer_ensure_index_uses_ik_mapping_when_requested() -> None:
     assert MAPPING_FALLBACK["mappings"]["properties"]["import_batch_id"] == {
         "type": "keyword"
     }
+    assert MAPPING["mappings"]["properties"]["source_updated_at"]["type"] == "date"
+    assert MAPPING_FALLBACK["mappings"]["properties"]["source_updated_at"] == {
+        "type": "keyword"
+    }
 
 
 def test_elastic_indexer_indexes_units_and_refreshes_index() -> None:
@@ -118,6 +123,7 @@ def test_elastic_indexer_indexes_units_and_refreshes_index() -> None:
     assert es.indexed[0]["body"]["source_record_id"] == "sr-001"
     assert es.indexed[0]["body"]["import_batch_id"] == "ib-001"
     assert es.indexed[0]["body"]["unit_version"] == 2
+    assert es.indexed[0]["body"]["source_updated_at"] == "2026-05-01T00:00:00Z"
     assert es.indices.refreshed == ["knowledge_units_v1"]
 
 

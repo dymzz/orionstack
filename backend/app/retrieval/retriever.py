@@ -11,6 +11,7 @@ _PHASE3_LOCAL_METADATA_FIELDS = (
     "source_record_id",
     "import_batch_id",
     "unit_version",
+    "source_updated_at",
     "fresh_until",
     "stale_after",
 )

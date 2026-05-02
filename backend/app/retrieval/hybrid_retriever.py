@@ -45,6 +45,7 @@ class HybridHit:
     source_record_id: str = ""
     import_batch_id: str = ""
     unit_version: int = 1
+    source_updated_at: str = ""
     fresh_until: str = ""
     stale_after: str = ""
 
@@ -207,6 +208,7 @@ class HybridRetriever:
                     source_record_id=base_hit.source_record_id,
                     import_batch_id=base_hit.import_batch_id,
                     unit_version=base_hit.unit_version,
+                    source_updated_at=base_hit.source_updated_at,
                     fresh_until=base_hit.fresh_until,
                     stale_after=base_hit.stale_after,
                 )
@@ -254,6 +256,7 @@ class HybridRetriever:
                     source_record_id=hit.source_record_id,
                     import_batch_id=hit.import_batch_id,
                     unit_version=hit.unit_version,
+                    source_updated_at=hit.source_updated_at,
                     fresh_until=hit.fresh_until,
                     stale_after=hit.stale_after,
                 )

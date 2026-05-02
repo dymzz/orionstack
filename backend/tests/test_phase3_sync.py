@@ -823,6 +823,7 @@ class TestExtract:
         assert unit.tenant_id == "default"
         assert unit.import_batch_id == sr.import_batch_id
         assert unit.unit_version == 1
+        assert unit.source_updated_at == sr.source_updated_at
         assert unit.published_at is not None
 
 
@@ -856,6 +857,7 @@ class TestKnowledgeUnitPhase3Compat:
         assert unit.tenant_id == "default"
         assert unit.source_record_id is None
         assert unit.unit_version == 1
+        assert unit.source_updated_at is None
         assert unit.fresh_until is None
         assert unit.stale_after is None
         assert unit.published_at is None
@@ -868,6 +870,7 @@ class TestKnowledgeUnitPhase3Compat:
         assert "tenant_id" in d
         assert "source_record_id" in d
         assert "unit_version" in d
+        assert "source_updated_at" in d
         assert "fresh_until" in d
         assert "stale_after" in d
         assert "import_batch_id" in d

@@ -80,6 +80,7 @@ def _publish_faq(
         source_record_id=source_record.source_record_id,
         import_batch_id=source_record.import_batch_id,
         unit_version=1,
+        source_updated_at=source_record.source_updated_at,
         published_at=datetime.now(timezone.utc).isoformat(),
     )
     return unit

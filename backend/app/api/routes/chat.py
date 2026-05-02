@@ -19,6 +19,7 @@ from app.services.chat_service import ChatService
 from app.testing.hard_cases_repo import HardCasesRepository
 from app.storage.repositories.chat_record_repo import ChatRecordRepository
 from app.storage.repositories.feedback_repo import FeedbackRepository
+from app.storage.repositories.source_record_repo import SourceRecordRepo
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 service = ChatService()
@@ -26,6 +27,7 @@ feedback_repository = FeedbackRepository(max_count=settings.feedback_record_max_
 chat_record_repository = ChatRecordRepository(max_count=settings.chat_record_max_count)
 retrieval_trace_repository = RetrievalTraceRepository()
 hard_cases_repository = HardCasesRepository()
+source_record_repository = SourceRecordRepo()
 
 
 @router.post("/ask", response_model=ChatAskResponse)
@@ -163,6 +165,19 @@ def _build_retrieval_trace_record(
     response: ChatAskResponse,
 ) -> dict[str, Any]:
     debug_info = response.debug_info
+    source_record_id = None if debug_info is None else getattr(debug_info, "source_record_id", None)
+    source_record = source_record_repository.get(source_record_id) if source_record_id else None
+    source_updated_at = (
+        None
+        if debug_info is None
+        else getattr(debug_info, "source_updated_at", None)
+    ) or (None if source_record is None else source_record.source_updated_at)
+    source_record_status = (
+        None
+        if debug_info is None
+        else getattr(debug_info, "source_record_status", None)
+    ) or (None if source_record is None else source_record.status)
+
     return {
         "trace_id": response.trace_id,
         "raw_query": payload.raw_query,
@@ -217,15 +232,15 @@ def _build_retrieval_trace_record(
         "reject_reason": None
         if debug_info is None
         else getattr(debug_info, "reject_reason", None),
-        "source_record_id": None
-        if debug_info is None
-        else getattr(debug_info, "source_record_id", None),
+        "source_record_id": source_record_id,
         "import_batch_id": None
         if debug_info is None
         else getattr(debug_info, "import_batch_id", None),
         "unit_version": None
         if debug_info is None
         else getattr(debug_info, "unit_version", None),
+        "source_updated_at": source_updated_at,
+        "source_record_status": source_record_status,
         "dynamic_query_key": None
         if debug_info is None
         else getattr(debug_info, "dynamic_query_key", None),
@@ -302,6 +317,8 @@ def _build_hard_case_item(
         "source_record_id": retrieval_trace.get("source_record_id"),
         "import_batch_id": retrieval_trace.get("import_batch_id"),
         "unit_version": retrieval_trace.get("unit_version"),
+        "source_updated_at": retrieval_trace.get("source_updated_at"),
+        "source_record_status": retrieval_trace.get("source_record_status"),
         "dynamic_query_key": retrieval_trace.get("dynamic_query_key"),
     }
 
@@ -323,6 +340,13 @@ def _infer_issue_category(retrieval_trace: dict[str, Any]) -> str:
         return "freshness_stale"
     if "evidence_below_threshold" in reject_reason:
         return "evidence_weak"
+    source_record_status = retrieval_trace.get("source_record_status")
+    if source_record_status == "deleted":
+        return "source_deleted"
+    if source_record_status == "revoked":
+        return "source_revoked"
+    if source_record_status == "superseded":
+        return "source_superseded"
     if retrieval_trace.get("source_record_id"):
         return "extraction_drift"
     return "unknown"

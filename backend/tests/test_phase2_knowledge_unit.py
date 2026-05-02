@@ -56,6 +56,7 @@ def test_map_faq_item_to_knowledge_unit_preserves_provenance_fields() -> None:
             "source_record_id": "sr-001",
             "import_batch_id": "ib-001",
             "unit_version": 2,
+            "source_updated_at": "2026-05-01T00:00:00Z",
             "fresh_until": "2026-06-01T00:00:00Z",
             "stale_after": "2026-07-01T00:00:00Z",
         }
@@ -64,6 +65,7 @@ def test_map_faq_item_to_knowledge_unit_preserves_provenance_fields() -> None:
     assert unit.source_record_id == "sr-001"
     assert unit.import_batch_id == "ib-001"
     assert unit.unit_version == 2
+    assert unit.source_updated_at == "2026-05-01T00:00:00Z"
     assert unit.fresh_until == "2026-06-01T00:00:00Z"
     assert unit.stale_after == "2026-07-01T00:00:00Z"
 
@@ -102,12 +104,14 @@ def test_map_chunk_to_knowledge_unit_preserves_provenance_fields() -> None:
             "source_record_id": "sr-doc-001",
             "import_batch_id": "ib-doc-001",
             "unit_version": 3,
+            "source_updated_at": "2026-05-02T00:00:00Z",
         }
     )
 
     assert unit.source_record_id == "sr-doc-001"
     assert unit.import_batch_id == "ib-doc-001"
     assert unit.unit_version == 3
+    assert unit.source_updated_at == "2026-05-02T00:00:00Z"
 
 
 def test_knowledge_unit_repository_lists_faq_and_chunk_units_in_single_view() -> None:

@@ -56,6 +56,11 @@ MAPPING = {
             "source_record_id": {"type": "keyword"},
             "import_batch_id": {"type": "keyword"},
             "unit_version": {"type": "integer"},
+            "source_updated_at": {
+                "type": "date",
+                "format": "strict_date_optional_time||epoch_millis",
+                "ignore_malformed": True,
+            },
             "fresh_until": {
                 "type": "date",
                 "format": "strict_date_optional_time||epoch_millis",
@@ -99,6 +104,7 @@ MAPPING_FALLBACK = {
             "source_record_id": {"type": "keyword"},
             "import_batch_id": {"type": "keyword"},
             "unit_version": {"type": "integer"},
+            "source_updated_at": {"type": "keyword"},
             "fresh_until": {"type": "keyword"},
             "stale_after": {"type": "keyword"},
             "published_at": {"type": "keyword"},

@@ -24,6 +24,7 @@ class LexicalHit:
     source_record_id: str = ""
     import_batch_id: str = ""
     unit_version: int = 1
+    source_updated_at: str = ""
     fresh_until: str = ""
     stale_after: str = ""
 
@@ -121,6 +122,7 @@ class LexicalRetriever:
                     source_record_id=source.get("source_record_id", ""),
                     import_batch_id=source.get("import_batch_id", ""),
                     unit_version=int(source.get("unit_version") or 1),
+                    source_updated_at=source.get("source_updated_at", ""),
                     fresh_until=source.get("fresh_until", ""),
                     stale_after=source.get("stale_after", ""),
                 )
