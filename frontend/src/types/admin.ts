@@ -73,8 +73,8 @@ export interface ExtractRequest {
 
 export interface ExtractResponse {
   source_record_id: string
-  candidates_created: number
-  candidate_ids: string[]
+  extracted_count: number
+  candidates: ExtractionCandidate[]
 }
 
 export interface ReviewRequest {
@@ -85,4 +85,7 @@ export interface ReviewRequest {
 export interface ReviewResponse {
   candidate_id: string
   review_status: string
+  reviewed_by?: string | null
+  reviewed_at?: string | null
+  published_type?: string | null
 }

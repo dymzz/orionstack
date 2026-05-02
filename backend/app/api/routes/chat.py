@@ -1,7 +1,8 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.auth import require_admin
 from app.observability.retrieval_trace import RetrievalTraceRepository
 from app.config.settings import settings
 from app.runtime.trace import new_trace_id
@@ -100,7 +101,11 @@ def submit_feedback(payload: ChatFeedbackRequest) -> ChatFeedbackResponse:
     return ChatFeedbackResponse(status="recorded")
 
 
-@router.get("/records", response_model=ChatRecordListResponse)
+@router.get(
+    "/records",
+    response_model=ChatRecordListResponse,
+    dependencies=[Depends(require_admin)],
+)
 def list_chat_records(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> ChatRecordListResponse:
@@ -119,7 +124,11 @@ def list_chat_records(
     return ChatRecordListResponse(items=items)
 
 
-@router.get("/feedback", response_model=FeedbackRecordListResponse)
+@router.get(
+    "/feedback",
+    response_model=FeedbackRecordListResponse,
+    dependencies=[Depends(require_admin)],
+)
 def list_feedback_records(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> FeedbackRecordListResponse:
@@ -137,7 +146,7 @@ def list_feedback_records(
     return FeedbackRecordListResponse(items=items)
 
 
-@router.get("/traces/{trace_id}")
+@router.get("/traces/{trace_id}", dependencies=[Depends(require_admin)])
 def get_retrieval_trace(trace_id: str) -> dict[str, Any]:
     _ensure_record_view_enabled()
     trace = retrieval_trace_repository.get_by_trace_id(trace_id)
@@ -146,7 +155,7 @@ def get_retrieval_trace(trace_id: str) -> dict[str, Any]:
     return trace
 
 
-@router.get("/hard-cases")
+@router.get("/hard-cases", dependencies=[Depends(require_admin)])
 def list_hard_cases(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, list[dict[str, Any]]]:

@@ -26,5 +26,8 @@ export async function extractCandidates(request: ExtractRequest): Promise<Extrac
 }
 
 export async function reviewCandidate(request: ReviewRequest): Promise<ReviewResponse> {
-  return await postJson<ReviewResponse>('/api/extraction/review', request)
+  return await postJson<ReviewResponse>('/api/extraction/review', {
+    candidate_id: request.candidate_id,
+    approved: request.action === 'approve',
+  })
 }

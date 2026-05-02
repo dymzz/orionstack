@@ -66,6 +66,12 @@ textarea {
   transition: background 0.15s, color 0.15s;
 }
 
+.nav-button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
 .nav-link:hover {
   background: #eef2ff;
   color: #4338ca;
@@ -357,6 +363,39 @@ textarea {
 .ghost-button {
   background: #eef2ff;
   color: #4338ca;
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.login-card {
+  max-width: 420px;
+  margin: 32px auto 0;
+  display: grid;
+  gap: 16px;
+}
+
+.login-head h2 {
+  margin: 0;
+}
+
+.login-eyebrow {
+  margin: 0 0 4px;
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-form {
+  display: grid;
+  gap: 10px;
 }
 
 .meta-row {

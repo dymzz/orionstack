@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { isAuthenticated, refreshAuthStatus } from './services/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,8 +10,14 @@ const router = createRouter({
       component: () => import('./pages/chat/ChatPage.vue'),
     },
     {
+      path: '/login',
+      name: 'login',
+      component: () => import('./pages/LoginPage.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('./pages/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true },
       children: [
         {
           path: '',
@@ -40,6 +47,26 @@ const router = createRouter({
       ],
     },
   ],
+})
+
+router.beforeEach(async (to) => {
+  if (to.name === 'login' && isAuthenticated()) {
+    return '/admin/traces'
+  }
+
+  if (!to.matched.some((record) => record.meta.requiresAuth)) {
+    return true
+  }
+
+  const authenticated = await refreshAuthStatus()
+  if (authenticated) {
+    return true
+  }
+
+  return {
+    name: 'login',
+    query: { redirect: to.fullPath },
+  }
 })
 
 export default router

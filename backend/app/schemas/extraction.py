@@ -8,10 +8,22 @@ class ExtractRequest(BaseModel):
 
 class CandidateItem(BaseModel):
     candidate_id: str
+    tenant_id: str | None = None
+    source_record_id: str | None = None
     candidate_type: str
     payload_json: str
+    extractor_model: str | None = None
+    prompt_version: str | None = None
+    source_span: str | None = None
+    source_span_hash: str | None = None
     review_status: str
     created_at: str
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+
+
+class CandidateListResponse(BaseModel):
+    items: list[CandidateItem]
 
 
 class ExtractResponse(BaseModel):

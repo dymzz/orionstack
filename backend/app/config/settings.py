@@ -98,6 +98,23 @@ class Settings:
         )
     )
 
+    # Minimal admin auth. Defaults are demo-friendly; production deployments
+    # should override password and token secret via environment variables.
+    admin_username: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_ADMIN_USERNAME", "admin")
+    )
+    admin_password: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_ADMIN_PASSWORD", "admin")
+    )
+    admin_token_secret: str = field(
+        default_factory=lambda: _resolve_str(
+            "ORIONSTACK_ADMIN_TOKEN_SECRET", "orionstack-dev-secret"
+        )
+    )
+    admin_token_ttl_seconds: int = field(
+        default_factory=lambda: _resolve_int("ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS", 28800)
+    )
+
     # Phase 2: search backend
     search_backend: str = field(default_factory=_resolve_search_backend)
     elastic_url: str = field(

@@ -200,6 +200,10 @@ python scripts/start-backend.py --app-mode prod --host 0.0.0.0 --port 8000 --wor
 | `ORIONSTACK_EXTRACTION_API_BASE` | DashScope OpenAI-compatible 地址 | 当前抽取 provider 的 API 地址 |
 | `ORIONSTACK_EXTRACTION_API_MODEL` | `qwen-plus` | 当前抽取 provider 的模型名 |
 | `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 动态查询适配器：`mock` / `odoo` / 自定义 |
+| `ORIONSTACK_ADMIN_USERNAME` | `admin` | 管理入口用户名，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS` | `28800` | 管理 token 有效期（秒） |
 | `ORIONSTACK_CHAT_RECORD_MAX_COUNT` | `200` | 问答记录保留上限 |
 | `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT` | `200` | 反馈记录保留上限 |
 
@@ -214,8 +218,9 @@ ORIONSTACK_CORS_ORIGINS=https://app.example.com
 ### 4. `prod` 模式行为
 
 - Debug 信息不返回前端
-- `/api/chat/records` 与 `/api/chat/feedback` 返回 404
-- 前端不展示 Debug 面板与最近记录区
+- `/admin/*` 与对应管理 API 需要管理员登录
+- `prod` 模式下，即使管理员已登录，`/api/chat/records`、`/api/chat/feedback`、trace 与 hard case 调试接口仍按隐藏处理
+- 前端问答页不展示 Debug 面板与最近记录区
 
 ### 5. Nginx 参考
 

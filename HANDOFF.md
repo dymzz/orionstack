@@ -216,6 +216,10 @@ python scripts/dev-demo.py
 | `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch` 或 `local` |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 是否启用 planner |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 是否启用 fast track |
+| `ORIONSTACK_ADMIN_USERNAME` | `admin` | 管理入口用户名，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_PASSWORD` | `admin` | 管理入口密码，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_TOKEN_SECRET` | `orionstack-dev-secret` | 管理 token 签名密钥，生产必须覆盖 |
+| `ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS` | `28800` | 管理 token 有效期（秒） |
 | `ORIONSTACK_DYNAMIC_QUERY_ADAPTER` | `mock` | 当前实现可选 `mock` 或 `odoo`，后续可扩展更多 adapter |
 | `ORIONSTACK_ODOO_URL` | `http://localhost:8069` | 当前 OdooAdapter 示例地址 |
 | `ORIONSTACK_ODOO_DB` | `odoo` | 当前 OdooAdapter 示例数据库 |
@@ -234,7 +238,7 @@ python scripts/dev-demo.py
 python scripts/run-phase2-regression.py
 ```
 
-当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **402 passed, 21 skipped, 9 xfailed**。
+当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **407 passed, 21 skipped, 9 xfailed**。
 
 live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
@@ -298,13 +302,21 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 ### 6.6 前端路由
 
 - `/` → ChatPage（纯问答）
+- `/login` → LoginPage（管理入口登录）
 - `/admin` → AdminLayout（tab 子导航）
   - `/admin/traces` — Trace 查询
   - `/admin/hard-cases` — Hard Case 列表
   - `/admin/extraction` — 候选审核
   - `/admin/debug` — 调试记录
 
-管理页面与问答页面隔离，导航只有"问答"+"管理入口"两个入口。
+管理页面与问答页面隔离，导航只有"问答"+"管理入口"两个入口。`/admin/*` 通过前端路由守卫和后端 Bearer token 双层保护；公开问答 `/`、`/api/chat/ask` 与反馈提交保持不需要登录。
+
+### 6.7 最小管理认证
+
+- 后端认证端点：`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
+- 受保护 API：`/api/chat/records`、`/api/chat/feedback`、`/api/chat/traces/*`、`/api/chat/hard-cases`、`/api/extraction/*`
+- token 机制：HMAC 签名 Bearer token，本地存储在前端 `localStorage`
+- 默认账号密码：`admin` / `admin`，仅用于本地 demo；生产必须覆盖 `ORIONSTACK_ADMIN_PASSWORD` 与 `ORIONSTACK_ADMIN_TOKEN_SECRET`
 
 ---
 
@@ -393,7 +405,6 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 - 实时同步（定时增量导入）
 - 多系统适配器（钉钉、飞书、Zendesk、Confluence）
 - 生产数据库（替换 JSONL）
-- 认证系统（当前无用户登录）
 - 前端 trace / hard case 管理 UX 改进
 - 生产部署配置（容器化、CI/CD、监控）
 
@@ -414,4 +425,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 402 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，管理入口已具备最小认证保护，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 407 passed, 21 skipped, 9 xfailed），系统可一键启动（`python scripts/dev-demo.py`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**

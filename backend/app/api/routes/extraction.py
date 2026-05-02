@@ -1,7 +1,8 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.auth import require_admin
 from app.extract.candidate_reviewer import review_candidate, publish_candidate
 from app.extract.extraction_service import ExtractionService
 from app.schemas.extraction import (
@@ -10,11 +11,16 @@ from app.schemas.extraction import (
     ReviewRequest,
     ReviewResponse,
     CandidateItem,
+    CandidateListResponse,
 )
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 
-router = APIRouter(prefix="/api/extraction", tags=["extraction"])
+router = APIRouter(
+    prefix="/api/extraction",
+    tags=["extraction"],
+    dependencies=[Depends(require_admin)],
+)
 
 _candidate_repo = ExtractionCandidateRepo()
 _source_record_repo = SourceRecordRepo()
@@ -32,10 +38,18 @@ def extract_from_source(request: ExtractRequest) -> ExtractResponse:
     items = [
         CandidateItem(
             candidate_id=c.candidate_id,
+            tenant_id=c.tenant_id,
+            source_record_id=c.source_record_id,
             candidate_type=c.candidate_type,
             payload_json=c.payload_json,
+            extractor_model=c.extractor_model,
+            prompt_version=c.prompt_version,
+            source_span=c.source_span,
+            source_span_hash=c.source_span_hash,
             review_status=c.review_status,
             created_at=c.created_at,
+            reviewed_by=c.reviewed_by,
+            reviewed_at=c.reviewed_at,
         )
         for c in candidates
     ]
@@ -79,20 +93,30 @@ def review_extraction_candidate(request: ReviewRequest) -> ReviewResponse:
     )
 
 
-@router.get("/candidates", response_model=list[CandidateItem])
-def list_candidates(status: str | None = None) -> list[CandidateItem]:
+@router.get("/candidates", response_model=CandidateListResponse)
+def list_candidates(status: str | None = None) -> CandidateListResponse:
     if status:
         candidates = _candidate_repo.list_by_review_status(status)
     else:
         candidates = _candidate_repo.list_by_review_status("pending")
 
-    return [
-        CandidateItem(
-            candidate_id=c.candidate_id,
-            candidate_type=c.candidate_type,
-            payload_json=c.payload_json,
-            review_status=c.review_status,
-            created_at=c.created_at,
-        )
-        for c in candidates
-    ]
+    return CandidateListResponse(
+        items=[
+            CandidateItem(
+                candidate_id=c.candidate_id,
+                tenant_id=c.tenant_id,
+                source_record_id=c.source_record_id,
+                candidate_type=c.candidate_type,
+                payload_json=c.payload_json,
+                extractor_model=c.extractor_model,
+                prompt_version=c.prompt_version,
+                source_span=c.source_span,
+                source_span_hash=c.source_span_hash,
+                review_status=c.review_status,
+                created_at=c.created_at,
+                reviewed_by=c.reviewed_by,
+                reviewed_at=c.reviewed_at,
+            )
+            for c in candidates
+        ]
+    )
