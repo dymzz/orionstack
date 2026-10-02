@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import re
 from typing import Any
 
@@ -8,6 +9,8 @@ from app.runtime.system_adapter import SystemAdapter
 from app.schemas.response import DynamicQueryResultItem
 from app.storage.models.dynamic_query import DynamicQuery
 from app.storage.repositories.dynamic_query_repo import DynamicQueryRepo
+
+_logger = logging.getLogger("orionstack.dynamic_query")
 
 
 @dataclass(frozen=True)
@@ -58,7 +61,8 @@ class DynamicQueryService:
 
         try:
             rows = self._adapter.fetch(resource_type, fetch_params)
-        except Exception:
+        except Exception as exc:
+            _logger.warning("dynamic_query_fetch_failed query_key=%s resource_type=%s error=%s", query_key, resource_type, exc)
             rows = []
 
         return DynamicQueryResultItem(

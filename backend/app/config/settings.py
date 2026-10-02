@@ -34,8 +34,13 @@ def _resolve_cors_origins() -> tuple[str, ...]:
 
 
 def _resolve_search_backend() -> str:
-    value = os.getenv("ORIONSTACK_SEARCH_BACKEND", "elasticsearch").strip().lower()
-    return value if value in {"local", "elasticsearch"} else "elasticsearch"
+    value = os.getenv("ORIONSTACK_SEARCH_BACKEND", "local").strip().lower()
+    return value if value in {"local", "elasticsearch"} else "local"
+
+
+def _resolve_log_level() -> str:
+    value = os.getenv("ORIONSTACK_LOG_LEVEL", "INFO").strip().upper()
+    return value if value in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
 
 
 def _resolve_str(env_name: str, default: str) -> str:
@@ -70,7 +75,7 @@ def _resolve_bool(env_name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes"}
 
 
-_INSECURE_ADMIN_PASSWORDS = {"", "admin", "password", "changeme"}
+_INSECURE_PASSWORDS = {"", "admin", "password", "changeme", "test"}
 _INSECURE_ADMIN_TOKEN_SECRETS = {
     "",
     "orionstack-dev-secret",
@@ -84,11 +89,15 @@ class Settings:
         default_factory=lambda: _resolve_str("ORIONSTACK_APP_NAME", "OrionStack Demo")
     )
     host: str = field(
-        default_factory=lambda: _resolve_str("ORIONSTACK_HOST", "127.0.0.1")
+        default_factory=lambda: _resolve_str("ORIONSTACK_HOST", "0.0.0.0")
     )
     port: int = field(default_factory=lambda: _resolve_int("ORIONSTACK_PORT", 8000))
     app_mode: str = field(default_factory=_resolve_app_mode)
     cors_origins: tuple[str, ...] = field(default_factory=_resolve_cors_origins)
+    log_level: str = field(default_factory=_resolve_log_level)
+    access_log_enabled: bool = field(
+        default_factory=lambda: _resolve_bool("ORIONSTACK_ACCESS_LOG_ENABLED", default=True)
+    )
     route_confidence_threshold: float = field(
         default_factory=lambda: _resolve_float(
             "ORIONSTACK_ROUTE_CONFIDENCE_THRESHOLD", 0.15
@@ -106,8 +115,8 @@ class Settings:
         )
     )
 
-    # Minimal admin auth. Defaults are demo-friendly; production deployments
-    # should override password and token secret via environment variables.
+    # Auth: admin account (full access including /admin pages).
+    # Production must override password and token secret via environment variables.
     admin_username: str = field(
         default_factory=lambda: _resolve_str("ORIONSTACK_ADMIN_USERNAME", "admin")
     )
@@ -121,6 +130,14 @@ class Settings:
     )
     admin_token_ttl_seconds: int = field(
         default_factory=lambda: _resolve_int("ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS", 28800)
+    )
+
+    # Auth: regular user account (can use Q&A and documents, cannot access /admin).
+    test_user_username: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_TEST_USER_USERNAME", "test")
+    )
+    test_user_password: str = field(
+        default_factory=lambda: _resolve_str("ORIONSTACK_TEST_USER_PASSWORD", "test")
     )
 
     # Phase 2: search backend
@@ -142,7 +159,7 @@ class Settings:
     # Phase 2: query planner
     enable_query_planner: bool = field(
         default_factory=lambda: _resolve_bool(
-            "ORIONSTACK_ENABLE_QUERY_PLANNER", default=True
+            "ORIONSTACK_ENABLE_QUERY_PLANNER", default=False
         )
     )
     planner_provider: str = field(
@@ -197,7 +214,7 @@ class Settings:
     # Phase 2: fast track
     enable_fast_track: bool = field(
         default_factory=lambda: _resolve_bool(
-            "ORIONSTACK_ENABLE_FAST_TRACK", default=True
+            "ORIONSTACK_ENABLE_FAST_TRACK", default=False
         )
     )
 
@@ -257,14 +274,25 @@ class Settings:
     def chat_record_view_enabled(self) -> bool:
         return self.app_mode in {"demo", "dev"}
 
+    @property
+    def user_accounts(self) -> dict[str, tuple[str, str]]:
+        return {
+            self.admin_username: (self.admin_password, "admin"),
+            self.test_user_username: (self.test_user_password, "user"),
+        }
+
     def production_config_errors(self) -> list[str]:
         if self.app_mode != "prod":
             return []
 
         errors: list[str] = []
-        if self.admin_password.strip().lower() in _INSECURE_ADMIN_PASSWORDS:
+        if self.admin_password.strip().lower() in _INSECURE_PASSWORDS:
             errors.append(
                 "ORIONSTACK_ADMIN_PASSWORD must be changed for prod mode"
+            )
+        if self.test_user_password.strip().lower() in _INSECURE_PASSWORDS:
+            errors.append(
+                "ORIONSTACK_TEST_USER_PASSWORD must be changed for prod mode"
             )
         if self.admin_token_secret.strip() in _INSECURE_ADMIN_TOKEN_SECRETS:
             errors.append(
@@ -274,7 +302,37 @@ class Settings:
             errors.append(
                 "ORIONSTACK_ADMIN_TOKEN_SECRET must be at least 24 characters in prod mode"
             )
+        if self.search_backend == "elasticsearch" and not self.elastic_url.strip():
+            errors.append("ORIONSTACK_ELASTIC_URL must be set when search_backend=elasticsearch")
+        if self.planner_provider not in ("local",) and not self.planner_api_base.strip():
+            errors.append(
+                f"ORIONSTACK_PLANNER_API_BASE must be set when planner_provider={self.planner_provider}"
+            )
+        if self.extraction_provider not in ("local",) and not self.extraction_api_base.strip():
+            errors.append(
+                f"ORIONSTACK_EXTRACTION_API_BASE must be set when extraction_provider={self.extraction_provider}"
+            )
+        if self.dynamic_query_adapter == "odoo" and not self.odoo_password.strip():
+            errors.append("ORIONSTACK_ODOO_PASSWORD must be set when dynamic_query_adapter=odoo")
         return errors
+
+    def startup_warnings(self) -> list[str]:
+        warnings: list[str] = []
+        if self.planner_provider not in ("local",) and not self.planner_api_base.strip():
+            warnings.append(
+                f"planner_provider={self.planner_provider} but ORIONSTACK_PLANNER_API_BASE is empty; planner calls will fail"
+            )
+        if self.extraction_provider not in ("local",) and not self.extraction_api_base.strip():
+            warnings.append(
+                f"extraction_provider={self.extraction_provider} but ORIONSTACK_EXTRACTION_API_BASE is empty; extraction calls will fail"
+            )
+        if self.dynamic_query_adapter == "odoo" and not self.odoo_password.strip():
+            warnings.append(
+                "dynamic_query_adapter=odoo but ORIONSTACK_ODOO_PASSWORD is empty; dynamic queries will return empty results"
+            )
+        if self.search_backend == "elasticsearch":
+            warnings.append(f"search_backend=elasticsearch connecting to {self.elastic_url}")
+        return warnings
 
     def assert_production_safe(self) -> None:
         errors = self.production_config_errors()

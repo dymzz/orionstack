@@ -1,10 +1,10 @@
-from typing import Any
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.auth import require_admin
 from app.extract.candidate_reviewer import review_candidate, publish_candidate
 from app.extract.extraction_service import ExtractionService
+from app.extract.providers import build_extraction_provider
+from app.config.settings import settings
 from app.schemas.extraction import (
     ExtractRequest,
     ExtractResponse,
@@ -14,16 +14,35 @@ from app.schemas.extraction import (
     CandidateListResponse,
 )
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
+from app.storage.repositories.extracted_faq_repo import ExtractedFaqRepo
+from app.storage.repositories.knowledge_unit_repo import KnowledgeUnit
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 
 router = APIRouter(
-    prefix="/api/extraction",
+    prefix="/api/v1/extraction",
     tags=["extraction"],
     dependencies=[Depends(require_admin)],
 )
 
 _candidate_repo = ExtractionCandidateRepo()
 _source_record_repo = SourceRecordRepo()
+_extracted_faq_repo = ExtractedFaqRepo()
+_extraction_service = ExtractionService(
+    candidate_repo=_candidate_repo,
+    provider=build_extraction_provider(settings.extraction_provider, settings),
+)
+
+
+def get_candidate_repo() -> ExtractionCandidateRepo:
+    return _candidate_repo
+
+
+def get_source_record_repo() -> SourceRecordRepo:
+    return _source_record_repo
+
+
+def get_extraction_service() -> ExtractionService:
+    return _extraction_service
 
 
 @router.post("/extract", response_model=ExtractResponse)
@@ -32,8 +51,7 @@ def extract_from_source(request: ExtractRequest) -> ExtractResponse:
     if sr is None:
         raise HTTPException(status_code=404, detail="source_record not found")
 
-    service = ExtractionService()
-    candidates = service.extract_from_record(sr, candidate_types=request.candidate_types)
+    candidates = _extraction_service.extract_from_record(sr, candidate_types=request.candidate_types)
 
     items = [
         CandidateItem(
@@ -62,7 +80,7 @@ def extract_from_source(request: ExtractRequest) -> ExtractResponse:
 
 
 @router.post("/review", response_model=ReviewResponse)
-def review_extraction_candidate(request: ReviewRequest) -> ReviewResponse:
+def review_extraction_candidate(request: ReviewRequest, req: Request) -> ReviewResponse:
     candidate = _candidate_repo.get(request.candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="candidate not found")
@@ -80,9 +98,12 @@ def review_extraction_candidate(request: ReviewRequest) -> ReviewResponse:
     if request.approved:
         sr = _source_record_repo.get(reviewed.source_record_id)
         if sr is not None:
-            result = publish_candidate(reviewed, sr)
+            result = publish_candidate(
+                reviewed, sr, extracted_faq_repo=_extracted_faq_repo
+            )
             if result is not None:
                 published_type = type(result).__name__
+                _try_incremental_index(result, req)
 
     return ReviewResponse(
         candidate_id=request.candidate_id,
@@ -120,3 +141,24 @@ def list_candidates(status: str | None = None) -> CandidateListResponse:
             for c in candidates
         ]
     )
+
+
+def get_extracted_faq_repo() -> ExtractedFaqRepo:
+    return _extracted_faq_repo
+
+
+def _try_incremental_index(published_result, req: Request) -> None:
+    if not isinstance(published_result, KnowledgeUnit):
+        return
+    if settings.search_backend != "elasticsearch":
+        return
+    es_client = getattr(req.app.state, "es_client", None)
+    if es_client is None:
+        return
+    try:
+        from app.indexing.elastic_indexer import ElasticIndexer
+
+        indexer = ElasticIndexer(es_client, index_name=settings.elastic_index)
+        indexer.index_unit(published_result)
+    except Exception:
+        pass

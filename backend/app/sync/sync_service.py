@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ _SyncResult: TypeAlias = Literal["added", "updated", "unchanged"]
 
 
 class SyncService:
+    _log = logging.getLogger("orionstack.sync")
     def __init__(
         self,
         source_record_repo: SourceRecordRepo,
@@ -49,6 +51,7 @@ class SyncService:
         mode: str = "incremental",
         tenant_id: str = "default",
     ) -> ImportBatch:
+        self._log.info("sync_start path=%s source_system=%s mode=%s", path.name, source_system, mode)
         batch_id = f"ib-{uuid4().hex[:12]}"
         now = datetime.now(timezone.utc).isoformat()
         batch = ImportBatch(
@@ -95,7 +98,7 @@ class SyncService:
             else:
                 unchanged += 1
 
-        return self._finish_batch(
+        result = self._finish_batch(
             batch,
             record_count=len(records),
             added=added,
@@ -104,6 +107,8 @@ class SyncService:
             failed=failed,
             errors=errors,
         )
+        self._log.info("sync_complete batch=%s added=%s updated=%s failed=%s", result.import_batch_id, added, updated, failed)
+        return result
 
     def _sync_record(self, record: SourceRecord, batch_id: str) -> _SyncResult:
         existing = self._sr_repo._find_active_by_system_and_external(

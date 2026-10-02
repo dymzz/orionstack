@@ -3,12 +3,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.storage.repositories.base_repo import JsonlLock
+
 
 class ChunkRepository:
     def __init__(self, path: Path | None = None) -> None:
         self._path = path or (
             Path(__file__).resolve().parents[1] / "chunks" / "chunks.jsonl"
         )
+        self._lock = JsonlLock(self._path)
 
     def list_all(self) -> list[dict[str, Any]]:
         if not self._path.exists():
@@ -31,7 +34,7 @@ class ChunkRepository:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         created_at = datetime.now(timezone.utc).isoformat()
         records: list[dict[str, Any]] = []
-        with self._path.open("a", encoding="utf-8") as handle:
+        with self._lock, self._path.open("a", encoding="utf-8") as handle:
             for index, chunk_text in enumerate(chunks):
                 locator_parts = [f"document_id: {document_id}"]
                 if file_path:
@@ -54,54 +57,56 @@ class ChunkRepository:
         return records
 
     def delete_by_document(self, document_id: str) -> int:
-        records = self.list_all()
-        retained_records = [
-            record for record in records if record.get("document_id") != document_id
-        ]
-        deleted_count = len(records) - len(retained_records)
+        with self._lock:
+            records = self.list_all()
+            retained_records = [
+                record for record in records if record.get("document_id") != document_id
+            ]
+            deleted_count = len(records) - len(retained_records)
 
-        if deleted_count == 0:
-            return 0
+            if deleted_count == 0:
+                return 0
 
-        if retained_records:
-            serialized = (
-                "\n".join(
-                    json.dumps(record, ensure_ascii=False)
-                    for record in retained_records
+            if retained_records:
+                serialized = (
+                    "\n".join(
+                        json.dumps(record, ensure_ascii=False)
+                        for record in retained_records
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-            self._path.write_text(serialized, encoding="utf-8")
-        elif self._path.exists():
-            self._path.unlink()
+                self._path.write_text(serialized, encoding="utf-8")
+            elif self._path.exists():
+                self._path.unlink()
 
         return deleted_count
 
     def update_status_by_source_record(
         self, source_record_id: str, lifecycle_status: str
     ) -> list[str]:
-        records = self.list_all()
-        updated_ids: list[str] = []
+        with self._lock:
+            records = self.list_all()
+            updated_ids: list[str] = []
 
-        for record in records:
-            if record.get("source_record_id") != source_record_id:
-                continue
-            if record.get("lifecycle_status", "active") == lifecycle_status:
-                continue
+            for record in records:
+                if record.get("source_record_id") != source_record_id:
+                    continue
+                if record.get("lifecycle_status", "active") == lifecycle_status:
+                    continue
 
-            record["lifecycle_status"] = lifecycle_status
-            chunk_id = str(record.get("chunk_id") or "")
-            if chunk_id:
-                updated_ids.append(chunk_id)
+                record["lifecycle_status"] = lifecycle_status
+                chunk_id = str(record.get("chunk_id") or "")
+                if chunk_id:
+                    updated_ids.append(chunk_id)
 
-        if updated_ids:
-            serialized = (
-                "\n".join(
-                    json.dumps(record, ensure_ascii=False) for record in records
+            if updated_ids:
+                serialized = (
+                    "\n".join(
+                        json.dumps(record, ensure_ascii=False) for record in records
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(serialized, encoding="utf-8")
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                self._path.write_text(serialized, encoding="utf-8")
 
         return updated_ids

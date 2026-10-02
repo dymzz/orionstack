@@ -1,16 +1,16 @@
 from app.config.settings import Settings
 
 
-def test_settings_phase2_defaults_to_full_open_stack(monkeypatch) -> None:
+def test_settings_default_to_local_during_postgres_migration(monkeypatch) -> None:
     monkeypatch.delenv("ORIONSTACK_SEARCH_BACKEND", raising=False)
     monkeypatch.delenv("ORIONSTACK_ENABLE_QUERY_PLANNER", raising=False)
     monkeypatch.delenv("ORIONSTACK_ENABLE_FAST_TRACK", raising=False)
 
     phase2_settings = Settings()
 
-    assert phase2_settings.search_backend == "elasticsearch"
-    assert phase2_settings.enable_query_planner is True
-    assert phase2_settings.enable_fast_track is True
+    assert phase2_settings.search_backend == "local"
+    assert phase2_settings.enable_query_planner is False
+    assert phase2_settings.enable_fast_track is False
 
 
 def test_settings_phase2_search_backend_accepts_elasticsearch(monkeypatch) -> None:
@@ -28,7 +28,7 @@ def test_settings_phase2_search_backend_falls_back_to_local_for_invalid_value(
 
     phase2_settings = Settings()
 
-    assert phase2_settings.search_backend == "elasticsearch"
+    assert phase2_settings.search_backend == "local"
 
 
 def test_settings_phase2_boolean_flags_parse_truthy_values(monkeypatch) -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.storage.models.extraction_candidate import ExtractionCandidate
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "extraction_candidates"
 
@@ -14,9 +15,11 @@ class ExtractionCandidateRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "candidates.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def create(self, candidate: ExtractionCandidate) -> None:
-        self._append(candidate)
+        with self._lock:
+            self._append(candidate)
 
     def get(self, candidate_id: str) -> ExtractionCandidate | None:
         for c in self._iter_all():
@@ -36,21 +39,22 @@ class ExtractionCandidateRepo:
         review_status: str,
         reviewed_by: str | None = None,
     ) -> ExtractionCandidate | None:
-        candidates = list(self._iter_all())
-        updated: ExtractionCandidate | None = None
-        self._file.write_text("", encoding="utf-8")
-        for c in candidates:
-            if c.candidate_id == candidate_id:
-                from dataclasses import replace
-                from datetime import datetime, timezone
-                c = replace(
-                    c,
-                    review_status=review_status,
-                    reviewed_by=reviewed_by,
-                    reviewed_at=datetime.now(timezone.utc).isoformat(),
-                )
-                updated = c
-            self._append(c)
+        with self._lock:
+            candidates = list(self._iter_all())
+            updated: ExtractionCandidate | None = None
+            self._file.write_text("", encoding="utf-8")
+            for c in candidates:
+                if c.candidate_id == candidate_id:
+                    from dataclasses import replace
+                    from datetime import datetime, timezone
+                    c = replace(
+                        c,
+                        review_status=review_status,
+                        reviewed_by=reviewed_by,
+                        reviewed_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    updated = c
+                self._append(c)
         return updated
 
     def _append(self, candidate: ExtractionCandidate) -> None:

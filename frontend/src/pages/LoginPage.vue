@@ -1,9 +1,9 @@
 <template>
   <section class="card login-card">
     <div class="login-head">
-      <p class="login-eyebrow">Admin Access</p>
-      <h2>登录管理入口</h2>
-      <p class="admin-subtitle">Trace、Hard Case、抽取审核与调试记录需要管理员身份。</p>
+      <p class="login-eyebrow">OrionStack</p>
+      <h2>登录</h2>
+      <p class="login-subtitle">请输入账号密码以继续使用。</p>
     </div>
 
     <form class="login-form" @submit.prevent="submit">
@@ -31,7 +31,7 @@
       </button>
     </form>
 
-    <p v-if="message" class="admin-message">{{ message }}</p>
+    <p v-if="message" class="login-message">{{ message }}</p>
   </section>
 </template>
 
@@ -42,7 +42,7 @@ import { login } from '../services/auth'
 
 const route = useRoute()
 const router = useRouter()
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const message = ref('')
@@ -52,7 +52,7 @@ async function submit() {
   message.value = ''
   try {
     await login(username.value, password.value)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin/traces'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     await router.replace(redirect)
   } catch (error) {
     message.value = error instanceof Error ? error.message : '登录失败'

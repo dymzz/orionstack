@@ -93,9 +93,10 @@ def test_chat_service_uses_planner_outputs_for_elasticsearch_lexical_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
-    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self, es: None)
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
 
     service = ChatService()
     response = service.ask(
@@ -158,9 +159,10 @@ def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
-    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self, es: None)
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
 
     service = ChatService()
     monkeypatch.setattr(

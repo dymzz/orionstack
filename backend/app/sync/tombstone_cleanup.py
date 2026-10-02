@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -8,6 +9,8 @@ from typing import Any, Protocol
 from app.storage.models.cleanup_task import CleanupTask
 from app.storage.repositories.cleanup_task_repo import CleanupTaskRepo
 from app.storage.repositories.source_record_repo import SourceRecordRepo
+
+_logger = logging.getLogger("orionstack.cleanup")
 
 _CLEANUP_ELIGIBLE_STATUSES = {"revoked", "deleted", "superseded"}
 
@@ -116,7 +119,10 @@ class TombstoneCleanupService:
             started_at=_now(),
         )
         if processing is None:
+            _logger.warning("cleanup_task_processing_failed task=%s", cleanup_task_id)
             return None
+
+        _logger.info("cleanup_task_started task=%s source_record=%s", cleanup_task_id, processing.source_record_id)
 
         source_record = self._source_record_repo.get(processing.source_record_id)
         source_status = (
@@ -146,6 +152,13 @@ class TombstoneCleanupService:
         )
 
         final_status = _resolve_task_status(elastic, vector)
+        _logger.info(
+            "cleanup_task_finished task=%s status=%s elastic=%s vector=%s",
+            cleanup_task_id,
+            final_status,
+            elastic.status,
+            vector.status,
+        )
         return self._finish(
             processing,
             final_status,

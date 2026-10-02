@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.storage.repositories.base_repo import JsonlLock
+
 
 class HardCasesRepository:
     def __init__(self, *, max_count: int = 0) -> None:
@@ -13,34 +15,37 @@ class HardCasesRepository:
             / "hard_cases.jsonl"
         )
         self._max_count = max_count
+        self._lock = JsonlLock(self._path)
 
     def upsert(self, item: dict[str, Any]) -> dict[str, Any]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        records = self._load_all()
+        with self._lock:
+            records = self._load_all()
 
-        trace_id = str(item.get("trace_id", ""))
-        existing = next(
-            (record for record in records if str(record.get("trace_id", "")) == trace_id),
-            None,
-        )
-        if existing is None:
-            enriched_item = {
-                **item,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            records.append(enriched_item)
-        else:
-            existing.update(
-                {
-                    key: value
-                    for key, value in item.items()
-                    if value is not None and value != []
-                }
+            trace_id = str(item.get("trace_id", ""))
+            existing = next(
+                (record for record in records if str(record.get("trace_id", "")) == trace_id),
+                None,
             )
-            enriched_item = existing
+            if existing is None:
+                enriched_item = {
+                    **item,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                records.append(enriched_item)
+            else:
+                existing.update(
+                    {
+                        key: value
+                        for key, value in item.items()
+                        if value is not None and value != []
+                    }
+                )
+                enriched_item = existing
 
-        self._write_all(records)
-        self._truncate_if_needed()
+            if self._max_count > 0 and len(records) > self._max_count:
+                records = records[-self._max_count :]
+            self._write_all(records)
         return enriched_item
 
     def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -67,7 +72,8 @@ class HardCasesRepository:
     def _truncate_if_needed(self) -> None:
         if self._max_count <= 0:
             return
-        records = self._load_all()
-        if len(records) <= self._max_count:
-            return
-        self._write_all(records[-self._max_count :])
+        with self._lock:
+            records = self._load_all()
+            if len(records) <= self._max_count:
+                return
+            self._write_all(records[-self._max_count :])

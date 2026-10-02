@@ -35,10 +35,13 @@ def _install_fakes(monkeypatch, *, lexical, hybrid, planner) -> None:
         ),
     )
     monkeypatch.setattr(
-        ChatService, "_create_lexical_retriever", lambda self: lexical
+        ChatService, "_create_lexical_retriever", lambda self, es: lexical
     )
     monkeypatch.setattr(
-        ChatService, "_create_hybrid_retriever", lambda self: hybrid
+        ChatService, "_create_hybrid_retriever", lambda self, es: hybrid
+    )
+    monkeypatch.setattr(
+        ChatService, "_create_elasticsearch_client", lambda self: None
     )
     monkeypatch.setattr(
         ChatService, "_create_query_planner", lambda self: planner

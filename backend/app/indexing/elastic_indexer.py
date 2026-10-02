@@ -133,6 +133,10 @@ class ElasticIndexer:
         self._es.indices.refresh(index=self._index_name)
         return indexed
 
+    def index_unit(self, unit: KnowledgeUnit) -> None:
+        doc = unit.to_elasticsearch_doc()
+        self._es.index(index=self._index_name, id=unit.unit_id, body=doc, refresh=True)
+
     def update_status_by_source_record(
         self, source_record_id: str, lifecycle_status: str
     ) -> dict[str, Any]:

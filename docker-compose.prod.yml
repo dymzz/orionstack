@@ -1,34 +1,27 @@
 services:
-  elasticsearch:
-    build:
-      context: ./docker/elasticsearch
-    image: orionstack-elasticsearch:8.17.0-ik
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: ${ORIONSTACK_ES_JAVA_OPTS:--Xms512m -Xmx512m}
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-
   backend:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
     image: orionstack-backend:prod
     restart: unless-stopped
-    depends_on:
-      - elasticsearch
     environment:
       ORIONSTACK_APP_MODE: prod
       ORIONSTACK_HOST: 0.0.0.0
       ORIONSTACK_PORT: 8000
+      ORIONSTACK_DATABASE_URL: ${ORIONSTACK_DATABASE_URL:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ORIONSTACK_JEV_API_BASE: ${ORIONSTACK_JEV_API_BASE:-https://api.typesafe.ai/v1}
+      ORIONSTACK_JEV_MODEL: ${ORIONSTACK_JEV_MODEL:-jev-1.13.0}
+      ORIONSTACK_DEEPSEEK_API_BASE: ${ORIONSTACK_DEEPSEEK_API_BASE:-https://api.deepseek.com}
+      ORIONSTACK_DEEPSEEK_MODEL: ${ORIONSTACK_DEEPSEEK_MODEL:-deepseek-flash}
+      ORIONSTACK_CORE_PROVIDER_TIMEOUT_SECONDS: ${ORIONSTACK_CORE_PROVIDER_TIMEOUT_SECONDS:-30}
+      ORIONSTACK_DATABASE_CONNECT_TIMEOUT_SECONDS: ${ORIONSTACK_DATABASE_CONNECT_TIMEOUT_SECONDS:-5}
       ORIONSTACK_CORS_ORIGINS: ${ORIONSTACK_CORS_ORIGINS:-http://localhost:8080}
-      ORIONSTACK_SEARCH_BACKEND: elasticsearch
-      ORIONSTACK_ELASTIC_URL: http://elasticsearch:9200
-      ORIONSTACK_ELASTIC_INDEX: ${ORIONSTACK_ELASTIC_INDEX:-knowledge_units_v1}
-      ORIONSTACK_ENABLE_QUERY_PLANNER: ${ORIONSTACK_ENABLE_QUERY_PLANNER:-true}
-      ORIONSTACK_ENABLE_FAST_TRACK: ${ORIONSTACK_ENABLE_FAST_TRACK:-true}
+      ORIONSTACK_SEARCH_BACKEND: local
+      ORIONSTACK_ENABLE_QUERY_PLANNER: ${ORIONSTACK_ENABLE_QUERY_PLANNER:-false}
+      ORIONSTACK_ENABLE_FAST_TRACK: ${ORIONSTACK_ENABLE_FAST_TRACK:-false}
       ORIONSTACK_PLANNER_PROVIDER: ${ORIONSTACK_PLANNER_PROVIDER:-local}
       ORIONSTACK_PLANNER_API_BASE: ${ORIONSTACK_PLANNER_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       ORIONSTACK_PLANNER_API_MODEL: ${ORIONSTACK_PLANNER_API_MODEL:-qwen-plus}
@@ -43,6 +36,8 @@ services:
       ORIONSTACK_ADMIN_PASSWORD: ${ORIONSTACK_ADMIN_PASSWORD:?Set ORIONSTACK_ADMIN_PASSWORD before production deployment}
       ORIONSTACK_ADMIN_TOKEN_SECRET: ${ORIONSTACK_ADMIN_TOKEN_SECRET:?Set ORIONSTACK_ADMIN_TOKEN_SECRET before production deployment}
       ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS: ${ORIONSTACK_ADMIN_TOKEN_TTL_SECONDS:-28800}
+      ORIONSTACK_TEST_USER_USERNAME: ${ORIONSTACK_TEST_USER_USERNAME:-test}
+      ORIONSTACK_TEST_USER_PASSWORD: ${ORIONSTACK_TEST_USER_PASSWORD:?Set ORIONSTACK_TEST_USER_PASSWORD before production deployment}
     volumes:
       - backend_chat_records:/app/backend/app/storage/chat_records
       - backend_feedback:/app/backend/app/storage/feedback
@@ -53,10 +48,14 @@ services:
       - backend_uploads:/app/backend/app/storage/uploads
       - backend_source_records:/app/backend/app/storage/source_records
       - backend_extraction_candidates:/app/backend/app/storage/extraction_candidates
+      - backend_extracted_faqs:/app/backend/app/storage/extracted_faqs
+      - backend_import_batches:/app/backend/app/storage/import_batches
+      - backend_extraction_tasks:/app/backend/app/storage/extraction_tasks
+      - backend_cleanup_tasks:/app/backend/app/storage/cleanup_tasks
       - backend_action_links:/app/backend/app/storage/action_links
       - backend_dynamic_queries:/app/backend/app/storage/dynamic_queries
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -74,7 +73,6 @@ services:
       - "${ORIONSTACK_HTTP_PORT:-8080}:80"
 
 volumes:
-  es_data:
   backend_chat_records:
   backend_feedback:
   backend_retrieval_traces:
@@ -84,5 +82,9 @@ volumes:
   backend_uploads:
   backend_source_records:
   backend_extraction_candidates:
+  backend_extracted_faqs:
+  backend_import_batches:
+  backend_extraction_tasks:
+  backend_cleanup_tasks:
   backend_action_links:
   backend_dynamic_queries:

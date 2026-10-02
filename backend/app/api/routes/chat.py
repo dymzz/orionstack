@@ -3,8 +3,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.auth import require_admin
-from app.observability.retrieval_trace import RetrievalTraceRepository
 from app.config.settings import settings
+from app.observability.retrieval_trace import RetrievalTraceRepository
 from app.runtime.trace import new_trace_id
 from app.schemas.request import ChatAskRequest, ChatFeedbackRequest
 from app.schemas.response import (
@@ -22,7 +22,8 @@ from app.storage.repositories.chat_record_repo import ChatRecordRepository
 from app.storage.repositories.feedback_repo import FeedbackRepository
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+
 service = ChatService()
 feedback_repository = FeedbackRepository(max_count=settings.feedback_record_max_count)
 chat_record_repository = ChatRecordRepository(max_count=settings.chat_record_max_count)
@@ -31,7 +32,31 @@ hard_cases_repository = HardCasesRepository()
 source_record_repository = SourceRecordRepo()
 
 
-@router.post("/ask", response_model=ChatAskResponse)
+def get_chat_service() -> ChatService:
+    return service
+
+
+def get_feedback_repository() -> FeedbackRepository:
+    return feedback_repository
+
+
+def get_chat_record_repository() -> ChatRecordRepository:
+    return chat_record_repository
+
+
+def get_retrieval_trace_repository() -> RetrievalTraceRepository:
+    return retrieval_trace_repository
+
+
+def get_hard_cases_repository() -> HardCasesRepository:
+    return hard_cases_repository
+
+
+def get_source_record_repository() -> SourceRecordRepo:
+    return source_record_repository
+
+
+@router.post("/ask", response_model=ChatAskResponse, dependencies=[Depends(require_admin)])
 def ask_chat(payload: ChatAskRequest) -> ChatAskResponse:
     trace_id = new_trace_id()
     debug_enabled = payload.debug and settings.debug_response_enabled
@@ -73,7 +98,7 @@ def ask_chat(payload: ChatAskRequest) -> ChatAskResponse:
     return response
 
 
-@router.post("/feedback", response_model=ChatFeedbackResponse)
+@router.post("/feedback", response_model=ChatFeedbackResponse, dependencies=[Depends(require_admin)])
 def submit_feedback(payload: ChatFeedbackRequest) -> ChatFeedbackResponse:
     feedback_record = feedback_repository.save(
         {

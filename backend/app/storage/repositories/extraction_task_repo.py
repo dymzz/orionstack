@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from app.storage.models.extraction_task import ExtractionTask
 from app.storage.models.source_record import SourceRecord
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "extraction_tasks"
 
@@ -18,9 +19,11 @@ class ExtractionTaskRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "tasks.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def create(self, task: ExtractionTask) -> None:
-        self._append(task)
+        with self._lock:
+            self._append(task)
 
     def enqueue_for_source_record(
         self,
@@ -69,22 +72,23 @@ class ExtractionTaskRepo:
         finished_at: str | None = None,
         error_summary: str | None = None,
     ) -> ExtractionTask | None:
-        tasks = list(self._iter_all())
-        updated: ExtractionTask | None = None
-        self._file.write_text("", encoding="utf-8")
-        for task in tasks:
-            if task.extraction_task_id == extraction_task_id:
-                task = replace(
-                    task,
-                    status=status,
-                    started_at=started_at if started_at is not None else task.started_at,
-                    finished_at=(
-                        finished_at if finished_at is not None else task.finished_at
-                    ),
-                    error_summary=error_summary,
-                )
-                updated = task
-            self._append(task)
+        with self._lock:
+            tasks = list(self._iter_all())
+            updated: ExtractionTask | None = None
+            self._file.write_text("", encoding="utf-8")
+            for task in tasks:
+                if task.extraction_task_id == extraction_task_id:
+                    task = replace(
+                        task,
+                        status=status,
+                        started_at=started_at if started_at is not None else task.started_at,
+                        finished_at=(
+                            finished_at if finished_at is not None else task.finished_at
+                        ),
+                        error_summary=error_summary,
+                    )
+                    updated = task
+                self._append(task)
         return updated
 
     def _append(self, task: ExtractionTask) -> None:

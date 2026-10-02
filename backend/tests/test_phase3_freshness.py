@@ -116,7 +116,9 @@ def test_freshness_stale_detected() -> None:
         stale_after=past,
     )
 
-    result = ChatService._check_hit_freshness(stale_hit)
+    from app.services.freshness_checker import check_hit_freshness
+
+    result = check_hit_freshness(stale_hit)
     assert result is not None
     assert result.is_stale
 
@@ -180,9 +182,10 @@ def test_stale_elastic_hit_returns_safe_fallback_with_action_link(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: _FakeLexicalRetriever([stale_hit]),
+        lambda self, es: _FakeLexicalRetriever([stale_hit]),
     )
-    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self, es: None)
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
 
     service = ChatService()
     response = service.ask(
@@ -451,7 +454,7 @@ def test_local_stale_document_chunk_preserves_metadata_and_falls_back(
 
 def test_freshness_warning_detected() -> None:
     from app.retrieval.hybrid_retriever import HybridHit
-    from app.services.chat_service import ChatService
+    from app.services.freshness_checker import check_hit_freshness
 
     past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
@@ -478,7 +481,7 @@ def test_freshness_warning_detected() -> None:
         stale_after=future,
     )
 
-    result = ChatService._check_hit_freshness(warning_hit)
+    result = check_hit_freshness(warning_hit)
     assert result is not None
     assert result.is_warning
 
@@ -518,9 +521,10 @@ def test_warning_elastic_hit_still_answers_with_freshness_notice(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: _FakeLexicalRetriever([warning_hit]),
+        lambda self, es: _FakeLexicalRetriever([warning_hit]),
     )
-    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self: None)
+    monkeypatch.setattr(ChatService, "_create_hybrid_retriever", lambda self, es: None)
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
 
     service = ChatService()
     response = service.ask(

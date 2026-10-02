@@ -18,13 +18,14 @@ def _configure_document_storage(tmp_path: Path) -> None:
     documents_route.service._chunk_repository._path = tmp_path / "chunks.jsonl"
 
 
-def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
+def test_document_upload_registers_file_and_metadata(tmp_path, admin_headers) -> None:
     _configure_document_storage(tmp_path)
 
     client = TestClient(app)
     response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={"file": ("guide.txt", b"hello document", "text/plain")},
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
@@ -69,23 +70,26 @@ def test_document_upload_registers_file_and_metadata(tmp_path) -> None:
 
 def test_document_list_returns_uploaded_documents_in_reverse_created_order(
     tmp_path,
+    admin_headers,
 ) -> None:
     _configure_document_storage(tmp_path)
 
     client = TestClient(app)
     first_response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={"file": ("first.txt", b"first document text", "text/plain")},
+        headers=admin_headers,
     )
     second_response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={"file": ("second.txt", b"second document body", "text/plain")},
+        headers=admin_headers,
     )
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200
 
-    response = client.get("/api/documents")
+    response = client.get("/api/v1/documents", headers=admin_headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -99,13 +103,14 @@ def test_document_list_returns_uploaded_documents_in_reverse_created_order(
     assert payload["items"][1]["chunk_count"] == 1
 
 
-def test_document_delete_removes_file_metadata_and_chunks(tmp_path) -> None:
+def test_document_delete_removes_file_metadata_and_chunks(tmp_path, admin_headers) -> None:
     _configure_document_storage(tmp_path)
 
     client = TestClient(app)
     upload_response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={"file": ("guide.txt", b"hello document", "text/plain")},
+        headers=admin_headers,
     )
 
     assert upload_response.status_code == 200
@@ -113,7 +118,9 @@ def test_document_delete_removes_file_metadata_and_chunks(tmp_path) -> None:
     uploaded_file = tmp_path / "uploads" / f"{document_id}_guide.txt"
     assert uploaded_file.exists()
 
-    delete_response = client.delete(f"/api/documents/{document_id}")
+    delete_response = client.delete(
+        f"/api/v1/documents/{document_id}", headers=admin_headers
+    )
 
     assert delete_response.status_code == 200
     assert delete_response.json() == {"status": "deleted", "document_id": document_id}
@@ -122,22 +129,48 @@ def test_document_delete_removes_file_metadata_and_chunks(tmp_path) -> None:
     assert not (tmp_path / "chunks.jsonl").exists()
 
 
-def test_document_delete_returns_404_for_unknown_document(tmp_path) -> None:
+def test_document_delete_returns_404_for_unknown_document(tmp_path, admin_headers) -> None:
     _configure_document_storage(tmp_path)
 
     client = TestClient(app)
-    response = client.delete("/api/documents/doc-missing")
+    response = client.delete("/api/v1/documents/doc-missing", headers=admin_headers)
 
     assert response.status_code == 404
     assert response.json()["detail"] == "文档不存在"
 
 
-def test_document_upload_rejects_unsupported_suffix() -> None:
+def test_document_upload_rejects_unsupported_suffix(admin_headers) -> None:
     client = TestClient(app)
     response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={"file": ("guide.exe", b"bad", "application/octet-stream")},
+        headers=admin_headers,
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "当前仅支持 .txt / .md / .pdf / .docx 文件"
+
+
+def test_documents_endpoints_require_auth() -> None:
+    client = TestClient(app)
+
+    assert client.get("/api/v1/documents").status_code == 401
+    assert client.post(
+        "/api/v1/documents/upload",
+        files={"file": ("test.txt", b"data", "text/plain")},
+    ).status_code == 401
+    assert client.delete("/api/v1/documents/doc-x").status_code == 401
+
+
+def test_documents_endpoints_reject_user_role() -> None:
+    client = TestClient(app)
+    login = client.post("/api/v1/auth/login", json={"username": "test", "password": "test"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    assert client.get("/api/v1/documents", headers=headers).status_code == 403
+    assert client.post(
+        "/api/v1/documents/upload",
+        files={"file": ("test.txt", b"data", "text/plain")},
+        headers=headers,
+    ).status_code == 403
+    assert client.delete("/api/v1/documents/doc-x", headers=headers).status_code == 403

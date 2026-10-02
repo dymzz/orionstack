@@ -98,7 +98,7 @@ def map_faq_item_to_knowledge_unit(
     item: dict[str, Any], *, default_domain: str = "hr"
 ) -> KnowledgeUnit:
     return KnowledgeUnit(
-        unit_id=item.get("id", ""),
+        unit_id=item.get("unit_id") or item.get("id", ""),
         source_kind="faq",
         question=item.get("question", ""),
         answer=item.get("answer", ""),
@@ -162,9 +162,11 @@ class KnowledgeUnitRepository:
         *,
         faq_repo: Any | None = None,
         chunk_repo: Any | None = None,
+        extracted_faq_repo: Any | None = None,
     ) -> None:
         self._faq_repo = faq_repo
         self._chunk_repo = chunk_repo
+        self._extracted_faq_repo = extracted_faq_repo
         storage_root = Path(__file__).resolve().parents[1]
         self._seed_dir = storage_root / "seed"
         self._upload_dir = storage_root / "uploads"
@@ -185,6 +187,13 @@ class KnowledgeUnitRepository:
             if unit.unit_id and unit.unit_id not in known_faq_ids:
                 units.append(unit)
                 known_faq_ids.add(unit.unit_id)
+
+        if self._extracted_faq_repo is not None:
+            for item in self._extracted_faq_repo.list_all():
+                unit = map_faq_item_to_knowledge_unit(item)
+                if unit.unit_id and unit.unit_id not in known_faq_ids:
+                    units.append(unit)
+                    known_faq_ids.add(unit.unit_id)
 
         if self._chunk_repo is not None:
             for chunk in self._chunk_repo.list_all():
@@ -223,6 +232,13 @@ class KnowledgeUnitRepository:
                 target_status,
             )
         )
+        updated_ids.extend(
+            _update_repo_status_by_source_record(
+                self._extracted_faq_repo,
+                source_record_id,
+                target_status,
+            )
+        )
         return updated_ids
 
     def list_faq_units(self) -> list[KnowledgeUnit]:
@@ -241,6 +257,13 @@ class KnowledgeUnitRepository:
             if unit.unit_id and unit.unit_id not in known_faq_ids:
                 units.append(unit)
                 known_faq_ids.add(unit.unit_id)
+
+        if self._extracted_faq_repo is not None:
+            for item in self._extracted_faq_repo.list_all():
+                unit = map_faq_item_to_knowledge_unit(item)
+                if unit.unit_id and unit.unit_id not in known_faq_ids:
+                    units.append(unit)
+                    known_faq_ids.add(unit.unit_id)
 
         return units
 

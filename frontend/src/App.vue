@@ -8,7 +8,7 @@
       </div>
       <nav class="app-nav">
         <RouterLink to="/" class="nav-link" exact-active-class="nav-link-active">问答</RouterLink>
-        <RouterLink to="/admin" class="nav-link" active-class="nav-link-active">管理入口</RouterLink>
+        <RouterLink v-if="isAdminRole" to="/admin" class="nav-link" active-class="nav-link-active">管理入口</RouterLink>
         <button v-if="authenticated" class="nav-link nav-button" @click="handleLogout">
           退出 {{ currentUsername }}
         </button>
@@ -17,6 +17,7 @@
     <main class="app-main">
       <RouterView />
     </main>
+    <ToastContainer />
   </div>
 </template>
 
@@ -24,12 +25,15 @@
 import { RouterLink, RouterView } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { logout, useAuthState } from './services/auth'
+import ToastContainer from './components/common/ToastContainer.vue'
 
 const router = useRouter()
-const { authenticated, currentUsername } = useAuthState()
+const { authenticated, currentUsername, currentRole } = useAuthState()
+
+const isAdminRole = currentRole
 
 async function handleLogout() {
   await logout()
-  await router.push('/')
+  await router.push('/login')
 }
 </script>

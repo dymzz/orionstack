@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from app.config.settings import settings
@@ -19,8 +20,30 @@ from app.schemas.response import (
     DynamicQueryResultItem,
     RetrievalCandidateSummary,
 )
+from app.services.action_link_resolver import ActionLinkResolver
+from app.services.debug_info_builder import (
+    build_debug_info,
+    hit_provenance_kwargs,
+    item_provenance_kwargs,
+)
+from app.services.freshness_checker import check_hit_freshness, check_item_freshness
+from app.services.refusal_checker import match_refusal_reason
+from app.services.search_utils import (
+    CLARIFICATION_MAX_RERANK_SCORE_GAP,
+    SCOPED_HYBRID_RERANK_SIZE,
+    UNSCOPED_HYBRID_RERANK_SIZE,
+    combine_reject_reason,
+    format_backend_soft_fallback_reason,
+    format_backend_warning,
+    select_elastic_hit,
+    select_reranked_hit,
+    summarize_hybrid_hits,
+    summarize_lexical_hits,
+    summarize_rerank_decision,
+)
 from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.faq_repo import FAQRepository
+from app.storage.repositories.extracted_faq_repo import ExtractedFaqRepo
 from app.storage.repositories.knowledge_unit_repo import KnowledgeUnitRepository
 
 if TYPE_CHECKING:
@@ -28,33 +51,24 @@ if TYPE_CHECKING:
 
 
 class ChatService:
-    _ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP = 0.35
-    _CLARIFICATION_MAX_RERANK_SCORE_GAP = 0.15
     _ELASTIC_REQUEST_TIMEOUT_SECONDS = 2
-    _SCOPED_HYBRID_RERANK_SIZE = 5
-    _UNSCOPED_HYBRID_RERANK_SIZE = 12
     _LEXICAL_TERM_LIMIT = 18
-    _REFUSAL_TERMS = {
-        "unsafe_request": (
-            "炸弹",
-            "爆炸物",
-            "攻击系统",
-            "木马",
-            "勒索",
-            "窃取密码",
-            "毒品",
-            "伪造证件",
-            "自杀",
-        )
-    }
+    _log = logging.getLogger("orionstack.chat")
 
     def __init__(self) -> None:
         self._faq_repo = FAQRepository()
         self._chunk_repo = ChunkRepository()
+        self._extracted_faq_repo = ExtractedFaqRepo()
         self._ku_repo = KnowledgeUnitRepository(
-            faq_repo=self._faq_repo, chunk_repo=self._chunk_repo
+            faq_repo=self._faq_repo,
+            chunk_repo=self._chunk_repo,
+            extracted_faq_repo=self._extracted_faq_repo,
         )
-        self._retriever = Retriever(self._faq_repo, self._chunk_repo)
+        self._retriever = Retriever(
+            self._faq_repo,
+            self._chunk_repo,
+            extracted_faq_repo=self._extracted_faq_repo,
+        )
         self._resolver = RouteResolver()
         self._query_planner = None
         if settings.enable_query_planner:
@@ -63,11 +77,24 @@ class ChatService:
         self._hybrid_retriever = None
         self._reranker = None
         if settings.search_backend == "elasticsearch":
-            self._lexical_retriever = self._create_lexical_retriever()
-            self._hybrid_retriever = self._create_hybrid_retriever()
+            es = self._create_elasticsearch_client()
+            self._lexical_retriever = self._create_lexical_retriever(es)
+            self._hybrid_retriever = self._create_hybrid_retriever(es)
             if self._hybrid_retriever is not None:
                 self._reranker = self._create_reranker()
         self._dynamic_query_service = self._create_dynamic_query_service()
+        self._action_link_resolver = ActionLinkResolver()
+
+    @staticmethod
+    def _create_elasticsearch_client():
+        from elasticsearch import Elasticsearch
+
+        return Elasticsearch(
+            settings.elastic_url,
+            request_timeout=ChatService._ELASTIC_REQUEST_TIMEOUT_SECONDS,
+            retry_on_timeout=False,
+            max_retries=0,
+        )
 
     def _create_query_planner(self) -> QueryPlanner:
         return QueryPlanner(
@@ -75,30 +102,18 @@ class ChatService:
             model=settings.planner_model,
         )
 
-    def _create_lexical_retriever(self):
+    @staticmethod
+    def _create_lexical_retriever(es):
         from app.retrieval.lexical_retriever import LexicalRetriever
-        from elasticsearch import Elasticsearch
 
-        es = Elasticsearch(
-            settings.elastic_url,
-            request_timeout=self._ELASTIC_REQUEST_TIMEOUT_SECONDS,
-            retry_on_timeout=False,
-            max_retries=0,
-        )
         return LexicalRetriever(es, index_name=settings.elastic_index)
 
-    def _create_hybrid_retriever(self):
+    @staticmethod
+    def _create_hybrid_retriever(es):
         from app.retrieval.hybrid_retriever import HybridRetriever
         from app.retrieval.lexical_retriever import LexicalRetriever
         from app.retrieval.vector_retriever import VectorRetriever
-        from elasticsearch import Elasticsearch
 
-        es = Elasticsearch(
-            settings.elastic_url,
-            request_timeout=self._ELASTIC_REQUEST_TIMEOUT_SECONDS,
-            retry_on_timeout=False,
-            max_retries=0,
-        )
         lexical_retriever = LexicalRetriever(es, index_name=settings.elastic_index)
         vector_retriever = VectorRetriever(es, index_name=settings.elastic_index)
         return HybridRetriever(lexical_retriever, vector_retriever)
@@ -117,6 +132,7 @@ class ChatService:
     def ask(
         self, payload: ChatAskRequest, *, trace_id: str, debug_enabled: bool
     ) -> ChatAskResponse:
+        self._log.info("chat_ask trace_id=%s query=%r", trace_id, payload.raw_query[:80])
         normalized_query = normalize_query(payload.raw_query)
         document_ids = [
             document_id.strip()
@@ -129,7 +145,7 @@ class ChatService:
                 trace_id=trace_id,
                 answer="请输入更明确的问题后再试。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result="refused",
@@ -140,14 +156,14 @@ class ChatService:
                 ),
             )
 
-        refusal_reason = self._match_refusal_reason(normalized_query)
+        refusal_reason = match_refusal_reason(normalized_query)
         if refusal_reason is not None:
             return ChatAskResponse(
                 response_status="refused",
                 trace_id=trace_id,
                 answer="当前请求超出 FAQ 知识问答的安全边界，暂不提供回答。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result="refused",
@@ -178,7 +194,7 @@ class ChatService:
                 trace_id=trace_id,
                 answer="当前请求未进入标准 FAQ 路径，请先尝试更直接的提问方式。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result=decision.route,
@@ -242,11 +258,13 @@ class ChatService:
             planner_terms,
             self._extract_lexical_terms(search_query),
         )
-        business_domain = None if planner_output is None else planner_output.domain_hint
+        business_domain = (
+            None if planner_output is None else planner_output.domain_hint
+        )
         hybrid_size = (
-            self._UNSCOPED_HYBRID_RERANK_SIZE
+            UNSCOPED_HYBRID_RERANK_SIZE
             if business_domain is None
-            else self._SCOPED_HYBRID_RERANK_SIZE
+            else SCOPED_HYBRID_RERANK_SIZE
         )
 
         used_hybrid = planner_output is not None and self._hybrid_retriever is not None
@@ -265,7 +283,7 @@ class ChatService:
                 backend_warning = getattr(
                     self._hybrid_retriever, "last_backend_warning", None
                 )
-                lexical_topk, vector_topk, rrf_topk = self._summarize_hybrid_hits(hits)
+                lexical_topk, vector_topk, rrf_topk = summarize_hybrid_hits(hits)
             else:
                 hits = self._lexical_retriever.search(
                     search_query,
@@ -273,16 +291,16 @@ class ChatService:
                     min_score=0.1,
                     business_domain=business_domain,
                     lifecycle_status="active",
-                    size=self._SCOPED_HYBRID_RERANK_SIZE,
+                    size=SCOPED_HYBRID_RERANK_SIZE,
                 )
-                lexical_topk = self._summarize_lexical_hits(hits)
+                lexical_topk = summarize_lexical_hits(hits)
         except RetrievalBackendError as error:
             return ChatAskResponse(
                 response_status="fallback",
                 trace_id=trace_id,
                 answer="当前检索后端暂时不可用，请稍后重试。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result="faq_qa_elastic",
@@ -296,7 +314,7 @@ class ChatService:
                     lexical_topk=lexical_topk,
                     vector_topk=vector_topk,
                     rrf_topk=rrf_topk,
-                    **self._summarize_rerank_decision(
+                    **summarize_rerank_decision(
                         None,
                         reject_reason=error.cause_name,
                     ),
@@ -309,7 +327,7 @@ class ChatService:
                 trace_id=trace_id,
                 answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result="faq_qa_elastic",
@@ -323,9 +341,9 @@ class ChatService:
                     lexical_topk=lexical_topk,
                     vector_topk=vector_topk,
                     rrf_topk=rrf_topk,
-                    **self._summarize_rerank_decision(
+                    **summarize_rerank_decision(
                         None,
-                        reject_reason=self._format_backend_warning(backend_warning),
+                        reject_reason=format_backend_warning(backend_warning),
                     ),
                 ),
             )
@@ -358,7 +376,7 @@ class ChatService:
             if clarification_response is not None:
                 return clarification_response
 
-            reranked = self._select_reranked_hit(reranked_hits)
+            reranked = select_reranked_hit(reranked_hits)
             if reranked is None:
                 top_reranked = None if not reranked_hits else reranked_hits[0]
                 return ChatAskResponse(
@@ -366,7 +384,7 @@ class ChatService:
                     trace_id=trace_id,
                     answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
                     citations=[],
-                    debug_info=self._build_debug_info(
+                    debug_info=build_debug_info(
                         debug_enabled,
                         normalized_query,
                         route_result="faq_qa_elastic",
@@ -381,9 +399,9 @@ class ChatService:
                         lexical_topk=lexical_topk,
                         vector_topk=vector_topk,
                         rrf_topk=rrf_topk,
-                        **self._summarize_rerank_decision(
+                        **summarize_rerank_decision(
                             top_reranked,
-                            reject_reason=self._combine_reject_reason(
+                            reject_reason=combine_reject_reason(
                                 "evidence_below_threshold",
                                 backend_warning,
                             ),
@@ -391,7 +409,7 @@ class ChatService:
                         **(
                             {}
                             if top_reranked is None
-                            else self._hit_provenance_kwargs(top_reranked.hit)
+                            else hit_provenance_kwargs(top_reranked.hit)
                         ),
                     ),
                 )
@@ -399,16 +417,16 @@ class ChatService:
             evidence_spans = reranked.evidence_spans
             selected_reranked = reranked
         else:
-            best = self._select_elastic_hit(hits)
+            best = select_elastic_hit(hits)
 
         answer = best.answer or best.body_text
         snippet = answer[:160] if not evidence_spans else evidence_spans[0].text
         citation = self._build_hit_citation(best, snippet)
-        action_links = self._find_action_links_for_domain(business_domain)
+        action_links = self._action_link_resolver.find_by_domain(business_domain)
 
-        freshness_result = self._check_hit_freshness(best)
+        freshness_result = check_hit_freshness(best)
         if freshness_result is not None and freshness_result.is_stale:
-            stale_action_links = action_links or self._find_action_links_for_source_record(
+            stale_action_links = action_links or self._action_link_resolver.find_by_source_record(
                 best.source_record_id
             )
             return ChatAskResponse(
@@ -420,7 +438,7 @@ class ChatService:
                 ),
                 citations=[],
                 action_links=stale_action_links,
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result="faq_qa_elastic",
@@ -435,9 +453,9 @@ class ChatService:
                     lexical_topk=lexical_topk,
                     vector_topk=vector_topk,
                     rrf_topk=rrf_topk,
-                    **self._summarize_rerank_decision(
+                    **summarize_rerank_decision(
                         selected_reranked,
-                        reject_reason=self._format_backend_warning(backend_warning),
+                        reject_reason=format_backend_warning(backend_warning),
                     ),
                     source_record_id=best.source_record_id or None,
                     import_batch_id=best.import_batch_id or None,
@@ -455,7 +473,7 @@ class ChatService:
             answer=answer,
             citations=[citation],
             action_links=action_links,
-            debug_info=self._build_debug_info(
+            debug_info=build_debug_info(
                 debug_enabled,
                 normalized_query,
                 route_result="faq_qa_elastic",
@@ -464,7 +482,7 @@ class ChatService:
                 route_confidence=None,
                 retrieval_score=None if used_hybrid else best.score,
                 fusion_score=best.score if used_hybrid else None,
-                fallback_reason=self._format_backend_soft_fallback_reason(
+                fallback_reason=format_backend_soft_fallback_reason(
                     backend_warning
                 ),
                 planner_output=planner_output,
@@ -472,9 +490,9 @@ class ChatService:
                 lexical_topk=lexical_topk,
                 vector_topk=vector_topk,
                 rrf_topk=rrf_topk,
-                **self._summarize_rerank_decision(
+                **summarize_rerank_decision(
                     selected_reranked,
-                    reject_reason=self._format_backend_warning(backend_warning),
+                    reject_reason=format_backend_warning(backend_warning),
                 ),
                 source_record_id=best.source_record_id or None,
                 import_batch_id=best.import_batch_id or None,
@@ -482,53 +500,6 @@ class ChatService:
                 freshness_status=freshness_result.status if freshness_result else None,
             ),
         )
-
-    @classmethod
-    def _select_elastic_hit(cls, hits):
-        best = hits[0]
-        if best.source_kind == "faq":
-            return best
-
-        faq_candidate = next(
-            (
-                hit
-                for hit in hits
-                if hit.source_kind == "faq" and (hit.answer or hit.body_text)
-            ),
-            None,
-        )
-        if faq_candidate is None:
-            return best
-
-        score_gap = best.score - faq_candidate.score
-        if score_gap <= cls._ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP:
-            return faq_candidate
-        return best
-
-    def _select_reranked_hit(self, reranked_hits):
-        accepted_hits = [
-            item
-            for item in reranked_hits
-            if item.accept and (item.hit.answer or item.hit.body_text)
-        ]
-        if not accepted_hits:
-            return None
-
-        best = accepted_hits[0]
-        if best.hit.source_kind == "faq":
-            return best
-
-        faq_candidate = next(
-            (item for item in accepted_hits if item.hit.source_kind == "faq"),
-            None,
-        )
-        if faq_candidate is None:
-            return best
-
-        score_gap = best.rerank_score - faq_candidate.rerank_score
-        if score_gap <= self._ELASTIC_FAQ_PREFERENCE_MAX_SCORE_GAP:
-            return faq_candidate
-        return best
 
     def _build_clarification_response(
         self,
@@ -552,7 +523,7 @@ class ChatService:
         top_candidate = clarification_candidates[0]
         second_candidate = clarification_candidates[1]
         score_gap = top_candidate.rerank_score - second_candidate.rerank_score
-        if score_gap > self._CLARIFICATION_MAX_RERANK_SCORE_GAP:
+        if score_gap > CLARIFICATION_MAX_RERANK_SCORE_GAP:
             return None
 
         if top_candidate.hit.question == second_candidate.hit.question:
@@ -579,14 +550,14 @@ class ChatService:
             trace_id=trace_id,
             answer="当前问题还不够具体，请先确认您想了解的具体规则方向。",
             citations=citations,
-            action_links=self._find_action_links_for_domain(business_domain),
+            action_links=self._action_link_resolver.find_by_domain(business_domain),
             clarification=ClarificationInfo(
                 clarification_required=True,
                 question="您更想了解以下哪一项？",
                 options=options,
                 conflict_reason="multiple_close_faq_candidates",
             ),
-            debug_info=self._build_debug_info(
+            debug_info=build_debug_info(
                 debug_enabled,
                 normalized_query,
                 route_result="faq_qa_elastic",
@@ -601,11 +572,11 @@ class ChatService:
                 lexical_topk=lexical_topk,
                 vector_topk=vector_topk,
                 rrf_topk=rrf_topk,
-                **self._summarize_rerank_decision(
+                **summarize_rerank_decision(
                     top_candidate,
                     reject_reason=rerank_reject_reason,
                 ),
-                **self._hit_provenance_kwargs(top_candidate.hit),
+                **hit_provenance_kwargs(top_candidate.hit),
             ),
         )
 
@@ -632,109 +603,6 @@ class ChatService:
             }
         )
 
-    @staticmethod
-    def _summarize_lexical_hits(
-        hits, *, limit: int = 3
-    ) -> list[RetrievalCandidateSummary]:
-        return [
-            RetrievalCandidateSummary(
-                unit_id=hit.unit_id,
-                score=float(hit.score),
-                source_kind=hit.source_kind,
-            )
-            for hit in hits[:limit]
-        ]
-
-    @classmethod
-    def _summarize_hybrid_hits(
-        cls, hits, *, limit: int = 3
-    ) -> tuple[
-        list[RetrievalCandidateSummary],
-        list[RetrievalCandidateSummary],
-        list[RetrievalCandidateSummary],
-    ]:
-        lexical_topk = [
-            RetrievalCandidateSummary(
-                unit_id=hit.unit_id,
-                score=float(hit.bm25_score or 0.0),
-                source_kind=hit.source_kind,
-            )
-            for hit in sorted(
-                (item for item in hits if item.lexical_rank is not None),
-                key=lambda item: item.lexical_rank or 0,
-            )[:limit]
-        ]
-        vector_topk = [
-            RetrievalCandidateSummary(
-                unit_id=hit.unit_id,
-                score=float(hit.vector_score or 0.0),
-                source_kind=hit.source_kind,
-            )
-            for hit in sorted(
-                (item for item in hits if item.vector_rank is not None),
-                key=lambda item: item.vector_rank or 0,
-            )[:limit]
-        ]
-        rrf_topk = [
-            RetrievalCandidateSummary(
-                unit_id=hit.unit_id,
-                score=float(hit.score),
-                source_kind=hit.source_kind,
-                lexical_dominance_applied=hit.lexical_dominance_applied,
-                vector_dominance_applied=hit.vector_dominance_applied,
-            )
-            for hit in sorted(hits, key=lambda item: item.rrf_rank)[:limit]
-        ]
-        return lexical_topk, vector_topk, rrf_topk
-
-    @staticmethod
-    def _summarize_rerank_decision(
-        reranked_hit,
-        *,
-        reject_reason: str | None = None,
-    ) -> dict[str, bool | float | int | str | None]:
-        if reranked_hit is None:
-            return {
-                "rerank_accept": None,
-                "rerank_score": None,
-                "evidence_confidence": None,
-                "evidence_span_count": None,
-                "reject_reason": reject_reason,
-            }
-
-        return {
-            "rerank_accept": reranked_hit.accept,
-            "rerank_score": float(reranked_hit.rerank_score),
-            "evidence_confidence": float(reranked_hit.evidence_confidence),
-            "evidence_span_count": len(reranked_hit.evidence_spans),
-            "reject_reason": reject_reason,
-        }
-
-    @staticmethod
-    def _format_backend_warning(backend_warning) -> str | None:
-        if backend_warning is None:
-            return None
-        return f"{backend_warning.failed_stage}_backend_soft_fallback:{backend_warning.cause_name}"
-
-    @classmethod
-    def _combine_reject_reason(
-        cls,
-        reject_reason: str | None,
-        backend_warning,
-    ) -> str | None:
-        backend_reason = cls._format_backend_warning(backend_warning)
-        if backend_reason is None:
-            return reject_reason
-        if reject_reason is None:
-            return backend_reason
-        return f"{reject_reason};{backend_reason}"
-
-    @staticmethod
-    def _format_backend_soft_fallback_reason(backend_warning) -> str | None:
-        if backend_warning is None:
-            return None
-        return f"{backend_warning.failed_stage}_backend_soft_fallback"
-
     def _search_local(
         self,
         decision: IntentDecision,
@@ -757,7 +625,7 @@ class ChatService:
                 trace_id=trace_id,
                 answer="当前知识库中未命中足够依据，请尝试使用更明确的关键词提问。",
                 citations=[],
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result=decision.route,
@@ -772,16 +640,16 @@ class ChatService:
                     **(
                         {}
                         if hit is None
-                        else self._item_provenance_kwargs(hit.item)
+                        else item_provenance_kwargs(hit.item)
                     ),
                 ),
             )
 
-        freshness_result = self._check_item_freshness(hit.item)
+        freshness_result = check_item_freshness(hit.item)
         if freshness_result is not None and freshness_result.is_stale:
-            action_links = self._find_action_links_for_source_record(
+            action_links = self._action_link_resolver.find_by_source_record(
                 hit.item.get("source_record_id")
-            ) or self._find_action_links_for_domain(hit.item.get("business_domain"))
+            ) or self._action_link_resolver.find_by_domain(hit.item.get("business_domain"))
             return ChatAskResponse(
                 response_status="fallback",
                 trace_id=trace_id,
@@ -791,7 +659,7 @@ class ChatService:
                 ),
                 citations=[],
                 action_links=action_links,
-                debug_info=self._build_debug_info(
+                debug_info=build_debug_info(
                     debug_enabled,
                     normalized_query,
                     route_result=decision.route,
@@ -801,7 +669,7 @@ class ChatService:
                     retrieval_score=float(hit.score),
                     fallback_reason="stale_knowledge",
                     planner_output=planner_output,
-                    **self._item_provenance_kwargs(hit.item),
+                    **item_provenance_kwargs(hit.item),
                     freshness_status=freshness_result.status,
                 ),
             )
@@ -816,7 +684,7 @@ class ChatService:
             trace_id=trace_id,
             answer=answer,
             citations=[citation],
-            debug_info=self._build_debug_info(
+            debug_info=build_debug_info(
                 debug_enabled,
                 normalized_query,
                 route_result=decision.route,
@@ -825,7 +693,7 @@ class ChatService:
                 route_confidence=decision.confidence,
                 retrieval_score=float(hit.score),
                 planner_output=planner_output,
-                **self._item_provenance_kwargs(hit.item),
+                **item_provenance_kwargs(hit.item),
                 freshness_status=freshness_result.status if freshness_result else None,
             ),
         )
@@ -839,7 +707,8 @@ class ChatService:
 
         try:
             planner_output = self._query_planner.plan(normalized_query)
-        except Exception:
+        except Exception as exc:
+            self._log.warning("planner_failed falling_back=rule_parser error=%s", exc)
             decision = self._resolver.resolve(normalized_query)
             return decision, None, "rule_parser"
 
@@ -848,6 +717,7 @@ class ChatService:
             or not planner_output.lexical_terms
             or planner_output.planner_confidence < settings.route_confidence_threshold
         ):
+            self._log.info("planner_low_confidence confidence=%.2f falling_back=rule_parser", planner_output.planner_confidence)
             decision = self._resolver.resolve(normalized_query)
             return decision, None, "rule_parser"
 
@@ -891,96 +761,6 @@ class ChatService:
                     terms.append(trigram)
         return terms
 
-    @staticmethod
-    def _match_refusal_reason(normalized_query: str) -> str | None:
-        lowered_query = normalized_query.lower()
-        for reason, terms in ChatService._REFUSAL_TERMS.items():
-            if any(term in lowered_query for term in terms):
-                return reason
-        return None
-
-    @staticmethod
-    def _build_debug_info(
-        enabled: bool,
-        normalized_query: str,
-        route_result: str,
-        chunk_ids: list[str],
-        *,
-        router_used: str,
-        route_confidence: float | None,
-        retrieval_score: float | None = None,
-        fusion_score: float | None = None,
-        fallback_reason: str | None = None,
-        planner_output: PlannerOutput | None = None,
-        retrieval_mode: str | None = None,
-        lexical_topk: list[RetrievalCandidateSummary] | None = None,
-        vector_topk: list[RetrievalCandidateSummary] | None = None,
-        rrf_topk: list[RetrievalCandidateSummary] | None = None,
-        rerank_accept: bool | None = None,
-        rerank_score: float | None = None,
-        evidence_confidence: float | None = None,
-        evidence_span_count: int | None = None,
-        reject_reason: str | None = None,
-        source_record_id: str | None = None,
-        import_batch_id: str | None = None,
-        unit_version: int | None = None,
-        source_updated_at: str | None = None,
-        source_record_status: str | None = None,
-        dynamic_query_key: str | None = None,
-        freshness_status: str | None = None,
-    ) -> DebugInfo | None:
-        if not enabled:
-            return None
-        return DebugInfo(
-            normalized_query=normalized_query,
-            route_result=route_result,
-            router_used=router_used,
-            retrieved_chunks=chunk_ids,
-            route_confidence=route_confidence,
-            retrieval_score=retrieval_score,
-            fusion_score=fusion_score,
-            fallback_reason=fallback_reason,
-            domain_hint=None if planner_output is None else planner_output.domain_hint,
-            lexical_terms=None if planner_output is None else planner_output.lexical_terms,
-            planner_confidence=None
-            if planner_output is None
-            else planner_output.planner_confidence,
-            retrieval_mode=retrieval_mode,
-            lexical_topk=lexical_topk,
-            vector_topk=vector_topk,
-            rrf_topk=rrf_topk,
-            rerank_accept=rerank_accept,
-            rerank_score=rerank_score,
-            evidence_confidence=evidence_confidence,
-            evidence_span_count=evidence_span_count,
-            reject_reason=reject_reason,
-            source_record_id=source_record_id,
-            import_batch_id=import_batch_id,
-            unit_version=unit_version,
-            source_updated_at=source_updated_at,
-            source_record_status=source_record_status,
-            dynamic_query_key=dynamic_query_key,
-            freshness_status=freshness_status,
-        )
-
-    @staticmethod
-    def _hit_provenance_kwargs(hit) -> dict[str, Any]:
-        return {
-            "source_record_id": getattr(hit, "source_record_id", "") or None,
-            "import_batch_id": getattr(hit, "import_batch_id", "") or None,
-            "unit_version": int(getattr(hit, "unit_version", 1) or 1),
-            "source_updated_at": getattr(hit, "source_updated_at", "") or None,
-        }
-
-    @staticmethod
-    def _item_provenance_kwargs(item: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "source_record_id": item.get("source_record_id") or None,
-            "import_batch_id": item.get("import_batch_id") or None,
-            "unit_version": int(item.get("unit_version") or 1),
-            "source_updated_at": item.get("source_updated_at") or None,
-        }
-
     def _try_dynamic_query(
         self,
         normalized_query: str,
@@ -999,7 +779,7 @@ class ChatService:
         if result is None:
             return None
 
-        action_links = self._find_action_links_for_resource_type(result.resource_type)
+        action_links = self._action_link_resolver.find_by_resource_type(result.resource_type)
         answer = self._compose_dynamic_query_answer(result)
 
         return ChatAskResponse(
@@ -1009,7 +789,7 @@ class ChatService:
             citations=[],
             action_links=action_links,
             dynamic_query_result=result,
-            debug_info=self._build_debug_info(
+            debug_info=build_debug_info(
                 debug_enabled,
                 normalized_query,
                 route_result="dynamic_query",
@@ -1038,89 +818,3 @@ class ChatService:
             return f"当前没有查到{result.description}的记录。"
         count = len(result.data)
         return f"已为您查询到 {count} 条{result.description}记录，详细数据见下方。"
-
-    @classmethod
-    def _find_action_links_for_resource_type(
-        cls, resource_type: str
-    ) -> list[ActionLinkItem]:
-        from app.storage.repositories.action_link_repo import ActionLinkRepo
-
-        repo = ActionLinkRepo()
-        links = repo.list_by_resource_type(resource_type)
-        return [
-            ActionLinkItem(
-                action_link_id=link.action_link_id,
-                label=link.label,
-                url=link.url,
-                system_type=link.system_type,
-                resource_type=link.resource_type,
-            )
-            for link in links
-        ]
-
-    @classmethod
-    def _find_action_links_for_source_record(
-        cls, source_record_id: str | None
-    ) -> list[ActionLinkItem]:
-        if not source_record_id:
-            return []
-        from app.storage.repositories.action_link_repo import ActionLinkRepo
-
-        repo = ActionLinkRepo()
-        links = repo.list_by_source_record(source_record_id)
-        return [
-            ActionLinkItem(
-                action_link_id=link.action_link_id,
-                label=link.label,
-                url=link.url,
-                system_type=link.system_type,
-                resource_type=link.resource_type,
-            )
-            for link in links
-        ]
-
-    @classmethod
-    def _find_action_links_for_domain(
-        cls, business_domain: str | None
-    ) -> list[ActionLinkItem]:
-        if business_domain is None:
-            return []
-        from app.storage.repositories.action_link_repo import ActionLinkRepo
-
-        repo = ActionLinkRepo()
-        items: list[ActionLinkItem] = []
-        explicit_links = repo.list_by_domain(business_domain)
-        for link in explicit_links:
-            items.append(
-                ActionLinkItem(
-                    action_link_id=link.action_link_id,
-                    label=link.label,
-                    url=link.url,
-                    system_type=link.system_type,
-                    resource_type=link.resource_type,
-                )
-            )
-
-        if items:
-            return items
-        return items
-
-    @staticmethod
-    def _check_hit_freshness(hit):
-        from app.sync.freshness import check_freshness
-
-        fresh_until = hit.fresh_until if hasattr(hit, "fresh_until") else ""
-        stale_after = hit.stale_after if hasattr(hit, "stale_after") else ""
-        if not fresh_until and not stale_after:
-            return None
-        return check_freshness(fresh_until or None, stale_after or None)
-
-    @staticmethod
-    def _check_item_freshness(item: dict[str, Any]):
-        from app.sync.freshness import check_freshness
-
-        fresh_until = item.get("fresh_until") or ""
-        stale_after = item.get("stale_after") or ""
-        if not fresh_until and not stale_after:
-            return None
-        return check_freshness(fresh_until or None, stale_after or None)

@@ -21,7 +21,7 @@ os.environ.setdefault("ORIONSTACK_SEARCH_BACKEND", "local")
 os.environ.setdefault("ORIONSTACK_ENABLE_QUERY_PLANNER", "false")
 os.environ.setdefault("ORIONSTACK_ENABLE_FAST_TRACK", "false")
 
-TEST_TMP_ROOT = Path(__file__).resolve().parent / "_tmp"
+TEST_TMP_ROOT = BACKEND_ROOT.parent / f"pytest-cache-files-{uuid.uuid4().hex}"
 TEST_TMP_ROOT.mkdir(exist_ok=True)
 
 _JSON_BLOCK_PATTERN = re.compile(r"```json\s*(\[.*?\])\s*```", re.S)
@@ -145,10 +145,83 @@ def tmp_path(request: pytest.FixtureRequest) -> Path:
         character if character.isalnum() or character in {"-", "_"} else "-"
         for character in request.node.name
     ).strip("-")
-    prefix = name or "test"
+    prefix = (name or "test")[:80]
     path = TEST_TMP_ROOT / f"{prefix}-{uuid.uuid4().hex[:8]}"
     path.mkdir(parents=True, exist_ok=False)
     try:
         yield path
     finally:
-        shutil.rmtree(path, ignore_errors=True)
+        if path.resolve().is_relative_to(TEST_TMP_ROOT.resolve()):
+            shutil.rmtree(path, ignore_errors=True)
+
+
+def pytest_sessionfinish() -> None:
+    if TEST_TMP_ROOT.resolve().is_relative_to(BACKEND_ROOT.parent.resolve()):
+        shutil.rmtree(TEST_TMP_ROOT, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime_storage(tmp_path: Path, monkeypatch) -> None:
+    from app.api.routes import chat, documents, extraction
+    from app.storage.repositories import extracted_faq_repo as extracted_storage
+    from app.storage.repositories.base_repo import JsonlLock
+    from app.storage.repositories.chunk_repo import ChunkRepository
+    from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
+    from app.storage.repositories.source_record_repo import SourceRecordRepo
+
+    create_chunk_repository = ChunkRepository.__init__
+    def isolated_chunk_repository(repository, path=None):
+        create_chunk_repository(repository, path=path or tmp_path / "chunks.jsonl")
+    monkeypatch.setattr(ChunkRepository, "__init__", isolated_chunk_repository)
+
+    monkeypatch.setattr(extracted_storage, "_STORAGE_DIR", tmp_path / "extracted_faqs")
+    extracted_repo = extracted_storage.ExtractedFaqRepo()
+    monkeypatch.setattr(extraction, "_extracted_faq_repo", extracted_repo)
+    monkeypatch.setattr(chat.service, "_extracted_faq_repo", extracted_repo)
+    monkeypatch.setattr(chat.service._ku_repo, "_extracted_faq_repo", extracted_repo)
+    monkeypatch.setattr(chat.service._retriever, "_extracted_faq_repo", extracted_repo)
+    source_repo = SourceRecordRepo(storage_dir=tmp_path / "source_records")
+    monkeypatch.setattr(chat, "source_record_repository", source_repo)
+    monkeypatch.setattr(extraction, "_source_record_repo", source_repo)
+    monkeypatch.setattr(
+        extraction, "_candidate_repo", ExtractionCandidateRepo(storage_dir=tmp_path / "candidates")
+    )
+
+    for repository, filename in (
+        (chat.chat_record_repository, "chat_records.jsonl"),
+        (chat.feedback_repository, "feedback.jsonl"),
+        (chat.retrieval_trace_repository, "traces.jsonl"),
+        (chat.hard_cases_repository, "hard_cases.jsonl"),
+        (chat.service._chunk_repo, "chunks.jsonl"),
+        (documents.service._chunk_repository, "chunks.jsonl"),
+    ):
+        path = tmp_path / filename
+        monkeypatch.setattr(repository, "_path", path)
+        monkeypatch.setattr(repository, "_lock", JsonlLock(path))
+    document_repo = documents.service._repository
+    monkeypatch.setattr(document_repo, "_meta_path", tmp_path / "documents.jsonl")
+    monkeypatch.setattr(document_repo, "_upload_dir", tmp_path / "uploads")
+    monkeypatch.setattr(document_repo, "_lock", JsonlLock(document_repo._meta_path))
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    from app.api.auth import create_token
+    from fastapi.testclient import TestClient
+    from main import app
+
+    client = TestClient(app)
+    login = client.post("/api/v1/auth/login", json={"username": "test", "password": "test"})
+    token = login.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def admin_headers() -> dict[str, str]:
+    from fastapi.testclient import TestClient
+    from main import app
+
+    client = TestClient(app)
+    login = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+    token = login.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

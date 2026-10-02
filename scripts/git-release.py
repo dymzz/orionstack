@@ -63,6 +63,7 @@ def main() -> None:
     parser.add_argument("--commit-message", default=None)
     parser.add_argument("--tag-prefix", default="v")
     parser.add_argument("--remote", default="origin")
+    parser.add_argument("--skip-release-check", action="store_true")
     parser.add_argument("--skip-push", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
@@ -114,11 +115,23 @@ def main() -> None:
     print(f"[orionstack] target version : {target_version}")
     print(f"[orionstack] tag            : {tag_name}")
     print(f"[orionstack] commit message : {commit_message}")
+    print(f"[orionstack] release check  : {not args.skip_release_check}")
     print(f"[orionstack] push enabled   : {not args.skip_push}")
 
     if args.check_only:
         print("[orionstack] check only passed.")
         return
+
+    if not args.skip_release_check:
+        release_check_path = os.path.join(repo_root, "scripts", "release-check.py")
+        print("[orionstack] running pre-release check: release-check.py --quick")
+        completed = subprocess.run(
+            [sys.executable, release_check_path, "--quick"],
+            cwd=repo_root,
+        )
+        if completed.returncode != 0:
+            print("[orionstack] Pre-release check failed.", file=sys.stderr)
+            sys.exit(completed.returncode)
 
     confirmation = (
         input("Continue with git add/commit/tag/push? (y/N): ").strip().lower()

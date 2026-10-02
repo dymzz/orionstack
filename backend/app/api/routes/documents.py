@@ -1,5 +1,6 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from app.api.auth import require_admin
 from app.schemas.document import (
     DocumentDeleteResponse,
     DocumentListResponse,
@@ -7,8 +8,16 @@ from app.schemas.document import (
 )
 from app.services.document_service import DocumentService
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter(
+    prefix="/api/v1/documents",
+    tags=["documents"],
+    dependencies=[Depends(require_admin)],
+)
 service = DocumentService()
+
+
+def get_document_service() -> DocumentService:
+    return service
 
 
 @router.get("", response_model=DocumentListResponse)

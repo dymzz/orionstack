@@ -1,4 +1,4 @@
-import { getJson, postJson } from './api'
+import { getJson, postJson, CHAT_TIMEOUT_MS } from './api'
 import type {
   ChatAskRequest,
   ChatAskResponse,
@@ -14,17 +14,17 @@ export async function askQuestion(
   documentIds: string[] = [],
 ): Promise<ChatAskResponse> {
   const payload: ChatAskRequest = { raw_query: rawQuery, debug, document_ids: documentIds }
-  return await postJson<ChatAskResponse>('/api/chat/ask', payload)
+  return await postJson<ChatAskResponse>('/api/v1/chat/ask', payload, CHAT_TIMEOUT_MS)
 }
 
 export async function submitFeedback(payload: ChatFeedbackRequest): Promise<ChatFeedbackResponse> {
-  return await postJson<ChatFeedbackResponse>('/api/chat/feedback', payload)
+  return await postJson<ChatFeedbackResponse>('/api/v1/chat/feedback', payload)
 }
 
 export async function listChatRecords(limit = 20): Promise<ChatRecordListResponse> {
-  return await getJson<ChatRecordListResponse>(`/api/chat/records?limit=${limit}`)
+  return await getJson<ChatRecordListResponse>(`/api/v1/chat/records?limit=${limit}`)
 }
 
 export async function listFeedbackRecords(limit = 20): Promise<FeedbackRecordListResponse> {
-  return await getJson<FeedbackRecordListResponse>(`/api/chat/feedback?limit=${limit}`)
+  return await getJson<FeedbackRecordListResponse>(`/api/v1/chat/feedback?limit=${limit}`)
 }

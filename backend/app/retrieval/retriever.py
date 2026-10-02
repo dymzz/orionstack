@@ -33,9 +33,16 @@ class _DocumentCandidate:
 
 
 class Retriever:
-    def __init__(self, faq_repo: FAQRepository, chunk_repo: ChunkRepository) -> None:
+    def __init__(
+        self,
+        faq_repo: FAQRepository,
+        chunk_repo: ChunkRepository,
+        *,
+        extracted_faq_repo: Any | None = None,
+    ) -> None:
         self._faq_repo = faq_repo
         self._chunk_repo = chunk_repo
+        self._extracted_faq_repo = extracted_faq_repo
 
     def search(
         self, query: str, *, min_score: int, document_ids: list[str] | None = None
@@ -212,7 +219,11 @@ class Retriever:
         best_hit: RetrievalHit | None = None
         best_score = 0
 
-        for item in self._faq_repo.list_all():
+        items = self._faq_repo.list_all()
+        if self._extracted_faq_repo is not None:
+            items = [*items, *self._extracted_faq_repo.list_all()]
+        for item in items:
+            item = {**item, "id": item.get("unit_id") or item.get("id", "")}
             if item.get("lifecycle_status", "active") != "active":
                 continue
 

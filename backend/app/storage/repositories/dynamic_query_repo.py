@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.storage.models.dynamic_query import DynamicQuery
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "dynamic_queries"
 
@@ -14,9 +15,11 @@ class DynamicQueryRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "dynamic_queries.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def create(self, query: DynamicQuery) -> None:
-        self._append(query)
+        with self._lock:
+            self._append(query)
 
     def get(self, dynamic_query_id: str) -> DynamicQuery | None:
         for q in self._iter_all():
@@ -48,34 +51,37 @@ class DynamicQueryRepo:
         ]
 
     def upsert(self, query: DynamicQuery) -> None:
-        existing = self._find_by_query_key(query.query_key)
-        if existing is not None:
-            self._remove(existing.dynamic_query_id)
-        self._append(query)
+        with self._lock:
+            existing = self._find_by_query_key(query.query_key)
+            if existing is not None:
+                self._remove(existing.dynamic_query_id)
+            self._append(query)
 
     def update_status(self, dynamic_query_id: str, status: str) -> None:
-        queries = list(self._iter_all())
-        self._file.write_text("", encoding="utf-8")
-        for q in queries:
-            if q.dynamic_query_id == dynamic_query_id:
-                from dataclasses import replace
+        with self._lock:
+            queries = list(self._iter_all())
+            self._file.write_text("", encoding="utf-8")
+            for q in queries:
+                if q.dynamic_query_id == dynamic_query_id:
+                    from dataclasses import replace
 
-                q = replace(q, status=status)
-            self._append(q)
+                    q = replace(q, status=status)
+                self._append(q)
 
     def update_status_by_source_record(
         self, source_record_id: str, status: str
     ) -> list[str]:
-        queries = list(self._iter_all())
-        updated_ids: list[str] = []
-        self._file.write_text("", encoding="utf-8")
-        for query in queries:
-            if query.source_record_id == source_record_id and query.status != status:
-                from dataclasses import replace
+        with self._lock:
+            queries = list(self._iter_all())
+            updated_ids: list[str] = []
+            self._file.write_text("", encoding="utf-8")
+            for query in queries:
+                if query.source_record_id == source_record_id and query.status != status:
+                    from dataclasses import replace
 
-                updated_ids.append(query.dynamic_query_id)
-                query = replace(query, status=status)
-            self._append(query)
+                    updated_ids.append(query.dynamic_query_id)
+                    query = replace(query, status=status)
+                self._append(query)
         return updated_ids
 
     def _find_by_query_key(self, query_key: str) -> DynamicQuery | None:
@@ -85,6 +91,7 @@ class DynamicQueryRepo:
         return None
 
     def _remove(self, dynamic_query_id: str) -> None:
+        # Must be called inside `with self._lock:` — see upsert().
         queries = [q for q in self._iter_all() if q.dynamic_query_id != dynamic_query_id]
         self._file.write_text("", encoding="utf-8")
         for q in queries:

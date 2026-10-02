@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.storage.models.source_record import SourceRecord
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "source_records"
 
@@ -15,12 +16,14 @@ class SourceRecordRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "source_records.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def upsert(self, record: SourceRecord) -> None:
-        existing = self._find_active_by_system_and_external(record.source_system, record.external_id)
-        if existing is not None:
-            self._remove(existing.source_record_id)
-        self._append(record)
+        with self._lock:
+            existing = self._find_active_by_system_and_external(record.source_system, record.external_id)
+            if existing is not None:
+                self._remove(existing.source_record_id)
+            self._append(record)
 
     def get(self, source_record_id: str) -> SourceRecord | None:
         for record in self._iter_all():
@@ -35,13 +38,14 @@ class SourceRecordRepo:
         return [r for r in self._iter_all() if r.source_system == source_system]
 
     def update_status(self, source_record_id: str, status: str) -> None:
-        records = list(self._iter_all())
-        self._file.write_text("", encoding="utf-8")
-        for r in records:
-            if r.source_record_id == source_record_id:
-                from dataclasses import replace
-                r = replace(r, status=status)
-            self._append(r)
+        with self._lock:
+            records = list(self._iter_all())
+            self._file.write_text("", encoding="utf-8")
+            for r in records:
+                if r.source_record_id == source_record_id:
+                    from dataclasses import replace
+                    r = replace(r, status=status)
+                self._append(r)
 
     def _find_active_by_system_and_external(self, source_system: str, external_id: str) -> SourceRecord | None:
         for r in self._iter_all():
@@ -56,6 +60,7 @@ class SourceRecordRepo:
         return None
 
     def _remove(self, source_record_id: str) -> None:
+        # Must be called inside `with self._lock:` — see upsert().
         records = [r for r in self._iter_all() if r.source_record_id != source_record_id]
         self._file.write_text("", encoding="utf-8")
         for r in records:

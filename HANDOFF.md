@@ -4,6 +4,10 @@
 > 日期：2026-05-02
 > 目的：为下一任开发者/AI 提供项目全貌、当前状态、关键决策与上手路径
 
+> 2026-10-02 更新：下一版本以根目录《OrionStack — DB + Vector + JEV 检索架构设计.md》为准，使用同一个 PostgreSQL 数据库中的结构化表与 pgvector；Jev 负责检索决策和证据判断，LLM 生成答案，后端验证来源。交付顺序见 [下一版本计划](docs/designs/4_postgresql_jev_architecture.md)。当前过渡基线默认为 local，旧 planner/fast track 关闭，生产 Compose 不启动 ES；下文 Phase 2 启动说明属于历史参考。Python 要求以 pyproject.toml 的 3.14+ 为准。
+
+> M1 进度：单库 schema、显式事务迁移/预览、来源与证据契约、Action/Event 模型和 Jev/DeepSeek 客户端已实现；Jev 真实路由已通过。读取 `ORIONSTACK_DATABASE_URL`、`TYPESAFE_API_KEY`、`DEEPSEEK_API_KEY` 环境变量。数据库与 DeepSeek 真实联调待配置；当前迁移预览有两条 FAQ 缺少被引用的来源，整批阻断。四个新 API 和检索编排仍待实现。入口见 [M1 运行说明](docs/designs/5_core_foundation_runbook.md)。
+
 ---
 
 ## 1. 项目是什么
@@ -89,7 +93,7 @@ orionstack/
 │   ├── main.py                         # FastAPI 应用入口
 │   ├── app/
 │   │   ├── api/routes/                 # REST 端点
-│   │   │   ├── health.py               #   /healthz
+│   │   │   ├── health.py               #   /healthz + /readyz
 │   │   │   ├── chat.py                 #   /api/chat/* + trace + hard case
 │   │   │   ├── documents.py            #   /api/documents/*
 │   │   │   └── extraction.py           #   /api/extraction/* (Phase 3)
@@ -157,8 +161,9 @@ orionstack/
 │       └── types/
 │           ├── chat.ts                 #   问答类型
 │           └── admin.ts                #   管理类型
-├── scripts/                            # 19 个脚本（见 scripts/README.md）
+├── scripts/                            # 22 个脚本（见 scripts/README.md）
 ├── docs/                               # 设计 + 进度 + 职责 + 字段 + 契约审计文档
+├── CHANGELOG.md                        # 版本变更记录
 ├── docker-compose.yml                  # Elasticsearch + Odoo 参考环境
 ├── .env.example                        # 环境变量参考
 └── HANDOFF.md                          # 本文件
@@ -213,6 +218,8 @@ python scripts/dev-demo.py
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `ORIONSTACK_APP_MODE` | `demo` | `demo`/`dev` 显示调试面板；`prod` 隐藏 |
+| `ORIONSTACK_LOG_LEVEL` | `INFO` | 后端日志级别 |
+| `ORIONSTACK_ACCESS_LOG_ENABLED` | `true` | 是否输出简要 access log；不记录请求体或 token |
 | `ORIONSTACK_SEARCH_BACKEND` | `elasticsearch` | `elasticsearch` 或 `local` |
 | `ORIONSTACK_ENABLE_QUERY_PLANNER` | `true` | 是否启用 planner |
 | `ORIONSTACK_ENABLE_FAST_TRACK` | `true` | 是否启用 fast track |
@@ -238,7 +245,18 @@ python scripts/dev-demo.py
 python scripts/run-phase2-regression.py
 ```
 
-当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **410 passed, 21 skipped, 9 xfailed**。
+当前快速回归入口覆盖 Phase 2 检索、chat flow、trace 与 hard cases。当前实测基线（2026-05-02）：快速回归 **101 passed**；全量后端测试 **418 passed, 21 skipped, 9 xfailed**。
+
+发布前统一检查入口：
+
+```text
+python scripts/release-check.py
+python scripts/release-check.py --quick
+```
+
+默认 `release-check.py` 会跑全量后端测试、前端生产构建、生产 compose config 校验；`--quick` 会改为 Phase 2 快速回归 + auth/settings 专项测试。
+
+版本发布流程：先更新 `CHANGELOG.md`，再运行 `python scripts/release-check.py`，最后用 `python scripts/git-release.py --version <x.y.z> --commit-message "release: v<x.y.z>"` 创建发布提交与 tag。`git-release.py` 默认会先执行 `release-check.py --quick`。
 
 live smoke 测试默认跳过，需要 API key / 网络时再显式运行。
 
@@ -326,8 +344,47 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 - 后端镜像：`docker/backend.Dockerfile`
 - 前端镜像：`docker/frontend.Dockerfile`
 - Nginx SPA + API 反代配置：`docker/nginx/orionstack.conf`
+- 运行检查：`/healthz` 是存活检查；`/readyz` 是 readiness，包含版本、app mode、生产配置安全状态、ES 索引启动状态，不 ready 时返回 503
 - 持久化：`docker-compose.prod.yml` 使用 named volumes 保存 ES、chat records、feedback、trace、hard case、uploads、SourceRecord、ExtractionCandidate、ActionLink、DynamicQuery 等数据
 - 首次部署保护：后端 entrypoint 会在 action link / dynamic query 持久卷为空时拷贝镜像内默认 JSONL 配置
+
+### 6.9 发布检查收口
+
+- 统一脚本：`scripts/release-check.py`
+- 默认检查：全量后端测试 + 前端 build + `docker compose --env-file .env.prod.example -f docker-compose.prod.yml config`
+- 快速检查：`python scripts/release-check.py --quick`
+- CI 可按需使用 `--skip-compose` 或 `--skip-frontend`
+- compose config 校验隐藏输出并覆盖敏感环境变量，避免本机 API key 泄露到日志
+- GitHub Actions：`.github/workflows/release-check.yml` 在 PR 与 `main` / `master` push 时运行同一 release check
+
+### 6.10 日志与运行观测
+
+- 统一配置：`backend/app/observability/logging.py`
+- 环境变量：`ORIONSTACK_LOG_LEVEL` / `ORIONSTACK_ACCESS_LOG_ENABLED`
+- access log：`request_completed method=... path=... status_code=... duration_ms=...`
+- 异常日志：`request_failed` 使用 `logger.exception` 记录堆栈
+- 启动日志：`startup_begin`、`elastic_indexing_completed`、`elastic_indexing_skipped`、`shutdown_complete`
+- 管理认证日志：`admin_login_succeeded`、`admin_login_failed`、`admin_logout`
+- 日志不记录请求体、密码或 Bearer token
+- Docker 查看：`docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f backend`
+
+### 6.11 备份与恢复
+
+- 本地备份：`python scripts/backup-storage.py`
+- 本地恢复预览：`python scripts/restore-storage.py <backup.tar.gz> --what-if`
+- 本地恢复执行：`python scripts/restore-storage.py <backup.tar.gz> --confirm-restore`
+- 备份包格式：`.tar.gz`，内含 `manifest.json`（路径、大小、SHA-256）和 `storage/` 目录
+- `release-check.py` 已包含 `backup-storage.py --check-only`
+- 生产 Docker named volumes 备份建议：停 backend → `docker compose cp backend:/app/backend/app/storage ./prod-storage-snapshot` → 对 snapshot 运行 `backup-storage.py` → 启动 backend
+
+### 6.12 版本发布与变更记录
+
+- 变更记录：`CHANGELOG.md`
+- 当前开发中能力记录在 `Unreleased`
+- 发布脚本：`scripts/git-release.py`
+- 发布前检查：`scripts/release-check.py`
+- `git-release.py` 默认先跑 `release-check.py --quick`，可用 `--skip-release-check` 显式跳过
+- 推荐发布命令：`python scripts/git-release.py --version <x.y.z> --commit-message "release: v<x.y.z>"`
 
 ---
 
@@ -417,7 +474,7 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 - 多系统适配器（钉钉、飞书、Zendesk、Confluence）
 - 生产数据库（替换 JSONL）
 - 前端 trace / hard case 管理 UX 改进
-- CI/CD 与监控
+- 监控告警与部署发布策略
 
 ---
 
@@ -436,4 +493,4 @@ LLM 只产候选，不直接上线。`pipeline_cli.py` 支持 `--auto-approve` �
 
 ## 13. 一句话收口
 
-**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，管理入口已具备最小认证保护，生产部署已有 Docker Compose 收口，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 410 passed, 21 skipped, 9 xfailed），系统可一键启动（开发：`python scripts/dev-demo.py`；生产：`docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**
+**Phase 1-3 第一轮全部完成，provider bad-case 主链当前无 open 项，管理入口已具备最小认证保护，生产部署已有 Docker Compose 收口，发布检查已有 `scripts/release-check.py` 统一入口并接入 GitHub Actions，运行观测已覆盖启动、请求、认证和 readiness，备份恢复已有脚本化入口，项目环境回归基线稳定（2026-05-02 实测：快速回归 101 passed；全量后端 418 passed, 21 skipped, 9 xfailed），系统可一键启动（开发：`python scripts/dev-demo.py`；生产：`docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build`），文档体系完整（设计 + 进度 + 职责 + 字段 + 契约审计），下一任接手者按本文件 + `docs/` 目录即可继续。**

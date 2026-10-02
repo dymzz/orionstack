@@ -15,6 +15,7 @@ from app.routing.contracts import IntentDecision
 from app.schemas.request import ChatAskRequest
 from app.services import chat_service as chat_service_module
 from app.services.chat_service import ChatService
+from app.services.search_utils import UNSCOPED_HYBRID_RERANK_SIZE
 from conftest import fixture_case, fixture_faq_map, fixture_path_for_faq_id
 
 
@@ -446,9 +447,10 @@ def test_chat_service_returns_backend_error_fallback_when_elasticsearch_search_r
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: _FailingLexicalRetriever(),
+        lambda self, es: _FailingLexicalRetriever(),
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何上传文档？", debug=True),
@@ -986,12 +988,12 @@ def test_chat_service_propagates_lexical_dominance_bonus_through_rerank_to_respo
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_lexical_retriever,
+        lambda self, es: fake_lexical_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: real_hybrid,
+        lambda self, es: real_hybrid,
     )
     monkeypatch.setattr(
         ChatService,
@@ -999,6 +1001,7 @@ def test_chat_service_propagates_lexical_dominance_bonus_through_rerank_to_respo
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假", debug=True),
@@ -1065,12 +1068,12 @@ def test_chat_service_propagates_vector_dominance_bonus_through_rerank_to_respon
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_lexical_retriever,
+        lambda self, es: fake_lexical_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: real_hybrid,
+        lambda self, es: real_hybrid,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1078,6 +1081,7 @@ def test_chat_service_propagates_vector_dominance_bonus_through_rerank_to_respon
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假", debug=True),
@@ -1146,12 +1150,12 @@ def test_chat_service_surfaces_fusion_dominance_attribution_in_debug_rrf_topk(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_lexical_retriever,
+        lambda self, es: fake_lexical_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: real_hybrid,
+        lambda self, es: real_hybrid,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1159,6 +1163,7 @@ def test_chat_service_surfaces_fusion_dominance_attribution_in_debug_rrf_topk(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假", debug=True),
@@ -1226,12 +1231,12 @@ def test_chat_service_propagates_planner_domain_hint_to_both_lexical_and_vector_
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_lexical_retriever,
+        lambda self, es: fake_lexical_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: real_hybrid,
+        lambda self, es: real_hybrid,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1239,6 +1244,7 @@ def test_chat_service_propagates_planner_domain_hint_to_both_lexical_and_vector_
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假", debug=True),
@@ -1342,9 +1348,10 @@ def test_chat_service_uses_elasticsearch_backend_when_configured(monkeypatch) ->
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何上传文档？", debug=True),
@@ -1401,12 +1408,12 @@ def test_chat_service_uses_query_planner_outputs_in_elasticsearch_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1414,6 +1421,7 @@ def test_chat_service_uses_query_planner_outputs_in_elasticsearch_path(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     monkeypatch.setattr(
         service._resolver,
@@ -1498,12 +1506,12 @@ def test_chat_service_augments_unscoped_planner_terms_before_hybrid_search(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1511,6 +1519,7 @@ def test_chat_service_augments_unscoped_planner_terms_before_hybrid_search(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="演示资料在哪里找", debug=True),
@@ -1520,7 +1529,7 @@ def test_chat_service_augments_unscoped_planner_terms_before_hybrid_search(
 
     assert response.response_status == "ok"
     assert response.citations[0].citation_id == "sales-faq-003"
-    assert fake_hybrid_retriever.calls[0]["size"] == ChatService._UNSCOPED_HYBRID_RERANK_SIZE
+    assert fake_hybrid_retriever.calls[0]["size"] == UNSCOPED_HYBRID_RERANK_SIZE
     effective_terms = fake_hybrid_retriever.calls[0]["lexical_terms"]
     assert effective_terms[0] == "演示资料"
     assert "演示" in effective_terms
@@ -1557,12 +1566,12 @@ def test_chat_service_uses_hybrid_soft_fallback_when_lexical_branch_times_out(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: soft_fallback_hybrid,
+        lambda self, es: soft_fallback_hybrid,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1570,6 +1579,7 @@ def test_chat_service_uses_hybrid_soft_fallback_when_lexical_branch_times_out(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假", debug=True),
@@ -1627,12 +1637,12 @@ def test_chat_service_prefers_faq_evidence_over_document_chunk_in_hybrid_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1640,6 +1650,7 @@ def test_chat_service_prefers_faq_evidence_over_document_chunk_in_hybrid_path(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="请假", debug=True),
@@ -1696,12 +1707,12 @@ def test_chat_service_returns_clarification_for_close_faq_candidates_in_hybrid_p
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1709,6 +1720,7 @@ def test_chat_service_returns_clarification_for_close_faq_candidates_in_hybrid_p
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="请假", debug=True),
@@ -1796,12 +1808,12 @@ def test_chat_service_excludes_irrelevant_candidate_from_clarification_options(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1809,6 +1821,7 @@ def test_chat_service_excludes_irrelevant_candidate_from_clarification_options(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="什么叫请假", debug=True),
@@ -1870,12 +1883,12 @@ def test_chat_service_returns_clarification_for_generic_leave_queries(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1883,6 +1896,7 @@ def test_chat_service_returns_clarification_for_generic_leave_queries(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query=raw_query, debug=True),
@@ -1971,12 +1985,12 @@ def test_chat_service_returns_clarification_for_fixture_driven_generic_queries(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -1984,6 +1998,7 @@ def test_chat_service_returns_clarification_for_fixture_driven_generic_queries(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query=raw_query, debug=True),
@@ -2043,12 +2058,12 @@ def test_chat_service_accepts_selected_clarification_option_in_hybrid_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2056,6 +2071,7 @@ def test_chat_service_accepts_selected_clarification_option_in_hybrid_path(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何申请年假？", debug=True),
@@ -2154,12 +2170,12 @@ def test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_p
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2167,6 +2183,7 @@ def test_chat_service_returns_direct_answers_for_specific_hr_queries_in_hybrid_p
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query=raw_query, debug=True),
@@ -2214,12 +2231,12 @@ def test_chat_service_returns_fallback_when_hybrid_hits_have_no_evidence(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2227,6 +2244,7 @@ def test_chat_service_returns_fallback_when_hybrid_hits_have_no_evidence(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="请假", debug=True),
@@ -2284,12 +2302,12 @@ def test_chat_service_phase2_refuses_unsafe_queries_before_retrieval(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2297,6 +2315,7 @@ def test_chat_service_phase2_refuses_unsafe_queries_before_retrieval(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query=raw_query, debug=True),
@@ -2374,12 +2393,12 @@ def test_chat_service_accepts_relevant_faq_from_hybrid_top5_for_sick_leave_query
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2387,6 +2406,7 @@ def test_chat_service_accepts_relevant_faq_from_hybrid_top5_for_sick_leave_query
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="病假材料", debug=True),
@@ -2444,12 +2464,12 @@ def test_chat_service_uses_search_query_for_progress_evidence_in_hybrid_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
         "_create_hybrid_retriever",
-        lambda self: fake_hybrid_retriever,
+        lambda self, es: fake_hybrid_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2457,6 +2477,7 @@ def test_chat_service_uses_search_query_for_progress_evidence_in_hybrid_path(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="请假进度怎么看", debug=True),
@@ -2502,7 +2523,7 @@ def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
     monkeypatch.setattr(
         ChatService,
@@ -2510,6 +2531,7 @@ def test_chat_service_falls_back_to_rule_parser_when_planner_confidence_is_low(
         lambda self: fake_planner,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     monkeypatch.setattr(
         service._resolver,
@@ -2592,9 +2614,10 @@ def test_chat_service_phase2_elastic_regression_for_natural_leave_queries(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     monkeypatch.setattr(
         service._resolver,
@@ -2660,9 +2683,10 @@ def test_chat_service_prefers_faq_hit_over_document_chunk_in_elasticsearch_path(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     monkeypatch.setattr(
         service._resolver,
@@ -2720,9 +2744,10 @@ def test_chat_service_returns_fallback_when_elasticsearch_backend_has_no_hits(
     monkeypatch.setattr(
         ChatService,
         "_create_lexical_retriever",
-        lambda self: fake_retriever,
+        lambda self, es: fake_retriever,
     )
 
+    monkeypatch.setattr(ChatService, "_create_elasticsearch_client", lambda self: None)
     service = ChatService()
     response = service.ask(
         ChatAskRequest(raw_query="如何上传文档？", debug=True),

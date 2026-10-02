@@ -8,6 +8,7 @@ from typing import Any
 from app.storage.models.extraction_candidate import ExtractionCandidate
 from app.storage.models.source_record import SourceRecord
 from app.storage.repositories.extraction_candidate_repo import ExtractionCandidateRepo
+from app.storage.repositories.extracted_faq_repo import ExtractedFaqRepo
 from app.storage.repositories.knowledge_unit_repo import (
     KnowledgeUnit,
     map_faq_item_to_knowledge_unit,
@@ -36,19 +37,20 @@ def publish_candidate(
     candidate_repo: ExtractionCandidateRepo | None = None,
     action_link_repo: ActionLinkRepo | None = None,
     dynamic_query_repo: DynamicQueryRepo | None = None,
+    extracted_faq_repo: ExtractedFaqRepo | None = None,
 ) -> KnowledgeUnit | ActionLink | DynamicQuery | None:
     payload = json.loads(candidate.payload_json)
     candidate_type = payload.get("candidate_type", candidate.candidate_type)
 
     if candidate_type == "faq":
-        return _publish_faq(candidate, source_record, payload)
+        return _publish_faq(candidate, source_record, payload, extracted_faq_repo=extracted_faq_repo)
     elif candidate_type == "action_link":
         return _publish_action_link(candidate, source_record, payload, action_link_repo=action_link_repo)
     elif candidate_type == "dynamic_query":
         return _publish_dynamic_query(candidate, source_record, payload, dynamic_query_repo=dynamic_query_repo)
 
     if candidate.candidate_type == "faq":
-        return _publish_faq(candidate, source_record, payload)
+        return _publish_faq(candidate, source_record, payload, extracted_faq_repo=extracted_faq_repo)
 
     return None
 
@@ -57,6 +59,7 @@ def _publish_faq(
     candidate: ExtractionCandidate,
     source_record: SourceRecord,
     payload: dict[str, Any],
+    extracted_faq_repo: ExtractedFaqRepo | None = None,
 ) -> KnowledgeUnit:
     item = {
         "id": f"ku-extracted-{candidate.candidate_id[:16]}",
@@ -83,6 +86,8 @@ def _publish_faq(
         source_updated_at=source_record.source_updated_at,
         published_at=datetime.now(timezone.utc).isoformat(),
     )
+    repo = extracted_faq_repo or ExtractedFaqRepo()
+    repo.upsert(unit.to_dict())
     return unit
 
 

@@ -1,10 +1,15 @@
 .git
 .venv
+.env
+.env.*
+!.env.example
+!.env.prod.example
 __pycache__
 *.pyc
 *.pyo
 *.pyd
 .pytest_cache
+backups
 node_modules
 frontend/dist
 backend/app/storage/uploads/*
@@ -16,3 +21,8 @@ backend/app/storage/documents/*.jsonl
 backend/app/storage/chunks/*.jsonl
 backend/app/storage/extraction_candidates/*.jsonl
 backend/app/storage/source_records/*.jsonl
+backend/app/storage/extracted_faqs/*.jsonl
+backend/app/storage/import_batches/*.jsonl
+backend/app/storage/extraction_tasks/*.jsonl
+backend/app/storage/cleanup_tasks/*.jsonl
+pytest-cache-files-*

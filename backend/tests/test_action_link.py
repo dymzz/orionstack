@@ -129,19 +129,21 @@ class TestActionLinkRepo:
 
 class TestFindActionLinks:
     def test_none_domain_returns_empty(self) -> None:
-        from app.services.chat_service import ChatService
+        from app.services.action_link_resolver import ActionLinkResolver
 
-        result = ChatService._find_action_links_for_domain(None)
+        resolver = ActionLinkResolver()
+        result = resolver.find_by_domain(None)
         assert result == []
 
     def test_unknown_domain_returns_empty(self) -> None:
-        from app.services.chat_service import ChatService
+        from app.services.action_link_resolver import ActionLinkResolver
 
-        result = ChatService._find_action_links_for_domain("unknown_domain")
+        resolver = ActionLinkResolver()
+        result = resolver.find_by_domain("unknown_domain")
         assert result == []
 
     def test_hr_domain_maps_resource_types(self, tmp_path: Path, monkeypatch) -> None:
-        from app.services.chat_service import ChatService
+        from app.services.action_link_resolver import ActionLinkResolver
 
         repo = ActionLinkRepo(storage_dir=tmp_path)
         repo.create(
@@ -157,7 +159,8 @@ class TestFindActionLinks:
             "app.storage.repositories.action_link_repo._STORAGE_DIR", tmp_path
         )
 
-        result = ChatService._find_action_links_for_domain("hr")
+        resolver = ActionLinkResolver(repo=repo)
+        result = resolver.find_by_domain("hr")
         assert len(result) >= 1
         assert any(li.label == "请假申请" for li in result)
 

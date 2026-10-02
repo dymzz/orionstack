@@ -755,6 +755,7 @@ def test_short_chinese_query_hits_document_chunk(tmp_path) -> None:
 def test_chat_route_returns_structured_answers_for_uploaded_hr_faq_seed_queries(
     tmp_path,
     faq_id: str,
+    admin_headers,
 ) -> None:
     faq_item = fixture_faq_map()[faq_id]
     _configure_shared_document_and_chat_storage(tmp_path)
@@ -762,7 +763,7 @@ def test_chat_route_returns_structured_answers_for_uploaded_hr_faq_seed_queries(
     fixture_path = fixture_path_for_faq_id(faq_id)
     client = TestClient(app)
     upload_response = client.post(
-        "/api/documents/upload",
+        "/api/v1/documents/upload",
         files={
             "file": (
                 fixture_path.name,
@@ -770,13 +771,15 @@ def test_chat_route_returns_structured_answers_for_uploaded_hr_faq_seed_queries(
                 "text/markdown",
             )
         },
+        headers=admin_headers,
     )
 
     assert upload_response.status_code == 200
 
     ask_response = client.post(
-        "/api/chat/ask",
+        "/api/v1/chat/ask",
         json={"raw_query": faq_item["question"], "debug": True},
+        headers=admin_headers,
     )
 
     assert ask_response.status_code == 200

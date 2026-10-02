@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.storage.models.import_batch import ImportBatch
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "import_batches"
 
@@ -14,9 +15,11 @@ class ImportBatchRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "import_batches.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def create(self, batch: ImportBatch) -> None:
-        self._append(batch)
+        with self._lock:
+            self._append(batch)
 
     def get(self, import_batch_id: str) -> ImportBatch | None:
         for b in self._iter_all():
@@ -25,11 +28,12 @@ class ImportBatchRepo:
         return None
 
     def update(self, batch: ImportBatch) -> None:
-        batches = [b for b in self._iter_all() if b.import_batch_id != batch.import_batch_id]
-        self._file.write_text("", encoding="utf-8")
-        for b in batches:
-            self._append(b)
-        self._append(batch)
+        with self._lock:
+            batches = [b for b in self._iter_all() if b.import_batch_id != batch.import_batch_id]
+            self._file.write_text("", encoding="utf-8")
+            for b in batches:
+                self._append(b)
+            self._append(batch)
 
     def list_by_source_system(self, source_system: str) -> list[ImportBatch]:
         return [b for b in self._iter_all() if b.source_system == source_system]

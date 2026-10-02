@@ -1,0 +1,745 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OrionStack Integration Boundary — proposed contract",
+    "version": "0.1.0-draft",
+    "description": "Design draft, not implemented runtime endpoints. Knowledge: one PostgreSQL database with pgvector and Embedding. Decision: Jev, LLM, permissions and citations. Integration: vendor-neutral actions and events; workflow engines never enter query retrieval."
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/actions/execute": {
+      "post": {
+        "operationId": "executeAction",
+        "summary": "Accept an independent business action for workflow execution",
+        "description": "Check entity, action parameter schema and authorization. The same tenant/action/request_id with different content is rejected. Core query processing does not call this endpoint.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Action"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Duplicate request; original receipt returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Action accepted for execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for the authenticated principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key conflicts with prior request content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Contract validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Action dispatch unavailable; acceptance has not been confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "post": {
+        "operationId": "acceptEvent",
+        "summary": "Accept normalized data or workflow status events",
+        "description": "Authenticate the event origin; validate schema, entity/lifecycle rules, version and idempotency before committing. Tenant and source privileges are server-derived.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Duplicate event; prior receipt returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Event accepted for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for the authenticated principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicting event content or version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Contract validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/entities/{type}/{id}": {
+      "get": {
+        "operationId": "getEntity",
+        "summary": "Read an authorized canonical entity from core PostgreSQL",
+        "description": "Never performs a live workflow lookup.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical entity snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entity"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for the authenticated principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity unavailable in the caller's permitted scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Contract validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/query": {
+      "post": {
+        "operationId": "queryKnowledge",
+        "summary": "Run the internal DB + Vector + Jev evidence pipeline",
+        "description": "PostgreSQL/pgvector, Retrieval Jev, Evidence Jev, LLM and citation validation form the core query path. This endpoint neither calls workflow engines nor executes external actions.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer or explicit evidence/clarification outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for the authenticated principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Contract validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Core query dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "EntityRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable business entity type"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical entity identifier; not a workflow node identifier"
+          }
+        }
+      },
+      "ActionContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Trace and idempotency key scoped by authenticated tenant and action"
+          }
+        }
+      },
+      "Action": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "entity",
+          "parameters",
+          "context"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Registered business action; workflow vendor details stay outside this contract"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntityRef"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Validated against the registered action's parameter schema"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ActionContext"
+          }
+        },
+        "example": {
+          "action": "create_ticket",
+          "entity": {
+            "type": "employee",
+            "id": "EMP-00128"
+          },
+          "parameters": {
+            "category": "account_access",
+            "priority": "normal"
+          },
+          "context": {
+            "request_id": "req_xxx"
+          }
+        }
+      },
+      "ActionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action_id",
+          "request_id",
+          "status"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "duplicate"
+            ]
+          }
+        },
+        "description": "Acceptance is not execution success. Completion arrives as a correlated event."
+      },
+      "Event": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "event_id",
+          "event_type",
+          "occurred_at",
+          "source",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1"
+            ]
+          },
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Idempotency key scoped to authenticated event origin"
+          },
+          "event_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Registered entity/document/lifecycle/action event"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Correlates an action result; required by action-result event schemas"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EventSource"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntityRef"
+          },
+          "payload": {
+            "type": "object",
+            "description": "Validated by the registered event schema; permissions and tenant are derived from authentication"
+          }
+        }
+      },
+      "EventSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "record_id",
+          "version"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "record_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_locator": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "Content fingerprint, not identity or permission"
+          }
+        }
+      },
+      "EventReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "status"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "duplicate"
+            ]
+          },
+          "processing_id": {
+            "type": "string"
+          }
+        },
+        "description": "Accepted events may require asynchronous knowledge processing before becoming searchable."
+      },
+      "Entity": {
+        "type": "object",
+        "required": [
+          "entity",
+          "version",
+          "as_of",
+          "data"
+        ],
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntityRef"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CitationSource"
+            }
+          }
+        }
+      },
+      "Query": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "document_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "request_id": {
+                "type": "string"
+              },
+              "session_id": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "description": "Identity and permission scope come from authentication. This operation never calls a workflow engine."
+      },
+      "QueryResponse": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "trace_id",
+          "status",
+          "answer",
+          "citations"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trace_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "insufficient_evidence",
+              "clarification",
+              "refused",
+              "system_error"
+            ]
+          },
+          "answer": {
+            "type": "string"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          },
+          "clarification": {
+            "type": "string"
+          }
+        },
+        "description": "Answer generation consumes internal evidence. Citation metadata is resolved by the backend."
+      },
+      "Citation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidence_id",
+          "source"
+        ],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier in the evidence set for this answer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CitationSource"
+          },
+          "snippet": {
+            "type": "string"
+          }
+        }
+      },
+      "CitationSource": {
+        "type": "object",
+        "required": [
+          "source_type",
+          "source_id",
+          "source_version",
+          "source_locator"
+        ],
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "structured_record",
+              "document_chunk"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Internal source identity; hashes do not replace this relationship"
+          },
+          "source_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_locator": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "chunk_id": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "section": {
+            "type": "string"
+          }
+        },
+        "description": "Structured record and document identities need not be equal. Entity/document relationships link them."
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "x-contract-status": "draft-not-implemented"
+}

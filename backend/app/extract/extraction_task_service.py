@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -8,6 +9,8 @@ from app.extract.extraction_service import ExtractionService
 from app.storage.models.extraction_candidate import ExtractionCandidate
 from app.storage.models.extraction_task import ExtractionTask
 from app.storage.repositories.extraction_task_repo import ExtractionTaskRepo
+
+_logger = logging.getLogger("orionstack.extraction_task")
 from app.storage.repositories.source_record_repo import SourceRecordRepo
 
 
@@ -109,7 +112,10 @@ class ExtractionTaskService:
             started_at=started_at,
         )
         if processing is None:
+            _logger.warning("extraction_task_processing_failed task=%s", extraction_task_id)
             return None
+
+        _logger.info("extraction_task_started task=%s source_record=%s", extraction_task_id, processing.source_record_id)
 
         source_record = self._source_record_repo.get(processing.source_record_id)
         if source_record is None:
@@ -125,6 +131,7 @@ class ExtractionTaskService:
                 candidate_types=candidate_types,
             )
         except Exception as error:
+            _logger.error("extraction_task_failed task=%s error=%s", extraction_task_id, error)
             failed = self._fail_task(
                 processing,
                 f"{error.__class__.__name__}: {error}",
@@ -139,6 +146,11 @@ class ExtractionTaskService:
         )
         if completed is None:
             return None
+        _logger.info(
+            "extraction_task_completed task=%s candidates=%d",
+            extraction_task_id,
+            len(candidates),
+        )
         return ExtractionTaskResult(task=completed, candidates=candidates)
 
     def _fail_task(self, task: ExtractionTask, error_summary: str) -> ExtractionTask:

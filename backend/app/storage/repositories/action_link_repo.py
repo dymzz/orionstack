@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.storage.models.action_link import ActionLink
+from app.storage.repositories.base_repo import JsonlLock
 
 _STORAGE_DIR = Path(__file__).resolve().parents[1] / "action_links"
 
@@ -14,9 +15,11 @@ class ActionLinkRepo:
         self._dir = storage_dir or _STORAGE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
         self._file = self._dir / "action_links.jsonl"
+        self._lock = JsonlLock(self._file)
 
     def create(self, link: ActionLink) -> None:
-        self._append(link)
+        with self._lock:
+            self._append(link)
 
     def get(self, action_link_id: str) -> ActionLink | None:
         for link in self._iter_all():
@@ -43,36 +46,40 @@ class ActionLinkRepo:
         ]
 
     def upsert(self, link: ActionLink) -> None:
-        existing = self.get(link.action_link_id)
-        if existing is not None:
-            self._remove(existing.action_link_id)
-        self._append(link)
+        with self._lock:
+            existing = self.get(link.action_link_id)
+            if existing is not None:
+                self._remove(existing.action_link_id)
+            self._append(link)
 
     def update_status(self, action_link_id: str, status: str) -> None:
-        links = list(self._iter_all())
-        self._file.write_text("", encoding="utf-8")
-        for l in links:
-            if l.action_link_id == action_link_id:
-                from dataclasses import replace
-                l = replace(l, status=status)
-            self._append(l)
+        with self._lock:
+            links = list(self._iter_all())
+            self._file.write_text("", encoding="utf-8")
+            for l in links:
+                if l.action_link_id == action_link_id:
+                    from dataclasses import replace
+                    l = replace(l, status=status)
+                self._append(l)
 
     def update_status_by_source_record(
         self, source_record_id: str, status: str
     ) -> list[str]:
-        links = list(self._iter_all())
-        updated_ids: list[str] = []
-        self._file.write_text("", encoding="utf-8")
-        for link in links:
-            if link.source_record_id == source_record_id and link.status != status:
-                from dataclasses import replace
+        with self._lock:
+            links = list(self._iter_all())
+            updated_ids: list[str] = []
+            self._file.write_text("", encoding="utf-8")
+            for link in links:
+                if link.source_record_id == source_record_id and link.status != status:
+                    from dataclasses import replace
 
-                updated_ids.append(link.action_link_id)
-                link = replace(link, status=status)
-            self._append(link)
+                    updated_ids.append(link.action_link_id)
+                    link = replace(link, status=status)
+                self._append(link)
         return updated_ids
 
     def _remove(self, action_link_id: str) -> None:
+        # Must be called inside `with self._lock:` — see upsert().
         links = [l for l in self._iter_all() if l.action_link_id != action_link_id]
         self._file.write_text("", encoding="utf-8")
         for l in links:

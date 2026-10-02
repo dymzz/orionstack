@@ -76,6 +76,92 @@
           <span v-else class="debug-empty">无</span>
         </dd>
       </div>
+      <div v-if="debugInfo.retrieval_mode" class="debug-item">
+        <dt>retrieval_mode</dt>
+        <dd>{{ debugInfo.retrieval_mode }}</dd>
+      </div>
+      <div v-if="debugInfo.fusion_score != null" class="debug-item">
+        <dt>fusion_score</dt>
+        <dd>{{ formatOptionalNumber(debugInfo.fusion_score) }}</dd>
+      </div>
+      <div v-if="debugInfo.rerank_accept != null" class="debug-item">
+        <dt>rerank_accept</dt>
+        <dd>{{ debugInfo.rerank_accept ? '是' : '否' }}</dd>
+      </div>
+      <div v-if="debugInfo.rerank_score != null" class="debug-item">
+        <dt>rerank_score</dt>
+        <dd>{{ formatOptionalNumber(debugInfo.rerank_score) }}</dd>
+      </div>
+      <div v-if="debugInfo.evidence_confidence != null" class="debug-item">
+        <dt>evidence_confidence</dt>
+        <dd>{{ formatOptionalNumber(debugInfo.evidence_confidence) }}</dd>
+      </div>
+      <div v-if="debugInfo.evidence_span_count != null" class="debug-item">
+        <dt>evidence_span_count</dt>
+        <dd>{{ debugInfo.evidence_span_count }}</dd>
+      </div>
+      <div v-if="debugInfo.reject_reason" class="debug-item debug-item-wide">
+        <dt>reject_reason</dt>
+        <dd>{{ debugInfo.reject_reason }}</dd>
+      </div>
+      <div v-if="debugInfo.source_record_id" class="debug-item">
+        <dt>source_record_id</dt>
+        <dd><code>{{ debugInfo.source_record_id }}</code></dd>
+      </div>
+      <div v-if="debugInfo.import_batch_id" class="debug-item">
+        <dt>import_batch_id</dt>
+        <dd><code>{{ debugInfo.import_batch_id }}</code></dd>
+      </div>
+      <div v-if="debugInfo.unit_version != null" class="debug-item">
+        <dt>unit_version</dt>
+        <dd>{{ debugInfo.unit_version }}</dd>
+      </div>
+      <div v-if="debugInfo.source_updated_at" class="debug-item">
+        <dt>source_updated_at</dt>
+        <dd>{{ debugInfo.source_updated_at }}</dd>
+      </div>
+      <div v-if="debugInfo.source_record_status" class="debug-item">
+        <dt>source_record_status</dt>
+        <dd>{{ debugInfo.source_record_status }}</dd>
+      </div>
+      <div v-if="debugInfo.dynamic_query_key" class="debug-item">
+        <dt>dynamic_query_key</dt>
+        <dd><code>{{ debugInfo.dynamic_query_key }}</code></dd>
+      </div>
+      <div v-if="debugInfo.freshness_status" class="debug-item">
+        <dt>freshness_status</dt>
+        <dd>{{ debugInfo.freshness_status }}</dd>
+      </div>
+      <div v-if="debugInfo.lexical_topk && debugInfo.lexical_topk.length > 0" class="debug-item debug-item-wide">
+        <dt>lexical_topk</dt>
+        <dd>
+          <ul class="debug-list">
+            <li v-for="c in debugInfo.lexical_topk" :key="c.unit_id">
+              <code>{{ c.unit_id }}</code> ({{ c.score.toFixed(2) }})
+            </li>
+          </ul>
+        </dd>
+      </div>
+      <div v-if="debugInfo.vector_topk && debugInfo.vector_topk.length > 0" class="debug-item debug-item-wide">
+        <dt>vector_topk</dt>
+        <dd>
+          <ul class="debug-list">
+            <li v-for="c in debugInfo.vector_topk" :key="c.unit_id">
+              <code>{{ c.unit_id }}</code> ({{ c.score.toFixed(2) }})
+            </li>
+          </ul>
+        </dd>
+      </div>
+      <div v-if="debugInfo.rrf_topk && debugInfo.rrf_topk.length > 0" class="debug-item debug-item-wide">
+        <dt>rrf_topk</dt>
+        <dd>
+          <ul class="debug-list">
+            <li v-for="c in debugInfo.rrf_topk" :key="c.unit_id">
+              <code>{{ c.unit_id }}</code> ({{ c.score.toFixed(4) }})
+            </li>
+          </ul>
+        </dd>
+      </div>
       <div class="debug-item debug-item-wide">
         <dt>retrieved_chunks</dt>
         <dd>
@@ -146,7 +232,7 @@ function fallbackCopyText(text: string) {
 
 function buildDebugContext() {
   const { debugInfo } = props
-  return [
+  const lines = [
     `trace_id: ${props.traceId}`,
     `response_status: ${props.responseStatus}`,
     `normalized_query: ${debugInfo.normalized_query}`,
@@ -154,14 +240,38 @@ function buildDebugContext() {
     `router_used: ${debugInfo.router_used}`,
     `route_confidence: ${formatOptionalNumber(debugInfo.route_confidence)}`,
     `retrieval_score: ${formatOptionalNumber(debugInfo.retrieval_score)}`,
+    `fusion_score: ${formatOptionalNumber(debugInfo.fusion_score)}`,
     `planner_confidence: ${formatOptionalNumber(debugInfo.planner_confidence)}`,
     `domain_hint: ${formatOptionalText(debugInfo.domain_hint)}`,
     `fallback_reason: ${formatOptionalText(debugInfo.fallback_reason)}`,
+    `retrieval_mode: ${debugInfo.retrieval_mode ?? '无'}`,
+    `rerank_accept: ${debugInfo.rerank_accept != null ? (debugInfo.rerank_accept ? '是' : '否') : '无'}`,
+    `rerank_score: ${formatOptionalNumber(debugInfo.rerank_score)}`,
+    `evidence_confidence: ${formatOptionalNumber(debugInfo.evidence_confidence)}`,
+    `evidence_span_count: ${debugInfo.evidence_span_count ?? '无'}`,
+    `reject_reason: ${formatOptionalText(debugInfo.reject_reason)}`,
+    `source_record_id: ${debugInfo.source_record_id ?? '无'}`,
+    `import_batch_id: ${debugInfo.import_batch_id ?? '无'}`,
+    `unit_version: ${debugInfo.unit_version ?? '无'}`,
+    `source_updated_at: ${debugInfo.source_updated_at ?? '无'}`,
+    `source_record_status: ${debugInfo.source_record_status ?? '无'}`,
+    `dynamic_query_key: ${debugInfo.dynamic_query_key ?? '无'}`,
+    `freshness_status: ${debugInfo.freshness_status ?? '无'}`,
     `clarification_required: ${props.clarificationRequired ? '是' : '否'}`,
     `clarification_question: ${props.clarificationQuestion ?? '无'}`,
     `lexical_terms: ${debugInfo.lexical_terms?.length ? debugInfo.lexical_terms.join(', ') : '无'}`,
     `retrieved_chunks: ${debugInfo.retrieved_chunks.length > 0 ? debugInfo.retrieved_chunks.join(', ') : '无'}`,
-  ].join('\n')
+  ]
+  if (debugInfo.lexical_topk?.length) {
+    lines.push(`lexical_topk: ${debugInfo.lexical_topk.map(c => `${c.unit_id}(${c.score.toFixed(2)})`).join(', ')}`)
+  }
+  if (debugInfo.vector_topk?.length) {
+    lines.push(`vector_topk: ${debugInfo.vector_topk.map(c => `${c.unit_id}(${c.score.toFixed(2)})`).join(', ')}`)
+  }
+  if (debugInfo.rrf_topk?.length) {
+    lines.push(`rrf_topk: ${debugInfo.rrf_topk.map(c => `${c.unit_id}(${c.score.toFixed(4)})`).join(', ')}`)
+  }
+  return lines.join('\n')
 }
 
 async function copyDebugContext() {

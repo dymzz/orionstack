@@ -8,13 +8,27 @@
 python scripts/<script_name>.py
 ```
 
-配置切换统一修改 `.env`；不要在命令前拼接临时环境变量。
+本地普通配置可使用 `.env`；部署时核心连接串与密钥由进程环境注入，优先于 `.env`。
+
+## 单库迁移与模型检查（M1）
+
+先运行 `uv sync` 更新依赖。新核心读取 `ORIONSTACK_DATABASE_URL`、`TYPESAFE_API_KEY`、`DEEPSEEK_API_KEY`，没有硬编码密钥或旧 provider key 回退。
+
+```powershell
+.venv\Scripts\python.exe scripts/check-core-providers.py
+.venv\Scripts\python.exe scripts/migrate-postgres.py
+.venv\Scripts\python.exe scripts/migrate-postgres.py --schema-only
+```
+
+默认只输出配置存在性或文件迁移预览。schema/导入实际执行加 `--apply`，须目标库具备 pgvector；迁移脚本和批次均幂等，错误回滚整批。`--storage-root` 指定恢复目录，`--tenant-id` 仅为缺少 tenant 的记录提供默认值，`--no-seed` 排除内置 FAQ。孤立来源、非法状态等预览错误会阻断全部导入。
+
+真实 API 检查使用虚构测试材料并产生少量调用费用，分别运行 `scripts/check-core-providers.py --live-jev` 或 `--live-deepseek`。当前四个新 API 仍是草案，完整边界与联调限制见 [M1 运行说明](../docs/designs/5_core_foundation_runbook.md)。
 
 ---
 
 ## 前置要求
 
-- 已安装 `python`（建议 3.12+）
+- 已安装 Python 3.14+（与 `pyproject.toml` 一致）
 - 已安装 `npm`
 - 已安装 `git`
 - 抽取管线脚本需要配置抽取 provider；当前配置优先读取 `ORIONSTACK_EXTRACTION_*`，旧的 `ORIONSTACK_QWEN_*` / `DASHSCOPE_API_KEY` 仍保留兼容
@@ -211,6 +225,23 @@ python scripts/pipeline_cli.py list --status approved
 
 ### 测试与回归
 
+#### `release-check.py`
+
+发布前统一检查入口，适合本地和 CI 共用。默认执行全量后端测试、前端生产构建、生产 compose 配置校验。
+
+```text
+python scripts/release-check.py
+python scripts/release-check.py --quick
+python scripts/release-check.py --skip-compose
+python scripts/release-check.py --check-only
+```
+
+参数：`--quick` / `--skip-backend` / `--skip-frontend` / `--skip-compose` / `--check-only`
+
+说明：compose config 校验会使用受控环境变量并隐藏输出，避免本机 API key 出现在日志里。
+
+GitHub Actions 工作流 `.github/workflows/release-check.yml` 会安装 Python / Node 依赖并执行同一个脚本，确保本地与 CI 使用同一检查入口。
+
 #### `run-phase2-regression.py`
 
 一键执行 Phase 2 专项回归（检索、chat flow、trace、hard cases）。
@@ -252,6 +283,41 @@ python scripts/probe_llama_server.py
 
 ### 运维
 
+#### `backup-storage.py`
+
+备份本地 `backend/app/storage/` 中的 JSONL 数据与上传文件，输出 `.tar.gz`，内含 `manifest.json`（文件列表、大小、SHA-256）。
+
+```text
+python scripts/backup-storage.py
+python scripts/backup-storage.py --output-dir backups
+python scripts/backup-storage.py --no-uploads
+python scripts/backup-storage.py --check-only
+```
+
+参数：`--storage-root` / `--output-dir` / `--no-uploads` / `--check-only`
+
+#### `restore-storage.py`
+
+从 `backup-storage.py` 生成的 `.tar.gz` 恢复本地 storage。恢复会覆盖同名文件；默认拒绝执行，必须先预览或显式确认。
+
+```text
+python scripts/restore-storage.py backups/orionstack-storage-YYYYMMDDTHHMMSSZ.tar.gz --what-if
+python scripts/restore-storage.py backups/orionstack-storage-YYYYMMDDTHHMMSSZ.tar.gz --confirm-restore
+```
+
+参数：`backup_path` / `--storage-root` / `--what-if` / `--confirm-restore`
+
+生产 Docker Compose 使用 named volumes。推荐生产备份流程：
+
+```text
+docker compose --env-file .env.prod -f docker-compose.prod.yml stop backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml cp backend:/app/backend/app/storage ./prod-storage-snapshot
+python scripts/backup-storage.py --storage-root ./prod-storage-snapshot --output-dir backups
+docker compose --env-file .env.prod -f docker-compose.prod.yml start backend
+```
+
+备份覆盖 15 个存储目录，包括 extracted_faqs、import_batches、extraction_tasks 和 cleanup_tasks。恢复前会核对文件列表、大小与 SHA-256，并将文档上传路径改为恢复目标路径。生产恢复应直接使用容器中的 storage root，操作步骤见 [备份与恢复指南](../wiki/backup-restore.md)。当前脚本只覆盖文件存储，PostgreSQL 备份将在数据库接入阶段实现。
+
 #### `rebuild-elastic-index.py`
 
 重建 Elasticsearch 索引（清空并重新写入所有 KnowledgeUnit）。
@@ -277,14 +343,15 @@ python scripts/clean-local-records.py --feedback-only
 
 #### `git-release.py`
 
-交互式创建本地版本发布提交、git tag 并推送。
+交互式创建本地版本发布提交、git tag 并推送。默认会先运行 `python scripts/release-check.py --quick`，发布说明应先更新 `CHANGELOG.md`。
 
 ```text
-python scripts/git-release.py --version 0.2.0 --commit-message "feat: Phase 3 extraction pipeline"
+python scripts/git-release.py --version 0.3.35 --commit-message "release: v0.3.35"
 python scripts/git-release.py --version 0.2.0 --skip-push
+python scripts/git-release.py --version 0.2.0 --skip-release-check
 ```
 
-参数：`--version` / `--commit-message` / `--tag-prefix v` / `--remote origin` / `--skip-push` / `--check-only`
+参数：`--version` / `--commit-message` / `--tag-prefix v` / `--remote origin` / `--skip-release-check` / `--skip-push` / `--check-only`
 
 ---
 
@@ -308,7 +375,9 @@ python scripts/git-release.py --version 0.2.0 --skip-push
 
 ---
 
-## Phase 2 推荐启动矩阵
+## Phase 2 历史启动矩阵
+
+当前过渡基线使用 `local / false / false`，生产 Compose 不启动 ES。下一版本按根目录《OrionStack — DB + Vector + JEV 检索架构设计.md》实施，交付目标见 [下一版本计划](../docs/designs/4_postgresql_jev_architecture.md)。下表仅用于历史链路参考。
 
 | 档位 | SEARCH_BACKEND | QUERY_PLANNER | FAST_TRACK | 说明 |
 |---|---|---|---|---|
