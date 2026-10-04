@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-page">
+  <div v-if="canUseWorkspace" class="chat-page">
     <div class="chat-history" ref="historyRef">
       <div v-if="turns.length === 0" class="chat-empty">
         <p class="chat-empty-hint">输入问题开始对话</p>
@@ -63,10 +63,14 @@
       @update:selected-ids="selectedDocumentIds = $event"
     />
   </div>
+  <section v-else class="card">
+    <h2>当前账号权限不足</h2>
+    <p>此页面的问答和文档维护需要管理员权限，请使用管理员账号登录。</p>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import ChatInput from '../../components/chat/ChatInput.vue'
 import AnswerCard from '../../components/chat/AnswerCard.vue'
 import CitationList from '../../components/chat/CitationList.vue'
@@ -75,12 +79,15 @@ import DocumentUpload from '../../components/chat/DocumentUpload.vue'
 import DocumentLibrary from '../../components/chat/DocumentLibrary.vue'
 import { askQuestion, submitFeedback } from '../../services/chat'
 import { deleteDocument, listDocuments, uploadDocument } from '../../services/documents'
+import { useAuthState } from '../../services/auth'
 import { useChatHistory } from '../../composables/useChatHistory'
 import { useToast } from '../../composables/useToast'
 import type { FeedbackLabel } from '../../types/chat'
 import type { DocumentListItem } from '../../types/document'
 
 const { turns, addTurn, clearHistory } = useChatHistory()
+const { currentRole } = useAuthState()
+const canUseWorkspace = computed(() => currentRole.value === 'admin')
 const { error: showError, success: showSuccess } = useToast()
 
 const loading = ref(false)
@@ -207,7 +214,7 @@ async function handleFeedback(turn: { response: { trace_id: string } | null; que
 }
 
 onMounted(() => {
-  void refreshDocuments()
+  if (canUseWorkspace.value) void refreshDocuments()
 })
 </script>
 

@@ -27,6 +27,8 @@ def list_documents() -> DocumentListResponse:
 
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResponse:
+    from app.dataops.legacy import require_legacy_upload
+    require_legacy_upload()
     try:
         return await service.register_upload(file)
     except ValueError as error:

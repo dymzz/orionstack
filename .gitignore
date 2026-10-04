@@ -18,6 +18,7 @@ node_modules/
 
 # Local runtime artifacts
 .runtime/
+data/
 
 # Environment files
 .env
@@ -34,13 +35,13 @@ backend/tests/.tmp/
 pytest-cache-files-*/
 backend/pytest-cache-files-*/
 
-# Optional local notes / workflow docs
-项目知识库仓使用方式.md
-主工程仓 + 知识库仓如何联动更新的工作流规范.md
-双仓联动工作流规范_完整版.md
-
 # Optional scratch tests folder at project root
 # tests/
 .history/
 .runtime/
 .uv-cache/
+docs/
+evals/
+.ruff_cache/
+
+HANDOFF.md

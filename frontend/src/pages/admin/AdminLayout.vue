@@ -1,6 +1,8 @@
 <template>
   <div class="admin-layout">
     <nav class="admin-tabs">
+      <RouterLink to="/admin/account" class="admin-tab" active-class="admin-tab-active">账号权限</RouterLink>
+      <RouterLink to="/support/diagnostics" class="admin-tab" active-class="admin-tab-active">系统状态</RouterLink>
       <RouterLink to="/admin/traces" class="admin-tab" active-class="admin-tab-active">Trace</RouterLink>
       <RouterLink to="/admin/hard-cases" class="admin-tab" active-class="admin-tab-active">Hard Cases</RouterLink>
       <RouterLink to="/admin/extraction" class="admin-tab" active-class="admin-tab-active">抽取审核</RouterLink>

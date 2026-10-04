@@ -1,5 +1,7 @@
 .git
 .venv
+.runtime
+data
 .env
 .env.*
 !.env.example
@@ -11,6 +13,7 @@ __pycache__
 .pytest_cache
 backups
 node_modules
+postgres-test-harness
 frontend/dist
 backend/app/storage/uploads/*
 backend/app/storage/chat_records/*.jsonl

@@ -1,0 +1,254 @@
+[
+  {
+    "id": "it-faq-001",
+    "title": "忘记登录密码怎么办？",
+    "question": "忘记登录密码怎么办？",
+    "answer": "如忘记公司账号密码，可先通过统一登录页的找回密码入口自助重置。若无法自助处理，请提交 IT 支持申请，由管理员按流程协助重置。",
+    "keywords": [
+      "密码",
+      "重置",
+      "账号",
+      "登录",
+      "IT 支持"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-001",
+    "snippet": "如忘记公司账号密码，可先通过统一登录页的找回密码入口自助重置。"
+  },
+  {
+    "id": "it-faq-002",
+    "title": "账号被锁定后怎么处理？",
+    "question": "账号被锁定后怎么处理？",
+    "answer": "账号被锁定后，可先确认是否因多次输错密码触发安全限制。若仍无法登录，请通过 IT 服务入口提交解锁申请，并按要求完成身份核验。",
+    "keywords": [
+      "账号锁定",
+      "解锁",
+      "登录",
+      "身份核验",
+      "安全限制"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-002",
+    "snippet": "若仍无法登录，请通过 IT 服务入口提交解锁申请，并按要求完成身份核验。"
+  },
+  {
+    "id": "it-faq-003",
+    "title": "VPN 连不上怎么办？",
+    "question": "VPN 连不上怎么办？",
+    "answer": "VPN 无法连接时，可先检查网络是否正常、客户端是否已更新以及账号权限是否有效。若多次重试仍失败，请记录报错信息并联系 IT 支持处理。",
+    "keywords": [
+      "VPN",
+      "连接失败",
+      "网络",
+      "客户端",
+      "权限"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-003",
+    "snippet": "VPN 无法连接时，可先检查网络是否正常、客户端是否已更新以及账号权限是否有效。"
+  },
+  {
+    "id": "it-faq-004",
+    "title": "如何申请安装办公软件？",
+    "question": "如何申请安装办公软件？",
+    "answer": "如需安装办公软件，应通过 IT 服务入口提交安装申请，注明软件名称、用途和设备信息。涉及授权或安全校验的软件，以审批结果和公司软件规范为准。",
+    "keywords": [
+      "软件安装",
+      "申请",
+      "办公软件",
+      "授权",
+      "审批"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-004",
+    "snippet": "应通过 IT 服务入口提交安装申请，注明软件名称、用途和设备信息。"
+  },
+  {
+    "id": "it-faq-005",
+    "title": "新电脑怎么申请？",
+    "question": "新电脑怎么申请？",
+    "answer": "如需申请新电脑，应按公司设备管理流程提交申请，说明申请原因、岗位需求和设备类型。设备发放时间与配置标准以审批和库存情况为准。",
+    "keywords": [
+      "新电脑",
+      "设备申请",
+      "库存",
+      "审批",
+      "配置标准"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-005",
+    "snippet": "应按公司设备管理流程提交申请，说明申请原因、岗位需求和设备类型。"
+  },
+  {
+    "id": "it-faq-006",
+    "title": "电脑故障怎么报修？",
+    "question": "电脑故障怎么报修？",
+    "answer": "电脑出现故障时，应通过 IT 工单或服务入口提交报修，填写设备编号、故障现象和紧急程度。必要时可附上报错截图，便于 IT 快速定位问题。",
+    "keywords": [
+      "电脑故障",
+      "报修",
+      "工单",
+      "设备编号",
+      "截图"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-006",
+    "snippet": "应通过 IT 工单或服务入口提交报修，填写设备编号、故障现象和紧急程度。"
+  },
+  {
+    "id": "it-faq-007",
+    "title": "公司 Wi-Fi 怎么连接？",
+    "question": "公司 Wi-Fi 怎么连接？",
+    "answer": "连接公司 Wi-Fi 时，可使用公司统一下发的网络名称和认证方式登录。若首次接入失败，请确认账号权限、密码和设备网络设置是否正确。",
+    "keywords": [
+      "Wi-Fi",
+      "无线网络",
+      "连接",
+      "认证",
+      "账号权限"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-007",
+    "snippet": "可使用公司统一下发的网络名称和认证方式登录。"
+  },
+  {
+    "id": "it-faq-008",
+    "title": "共享盘没有权限怎么办？",
+    "question": "共享盘没有权限怎么办？",
+    "answer": "如无法访问共享盘或共享文件夹，可先确认是否属于当前岗位可访问范围。若确需开通权限，请按流程提交权限申请，并由业务负责人或管理员审批。",
+    "keywords": [
+      "共享盘",
+      "权限",
+      "文件夹",
+      "访问",
+      "审批"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-008",
+    "snippet": "若确需开通权限，请按流程提交权限申请，并由业务负责人或管理员审批。"
+  },
+  {
+    "id": "it-faq-009",
+    "title": "邮箱签名怎么修改？",
+    "question": "邮箱签名怎么修改？",
+    "answer": "邮箱签名通常可在邮箱设置中的签名页面修改。若公司对签名格式有统一规范，请优先按标准模板填写姓名、职位和联系方式。",
+    "keywords": [
+      "邮箱签名",
+      "邮箱设置",
+      "模板",
+      "联系方式",
+      "规范"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-009",
+    "snippet": "邮箱签名通常可在邮箱设置中的签名页面修改。"
+  },
+  {
+    "id": "it-faq-010",
+    "title": "收不到验证码怎么办？",
+    "question": "收不到验证码怎么办？",
+    "answer": "收不到验证码时，可先确认网络状态、短信或邮件是否被拦截，以及当前绑定信息是否正确。若持续无法接收，请联系 IT 支持协助排查认证服务状态。",
+    "keywords": [
+      "验证码",
+      "短信",
+      "邮件",
+      "认证",
+      "绑定信息"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-010",
+    "snippet": "可先确认网络状态、短信或邮件是否被拦截，以及当前绑定信息是否正确。"
+  },
+  {
+    "id": "it-faq-011",
+    "title": "打印机无法使用怎么办？",
+    "question": "打印机无法使用怎么办？",
+    "answer": "打印机无法使用时，可先检查设备电源、网络连接和打印队列状态。若问题仍未恢复，请提交 IT 报修，并注明所在位置和打印机编号。",
+    "keywords": [
+      "打印机",
+      "无法使用",
+      "打印队列",
+      "网络连接",
+      "报修"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-011",
+    "snippet": "可先检查设备电源、网络连接和打印队列状态。"
+  },
+  {
+    "id": "it-faq-012",
+    "title": "如何申请系统权限开通？",
+    "question": "如何申请系统权限开通？",
+    "answer": "如需开通业务系统权限，应通过权限申请入口提交申请，说明系统名称、所需角色和业务用途。权限开通时间以审批流程和管理员处理结果为准。",
+    "keywords": [
+      "系统权限",
+      "开通",
+      "角色",
+      "业务系统",
+      "申请"
+    ],
+    "business_domain": "it",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "IT FAQ",
+    "source_locator": "it_faq_seed_v1#it-faq-012",
+    "snippet": "应通过权限申请入口提交申请，说明系统名称、所需角色和业务用途。"
+  }
+]

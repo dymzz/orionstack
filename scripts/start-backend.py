@@ -54,8 +54,12 @@ def main() -> None:
             args.host,
             "--port",
             str(args.port),
+            "--loop",
+            "app.graphs.loop:create_loop",
             "--workers",
             str(args.workers),
+            # Our structured access logger records paths, never callback codes/query strings.
+            "--no-access-log",
         ],
         env=env,
     )

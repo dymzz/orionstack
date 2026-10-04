@@ -146,12 +146,12 @@ def test_knowledge_unit_repository_lists_faq_and_chunk_units_in_single_view() ->
     assert units[0].source_kind == "faq"
     assert units[-1].source_kind == "document_chunk"
     assert "faq-001" in [unit.unit_id for unit in faq_units]
-    assert LEAVE_APPLY["id"] in [unit.unit_id for unit in faq_units]
+    assert [unit.unit_id for unit in faq_units] == ["faq-001"]
     assert [unit.unit_id for unit in chunk_units] == ["doc-001-chunk-1"]
 
 
-def test_knowledge_unit_repository_loads_hr_seed_markdown_faq_units() -> None:
-    repository = KnowledgeUnitRepository()
+def test_knowledge_unit_repository_preserves_explicit_fixture_provenance() -> None:
+    repository = KnowledgeUnitRepository(faq_repo=_StaticRepo([LEAVE_APPLY, LEAVE_PROGRESS]))
 
     faq_units = repository.list_faq_units()
 

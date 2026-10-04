@@ -1,0 +1,254 @@
+[
+  {
+    "id": "sales-faq-001",
+    "title": "报价申请在哪里提交？",
+    "question": "报价申请在哪里提交？",
+    "answer": "报价申请可通过公司销售管理平台或 CRM 系统的报价模块提交，填写客户信息、产品明细和价格方案后提交审批。",
+    "keywords": [
+      "报价",
+      "申请",
+      "提交",
+      "CRM",
+      "审批"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-001",
+    "snippet": "报价申请可通过公司销售管理平台或 CRM 系统的报价模块提交，填写客户信息、产品明细和价格方案后提交审批。"
+  },
+  {
+    "id": "sales-faq-002",
+    "title": "销售合同应该怎么走审批？",
+    "question": "销售合同应该怎么走审批？",
+    "answer": "销售合同需在合同管理平台中发起审批流程，按合同金额和类型走对应审批层级。审批通过后由法务团队审核合同条款，确认无误后盖章生效。",
+    "keywords": [
+      "合同",
+      "审批",
+      "销售",
+      "法务",
+      "盖章"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-002",
+    "snippet": "销售合同需在合同管理平台中发起审批流程，按合同金额和类型走对应审批层级。"
+  },
+  {
+    "id": "sales-faq-003",
+    "title": "演示资料在哪里找？",
+    "question": "演示资料在哪里找？",
+    "answer": "演示资料可在销售资料中心或产品文档平台中查找和下载。如需定制化演示材料，建议联系产品团队或市场团队协助准备。",
+    "keywords": [
+      "演示",
+      "资料",
+      "销售",
+      "下载",
+      "产品"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-003",
+    "snippet": "演示资料可在销售资料中心或产品文档平台中查找和下载。"
+  },
+  {
+    "id": "sales-faq-004",
+    "title": "商机信息填到哪里？",
+    "question": "商机信息填到哪里？",
+    "answer": "商机信息应在 CRM 系统的商机模块中录入，填写客户名称、需求描述、预计金额和跟进计划。录入后商机会进入团队管理视图。",
+    "keywords": [
+      "商机",
+      "CRM",
+      "录入",
+      "客户",
+      "跟进"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-004",
+    "snippet": "商机信息应在 CRM 系统的商机模块中录入，填写客户名称、需求描述、预计金额和跟进计划。"
+  },
+  {
+    "id": "sales-faq-005",
+    "title": "客户问题该找谁支持？",
+    "question": "客户问题该找谁支持？",
+    "answer": "一般客户问题可先在内部支持联系人清单中查找对应负责人。如涉及技术、法务或财务等专项问题，建议通过内部协作流程转交对应团队。",
+    "keywords": [
+      "客户",
+      "支持",
+      "联系人",
+      "协作",
+      "转交"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-005",
+    "snippet": "一般客户问题可先在内部支持联系人清单中查找对应负责人。"
+  },
+  {
+    "id": "sales-faq-006",
+    "title": "CRM 使用说明在哪里？",
+    "question": "CRM 使用说明在哪里？",
+    "answer": "CRM 使用说明可在销售资料中心或内部知识库中查看，涵盖客户录入、商机管理、报价生成等常用操作指引。",
+    "keywords": [
+      "CRM",
+      "使用说明",
+      "销售",
+      "知识库",
+      "操作"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-006",
+    "snippet": "CRM 使用说明可在销售资料中心或内部知识库中查看。"
+  },
+  {
+    "id": "sales-faq-007",
+    "title": "报价审批流程是什么？",
+    "question": "报价审批流程是什么？",
+    "answer": "报价审批流程通常包括提交报价、直属上级审核、财务确认折扣和最终审批。审批层级和金额阈值以公司报价审批规范为准。",
+    "keywords": [
+      "报价",
+      "审批",
+      "流程",
+      "折扣",
+      "财务"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-007",
+    "snippet": "报价审批流程通常包括提交报价、直属上级审核、财务确认折扣和最终审批。"
+  },
+  {
+    "id": "sales-faq-008",
+    "title": "销售资料目录在哪里？",
+    "question": "销售资料目录在哪里？",
+    "answer": "销售资料目录通常维护在销售资料中心，按产品线、资料类型和版本进行分类。可通过搜索或目录导航快速定位所需资料。",
+    "keywords": [
+      "销售资料",
+      "目录",
+      "分类",
+      "搜索",
+      "下载"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-008",
+    "snippet": "销售资料目录通常维护在销售资料中心，按产品线、资料类型和版本进行分类。"
+  },
+  {
+    "id": "sales-faq-009",
+    "title": "客户拜访记录模板在哪里？",
+    "question": "客户拜访记录模板在哪里？",
+    "answer": "客户拜访记录模板可在销售资料中心的模板库中下载，也可在 CRM 系统中直接填写电子版拜访记录。",
+    "keywords": [
+      "拜访记录",
+      "模板",
+      "客户",
+      "CRM",
+      "下载"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-009",
+    "snippet": "客户拜访记录模板可在销售资料中心的模板库中下载，也可在 CRM 系统中直接填写电子版拜访记录。"
+  },
+  {
+    "id": "sales-faq-010",
+    "title": "合同模板在哪里获取？",
+    "question": "合同模板在哪里获取？",
+    "answer": "销售合同模板可在合同管理平台或法务标准模板库中获取。使用前建议确认模板版本是否为最新，如需调整条款需经法务审核。",
+    "keywords": [
+      "合同",
+      "模板",
+      "法务",
+      "获取",
+      "版本"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-010",
+    "snippet": "销售合同模板可在合同管理平台或法务标准模板库中获取。"
+  },
+  {
+    "id": "sales-faq-011",
+    "title": "内部支持联系人清单在哪里看？",
+    "question": "内部支持联系人清单在哪里看？",
+    "answer": "内部支持联系人清单通常维护在销售资料中心或内部通讯录中，按职能分类列出技术、法务、财务等支持对接人。",
+    "keywords": [
+      "联系人",
+      "支持",
+      "清单",
+      "通讯录",
+      "对接"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-011",
+    "snippet": "内部支持联系人清单通常维护在销售资料中心或内部通讯录中，按职能分类列出各支持对接人。"
+  },
+  {
+    "id": "sales-faq-012",
+    "title": "价格口径在哪里确认？",
+    "question": "价格口径在哪里确认？",
+    "answer": "价格口径以公司最新发布的价格通知或报价审批规范为准。如有疑问，建议联系财务或销售管理团队确认当前有效价格。",
+    "keywords": [
+      "价格",
+      "口径",
+      "报价",
+      "确认",
+      "通知"
+    ],
+    "business_domain": "sales",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Sales FAQ",
+    "source_locator": "sales_faq_seed_v1#sales-faq-012",
+    "snippet": "价格口径以公司最新发布的价格通知或报价审批规范为准。"
+  }
+]

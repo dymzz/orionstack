@@ -286,19 +286,20 @@ class Settings:
             return []
 
         errors: list[str] = []
-        if self.admin_password.strip().lower() in _INSECURE_PASSWORDS:
+        local_auth = os.getenv("ORIONSTACK_AUTH_MODE", "demo") == "demo"
+        if local_auth and self.admin_password.strip().lower() in _INSECURE_PASSWORDS:
             errors.append(
                 "ORIONSTACK_ADMIN_PASSWORD must be changed for prod mode"
             )
-        if self.test_user_password.strip().lower() in _INSECURE_PASSWORDS:
+        if local_auth and self.test_user_password.strip().lower() in _INSECURE_PASSWORDS:
             errors.append(
                 "ORIONSTACK_TEST_USER_PASSWORD must be changed for prod mode"
             )
-        if self.admin_token_secret.strip() in _INSECURE_ADMIN_TOKEN_SECRETS:
+        if local_auth and self.admin_token_secret.strip() in _INSECURE_ADMIN_TOKEN_SECRETS:
             errors.append(
                 "ORIONSTACK_ADMIN_TOKEN_SECRET must be changed for prod mode"
             )
-        if len(self.admin_token_secret.strip()) < 24:
+        if local_auth and len(self.admin_token_secret.strip()) < 24:
             errors.append(
                 "ORIONSTACK_ADMIN_TOKEN_SECRET must be at least 24 characters in prod mode"
             )

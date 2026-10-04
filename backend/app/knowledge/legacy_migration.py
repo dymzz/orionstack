@@ -49,6 +49,7 @@ class MigrationPlan:
     )
     errors: list[dict[str, str]] = field(default_factory=list)
     warnings: list[dict[str, str]] = field(default_factory=list)
+    quarantined: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def snapshot_hash(self) -> str:
@@ -56,6 +57,8 @@ class MigrationPlan:
             table: sorted(rows, key=lambda row: tuple(row[key] for key in TABLE_KEYS[table]))
             for table, rows in self.rows.items()
         }
+        if self.quarantined:
+            ordered["quarantined_legacy_records"] = sorted(self.quarantined, key=lambda r: (r["tenant_id"], r["payload_hash"]))
         return content_hash(canonical_json(ordered))
 
     def summary(self) -> dict[str, Any]:
@@ -64,6 +67,7 @@ class MigrationPlan:
             "snapshot_hash": self.snapshot_hash,
             "counts": {table: len(rows) for table, rows in self.rows.items()},
             "errors": self.errors, "warnings": self.warnings,
+            "quarantined_records": len(self.quarantined),
         }
 
 
@@ -362,6 +366,13 @@ def apply_legacy_snapshot(connection: Any, plan: MigrationPlan) -> str:
                     f"({', '.join('%s' for _ in columns)})",
                     tuple(Jsonb(row[column]) if column == "metadata" else row[column] for column in columns),
                 )
+        for row in plan.quarantined:
+            connection.execute("""
+                INSERT INTO core.quarantined_legacy_records
+                    (tenant_id,payload_hash,unit_id,source_record_id,origin,payload,resolution)
+                VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,payload_hash) DO NOTHING
+            """, (row["tenant_id"],row["payload_hash"],row["unit_id"],row["source_record_id"],
+                  row["origin"],Jsonb(row["payload"]),Jsonb(row["resolution"])))
         connection.execute(
             "INSERT INTO core.import_batches (batch_id, snapshot_hash, counts) VALUES (%s, %s, %s)",
             (batch_id, snapshot_hash, Jsonb({table: len(rows) for table, rows in plan.rows.items()})),

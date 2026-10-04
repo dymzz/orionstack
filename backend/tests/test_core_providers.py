@@ -58,7 +58,8 @@ def test_env_config_reads_native_keys_and_redacts_repr(monkeypatch):
     assert settings.require_database_url().endswith("/core")
     assert settings.require_typesafe_key() == "native-jev-key"
     assert settings.require_deepseek_key() == "native-deepseek-key"
-    assert all(settings.configuration_status().values())
+    assert all(settings.configuration_status()[name] for name in
+               ("database_configured", "typesafe_configured", "deepseek_configured"))
     assert not any(secret in repr(settings) for secret in ("private", "native-jev-key", "native-deepseek-key"))
 
 
@@ -281,3 +282,19 @@ def test_full_hash_tracks_exact_content_without_merging_source_identity():
     assert len(content_hash("同一内容")) == 64
     assert content_hash("line\n") != content_hash("line\r\n")
     assert candidate().model_copy(update={"source": SourceRef(source_id="different", source_version="v1", source_locator="other")}).source.source_id != candidate().source.source_id
+
+
+@pytest.mark.parametrize('provider,body,code', [
+    ('workers_ai', {'errors':[{'code':4006,'message':'fake-secret daily quota'}]}, 'daily_allocation_exhausted'),
+    ('workers_ai', {'errors':[{'code':4000,'message':'fake-secret rate limit'}]}, 'rate_limited'),
+    ('workers_ai', None, 'rate_limited'),
+    ('jev', {'errors':[{'code':4006,'message':'fake-secret'}]}, 'http_error'),
+])
+def test_provider_quota_is_distinguished_from_transient_limits_without_error_body_leaks(provider,body,code):
+    from app.providers.http import post_json
+    response=httpx.Response(429,json=body) if body is not None else httpx.Response(429,content=b'fake-secret malformed response')
+    with transport(lambda _:response) as client:
+        with pytest.raises(ProviderError) as failure:
+            post_json(provider,'https://example.invalid/ai','fake-secret',{'text':['synthetic']},30,client)
+    assert failure.value.code==code and failure.value.status_code==429
+    assert 'fake-secret' not in str(failure.value)

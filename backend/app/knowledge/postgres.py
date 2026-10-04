@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Any
 
-from app.config.core_settings import CoreSettings
+from app.config.core_settings import CoreConfigurationError, CoreSettings
 from app.knowledge.contracts import content_hash
 
 
@@ -33,6 +33,8 @@ class PostgresDatabase:
                 url, connect_timeout=self.settings.database_connect_timeout_seconds,
                 autocommit=True,
             )
+        except psycopg.ProgrammingError:
+            raise CoreConfigurationError("ORIONSTACK_DATABASE_URL is not a valid PostgreSQL connection string") from None
         except psycopg.Error:
             # Driver messages may contain connection strings, passwords, or SQL data.
             raise DatabaseUnavailable("PostgreSQL connection failed") from None

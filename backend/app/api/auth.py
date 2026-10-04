@@ -5,15 +5,21 @@ import json
 import time
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, APIKeyCookie
+from app.account.settings import IdentitySettings
 
 from app.config.settings import settings
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer(auto_error=False,description="Legacy CLI compatibility in local demo mode only")
+session_security = APIKeyCookie(name=IdentitySettings().cookie_name,scheme_name="BrowserSession",auto_error=False,
+    description="Opaque HttpOnly server session; production cookie uses __Host- prefix. Writes require Origin + X-CSRF-Token.")
 
 
 def authenticate_user(username: str, password: str) -> tuple[bool, str]:
+    from app.account.boundary import get_identity_settings
+    if get_identity_settings().mode != "demo":
+        return False, ""
     account = settings.user_accounts.get(username)
     if account is None:
         return False, ""
@@ -37,6 +43,9 @@ def create_token(username: str, role: str) -> str:
 
 
 def verify_token(token: str) -> dict[str, Any] | None:
+    from app.account.boundary import get_identity_settings
+    if get_identity_settings().mode != "demo":
+        return None
     try:
         payload_part, signature = token.split(".", 1)
     except ValueError:
@@ -66,7 +75,13 @@ def verify_token(token: str) -> dict[str, Any] | None:
 
 def require_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    request: Request = None,
+    session_cookie: str | None = Depends(session_security),
 ) -> dict[str, Any]:
+    from app.account.boundary import get_identity_settings, session_user
+    config = get_identity_settings()
+    if request is not None and (config.mode == "oidc" or request.cookies.get(config.cookie_name)):
+        return session_user(request)
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _unauthorized("Authentication required")
     result = verify_token(credentials.credentials)
@@ -77,12 +92,10 @@ def require_user(
 
 def require_admin(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    request: Request = None,
+    session_cookie: str | None = Depends(session_security),
 ) -> str:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise _unauthorized("Admin authentication required")
-    result = verify_token(credentials.credentials)
-    if result is None:
-        raise _unauthorized("Admin authentication required")
+    result = require_user(credentials,request)
     if result["role"] != "admin":
         raise _forbidden("Admin access required")
     return result["username"]

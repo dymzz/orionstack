@@ -1,0 +1,1 @@
+export { dataRoutes } from './routes'

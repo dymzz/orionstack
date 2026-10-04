@@ -21,10 +21,10 @@ class QueryContext(CoreContract):
 
     @field_validator("query")
     @classmethod
-    def normalize_query(cls, value: str) -> str:
-        value = " ".join(value.split())
-        if not value:
+    def preserve_query(cls, value: str) -> str:
+        if not value.strip():
             raise ValueError("Query cannot be blank")
+        # Raw facts bind the exact text embedded, including user-provided whitespace.
         return value
 
 

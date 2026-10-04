@@ -1,0 +1,254 @@
+[
+  {
+    "id": "finance-faq-001",
+    "title": "如何提交日常报销？",
+    "question": "如何提交日常报销？",
+    "answer": "进入报销系统后选择对应报销类型，填写费用信息并上传合规票据后提交审批。审批通过后，报销将按公司流程进入付款环节。",
+    "keywords": [
+      "报销",
+      "费用",
+      "票据",
+      "审批",
+      "付款"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-001",
+    "snippet": "进入报销系统后选择对应报销类型，填写费用信息并上传合规票据后提交审批。"
+  },
+  {
+    "id": "finance-faq-002",
+    "title": "报销需要上传什么票据？",
+    "question": "报销需要上传什么票据？",
+    "answer": "报销通常需要上传与费用类型匹配的合规发票或票据。若为差旅类费用，还应按公司要求补充行程单、住宿单或其他附件。",
+    "keywords": [
+      "报销",
+      "票据",
+      "发票",
+      "差旅",
+      "附件"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-002",
+    "snippet": "报销通常需要上传与费用类型匹配的合规发票或票据。"
+  },
+  {
+    "id": "finance-faq-003",
+    "title": "差旅报销怎么提交？",
+    "question": "差旅报销怎么提交？",
+    "answer": "差旅结束后，应在报销系统中选择差旅报销类型，填写出差时间、地点和费用明细，并按要求上传交通、住宿等相关票据。",
+    "keywords": [
+      "差旅",
+      "报销",
+      "出差",
+      "住宿",
+      "交通"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-003",
+    "snippet": "应在报销系统中选择差旅报销类型，填写出差时间、地点和费用明细。"
+  },
+  {
+    "id": "finance-faq-004",
+    "title": "付款申请提交后在哪里查看进度？",
+    "question": "付款申请提交后在哪里查看进度？",
+    "answer": "付款申请提交后，可在付款申请记录或审批记录页面查看当前状态。若长时间未处理，可按流程联系对应审批人或财务。",
+    "keywords": [
+      "付款",
+      "申请",
+      "进度",
+      "审批",
+      "财务"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-004",
+    "snippet": "可在付款申请记录或审批记录页面查看当前状态。"
+  },
+  {
+    "id": "finance-faq-005",
+    "title": "借款申请怎么走？",
+    "question": "借款申请怎么走？",
+    "answer": "如需业务借款，应按公司流程在借款或付款系统中发起申请，填写用途、金额和预计归还或核销方式，并提交审批。",
+    "keywords": [
+      "借款",
+      "申请",
+      "用途",
+      "金额",
+      "审批"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-005",
+    "snippet": "应按公司流程在借款或付款系统中发起申请，填写用途、金额并提交审批。"
+  },
+  {
+    "id": "finance-faq-006",
+    "title": "发票抬头和税号在哪里查看？",
+    "question": "发票抬头和税号在哪里查看？",
+    "answer": "发票抬头和税号通常可在财务制度说明、报销指引页面或财务服务入口查看。开票前建议以公司最新对外开票信息为准。",
+    "keywords": [
+      "发票",
+      "抬头",
+      "税号",
+      "财务制度",
+      "开票"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-006",
+    "snippet": "发票抬头和税号通常可在财务制度说明、报销指引页面或财务服务入口查看。"
+  },
+  {
+    "id": "finance-faq-007",
+    "title": "报销被退回后怎么处理？",
+    "question": "报销被退回后怎么处理？",
+    "answer": "报销被退回后，应先查看退回原因，并按要求补充或修改费用信息、票据或附件后重新提交。若原因不明确，可联系财务或审批人确认。",
+    "keywords": [
+      "报销",
+      "退回",
+      "修改",
+      "票据",
+      "附件"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-007",
+    "snippet": "应先查看退回原因，并按要求补充或修改信息后重新提交。"
+  },
+  {
+    "id": "finance-faq-008",
+    "title": "预算不足时怎么申请付款或报销？",
+    "question": "预算不足时怎么申请付款或报销？",
+    "answer": "如遇预算不足，应先按公司流程申请预算调整或补充审批，再继续提交付款或报销申请。具体以预算管理规则和审批要求为准。",
+    "keywords": [
+      "预算",
+      "不足",
+      "付款",
+      "报销",
+      "审批"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-008",
+    "snippet": "应先按公司流程申请预算调整或补充审批，再继续提交付款或报销申请。"
+  },
+  {
+    "id": "finance-faq-009",
+    "title": "工资条在哪里查看？",
+    "question": "工资条在哪里查看？",
+    "answer": "工资条通常可在员工自助平台、薪酬系统或公司指定入口查看。如未显示，请先确认账号权限或联系财务或 HR。",
+    "keywords": [
+      "工资条",
+      "员工自助",
+      "薪酬系统",
+      "查看",
+      "权限"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-009",
+    "snippet": "工资条通常可在员工自助平台、薪酬系统或公司指定入口查看。"
+  },
+  {
+    "id": "finance-faq-010",
+    "title": "个税信息在哪里查看？",
+    "question": "个税信息在哪里查看？",
+    "answer": "个税相关信息通常可在薪酬系统、员工服务入口或个税申报相关说明中查看。具体展示范围以公司系统与当地申报规则为准。",
+    "keywords": [
+      "个税",
+      "薪酬系统",
+      "员工服务",
+      "申报",
+      "查看"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-010",
+    "snippet": "个税相关信息通常可在薪酬系统、员工服务入口或个税申报相关说明中查看。"
+  },
+  {
+    "id": "finance-faq-011",
+    "title": "对公付款需要准备哪些材料？",
+    "question": "对公付款需要准备哪些材料？",
+    "answer": "对公付款通常需要准备合同、发票、收款账户信息及公司流程要求的审批材料。具体材料范围以付款类型和制度要求为准。",
+    "keywords": [
+      "对公付款",
+      "合同",
+      "发票",
+      "收款账户",
+      "审批材料"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-011",
+    "snippet": "对公付款通常需要准备合同、发票、收款账户信息及审批材料。"
+  },
+  {
+    "id": "finance-faq-012",
+    "title": "备用金怎么申请或核销？",
+    "question": "备用金怎么申请或核销？",
+    "answer": "如需申请备用金，应按流程在财务系统中提交申请；使用后应在规定时间内按要求提交票据并完成核销。具体规则以公司财务制度为准。",
+    "keywords": [
+      "备用金",
+      "申请",
+      "核销",
+      "票据",
+      "财务制度"
+    ],
+    "business_domain": "finance",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Finance FAQ",
+    "source_locator": "finance_faq_seed_v1#finance-faq-012",
+    "snippet": "应按流程在财务系统中提交申请；使用后按要求提交票据并完成核销。"
+  }
+]

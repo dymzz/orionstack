@@ -1,6 +1,7 @@
 """Configuration check; explicit flags make a tiny synthetic live API request."""
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -12,16 +13,34 @@ from app.decision.deepseek import DeepSeekClient
 from app.decision.jev import JevClient
 from app.decision.providers import ProviderError
 from app.knowledge.contracts import AccessContext, EvidenceCandidate, QueryContext, SourceRef
+from app.knowledge.embedding import create_embedding_client
+from app.knowledge.postgres import DatabaseUnavailable, PostgresDatabase
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check core environment or explicitly smoke-test providers")
     parser.add_argument("--live-jev", action="store_true")
     parser.add_argument("--live-deepseek", action="store_true")
+    parser.add_argument("--live-embedding", action="store_true")
+    parser.add_argument("--embedding-provider", choices=("onnx", "cloudflare_workers_ai"))
+    parser.add_argument("--live-database", action="store_true", help="Read-only PostgreSQL connectivity and pgvector check")
     args = parser.parse_args()
     settings = CoreSettings()
+    if args.embedding_provider:
+        settings = replace(settings, embedding_provider=args.embedding_provider)
     report = settings.configuration_status()
     try:
+        if args.live_database:
+            with PostgresDatabase(settings).connection() as connection:
+                report["postgresql"] = {
+                    "connected": True,
+                    "server_major": connection.execute("SELECT current_setting('server_version_num')::int / 10000").fetchone()[0],
+                    "pgvector_available": bool(connection.execute("SELECT 1 FROM pg_available_extensions WHERE name = 'vector'").fetchone()),
+                }
+        if args.live_embedding:
+            batch = create_embedding_client(settings).embed(("病假申请需要哪些材料？", "病假申请需要提交医疗证明。"))
+            report["embedding"] = {"provider": batch.signature.provider, "model": batch.signature.model, "dimensions": batch.signature.dimensions,
+                                   "vectors": len(batch.vectors), "signature": batch.signature.fingerprint}
         if args.live_jev:
             decision = JevClient(settings).decide(QueryContext(query="What is the exact due date of invoice INV-DEMO-001?"))
             report["jev"] = {"model": decision.model, "strategy": decision.strategy,
@@ -46,7 +65,7 @@ def main() -> int:
                                   "usage": answer.usage.model_dump() if answer.usage else None}
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
-    except (CoreConfigurationError, ProviderError) as error:
+    except (CoreConfigurationError, DatabaseUnavailable, ProviderError) as error:
         print(f"[orionstack] {error}", file=sys.stderr)
         return 2
 

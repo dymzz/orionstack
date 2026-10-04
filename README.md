@@ -1,16 +1,26 @@
 # OrionStack
 
+> 2026-10-04 第 3 项 P1-2 最小反馈审计闭环完成：帮助度、候选相关性和事实纠错关联实际运行并幂等追加，Logs 串联原始召回/后处理/来源链/回答/反馈；服务端 Cedar 与当前来源访问校验，当前只读自己的记录。反馈均待复核、不可训练。Alembic 至 010_feedback_audit；155 项相关回归、49 项真实 HTTP 检查与浏览器验收通过。复核/训练导出、Core Cedar 统一和 OTel 仍待后续。见 [验收报告](docs/reports/2026-10-04_feedback_audit_acceptance.md)。
+
+> 2026-10-04 工作台三模式已完成：资料问答附原文引用；普通聊天独立调用 DeepSeek 并保留有限上下文；系统反馈显示服务端实际调用状态、原因与请求 ID，可回读自己的回执。新增 append-only 工作台审计与 Alembic 009；160 项相关回归、36 项真实 HTTP 检查及网页交互通过。见 [三模式验收](docs/reports/2026-10-04_workbench_modes_acceptance.md)。
+
+> 2026-10-04 本机工作台已通过真实 Confluence 问答：服务端将 admin/test 绑定独立验证租户，3 份原文 / 69 个本地 Qwen3 向量可检索，DeepSeek 回答附原文引用。47 项真实链路检查和浏览器验收通过；完整 5,189 份语料的后台索引仍在运行。配置、范围和运行记录见 [工作台知识问答验收](docs/reports/2026-10-04_workbench_knowledge_acceptance.md)。
+
+> 2026-10-04 当前界面：登录默认聊天工作台；DataOps 提供附件/版本、强制隔离、Cedar、pgBackRest 仓库适配与脱敏诊断。DataOps 008 扫描迁移已完成，工作台迁移已至 009；扫描检查独立追加，未 ready 版本不能生成派生结果。基础设施尚未部署；联合恢复、retention 执行与派生 worker 待实施。旧 domain 演示资料和文档管理/范围 UI 已退休，历史 Raw 保留。详见 [当前 DataOps 边界](docs/designs/16_dataops_assets_runtime.md)。
+
 企业知识助手 / 文档问答最小可运行系统。
 
-当前版本提供本地 FAQ 与文档问答、抽取审核发布、动态查询适配器与来源追溯。下一版本使用同一个 PostgreSQL 数据库存储结构化事实和 pgvector 向量，接入 TypeSafe Jev 完成检索决策与证据筛选，再由 LLM 根据证据生成回答。外部连接与编排交给 n8n / workflow，经稳定的 Action/Event 契约连接 Integration Layer；workflow 不进入核心检索链。当前设计见根目录《OrionStack — DB + Vector + JEV 检索架构设计.md》。
+P1-0/P1-1：四模块网页与新核心 API、逐条 EvidenceBundle/ChainProfile、BFF server-side session 已实现。企业身份使用外部 OIDC，内部主体采用 issuer/subject 映射，生产不用本地密码；真实 IdP 联调待配置。Secrets 交 OpenBao，正式迁移用 Alembic；DataOps 已接入 Cedar，三类待复核反馈和自己的实际运行审计 HTTP/Logs 已实现；完整 Core 授权统一、复核/训练导出、实体查询、OTel SDK 与联合恢复按 P1-2 至 P1-4 实施。见 [身份与运维边界](docs/designs/15_security_identity_operations.md) 和 [交付计划](docs/designs/12_p1_delivery_plan.md)。
+
+工作台已经使用同一个 PostgreSQL 数据库存储知识和 pgvector 向量，默认通过本地 ONNX Runtime 调用 Qwen3-Embedding-0.6B，Cloudflare Workers AI REST 保留为备选。先封存原始 Top-K，再按需使用 Jev、reranker 或规则处理，LLM 根据最终证据生成回答。外部连接与编排通过稳定契约交给 n8n / workflow，workflow 不进入核心检索链。当前设计见根目录《OrionStack — DB + Vector + JEV 检索架构设计.md》。
 
 ## 能做什么
 
-- 上传 `.txt` / `.md` / `.pdf` / `.docx` 文档
-- 基于文档内容进行问答检索与引用返回
-- FAQ 模式兜底（弱命中或无命中时自动回落）
-- 问答记录与用户反馈自动落盘
-- 开发态可查看最近问答记录与反馈
+- 工作台区分资料问答、普通聊天与系统反馈；资料查询展示引用和来源链，普通聊天有真实 DeepSeek 回答，反馈提供本次服务端执行回执。
+- DataOps 选择文件或文件夹，按 Asset/AssetVersion 隔离核验；存储、Tika、ClamAV 未配置时明确不可用。
+- pgBackRest 备份状态、文件名和授权下载接口；未部署时显示待配置，联合恢复未验证。
+- 管理员查看账号、开发演示身份和脱敏系统诊断；领域审计与系统遥测分开。
+- 旧阶段工具与操作说明保留作历史兼容参考，新的实现范围以 P1 交付计划为准。
 
 ## 前置要求
 
@@ -26,7 +36,7 @@
 
 ## 快速启动（当前过渡基线）
 
-当前版本默认使用本地 FAQ 与文档检索，不需要启动 Elasticsearch。下一版本目标是 **同一个 PostgreSQL 数据库中的结构化表 + pgvector 向量表**，由 TypeSafe Jev 选择检索路径、筛选候选证据，再由 LLM 生成带来源的回答。接入尚未完成，详见 [目标架构与交付计划](docs/designs/4_postgresql_jev_architecture.md)。
+当前版本默认使用本地 FAQ 与文档检索，不需要启动 Elasticsearch。下一版本目标是 **同一个 PostgreSQL 数据库中的结构化表 + pgvector 向量表**；Jev 是可选处理器，原始召回和训练派生独立保存。新库、CLI 与认证后的 `/api/query`、`/api/documents` 已实现，模块化网页已切换新核心，Web 使用 BFF session；详见 [目标架构与交付计划](docs/designs/4_postgresql_jev_architecture.md)。
 
 本地配置写入 `.env`：
 
@@ -61,7 +71,21 @@ M1 已提供单库 PostgreSQL + pgvector schema、JSONL 迁移预览和 Jev/Deep
 .venv\Scripts\python.exe scripts/migrate-postgres.py
 ```
 
-以上命令默认只检查配置和预览，不调用模型、不连接数据库。实际迁移需显式 `--apply`，真实模型测试需 `--live-jev` / `--live-deepseek`。新 query/entities/actions/events 四接口尚未注册，现有问答保持当前链路。迁移错误、版本约束、联调进度与命令见 [M1 运行说明](docs/designs/5_core_foundation_runbook.md)。
+以上命令默认只检查配置和预览，不调用模型、不连接数据库。实际迁移需显式 `--apply`，真实模型测试需 `--live-jev` / `--live-deepseek`。新 `/api/query` 与文档生命周期接口已注册；entities/actions/events 仍为草案，旧网页继续使用原链路。迁移错误、版本约束、联调进度与命令见 [M1 运行说明](docs/designs/5_core_foundation_runbook.md)。
+
+M2 新增 Workers AI embedding、pgvector 召回、不可变 raw journal、可选处理器、独立反馈及训练样本派生。默认 embedding provider 为 `onnx`，从 `ORIONSTACK_ONNX_DIR` 读取本地 Qwen3-Embedding-0.6B / 1024 维。设置 `ORIONSTACK_EMBEDDING_PROVIDER=cloudflare_workers_ai` 才使用 Cloudflare 备选及其 `CF_API_TOKEN`、`CF_ACCOUNT_ID`。`scripts/check-core-providers.py --live-embedding` 使用两条虚构中文文本验证 API；入库、召回和隔离 PostgreSQL 测试命令见 [原始召回运行说明](docs/designs/6_raw_retrieval_processing.md)。未配置 Jev key 也可运行默认 raw 链路。
+
+## P0 核心 API
+
+P0 1–4 已完成真实 legacy 迁移、受控文档入库、认证查询/raw 日常归档与逐字摘录的来源核验。目标 PostgreSQL 17 / pgvector 0.8.2 已保存 5 份文档、94 个 chunk 向量和 99 条知识记录；两条缺来源 FAQ 的 7 条历史记录单独隔离，原文件保留。Workers AI、DeepSeek 和真实 query/upload/download/revoke 已联调通过。
+
+使用新核心请调用 `/api/query` 和 `/api/documents`；登录仍用 `/api/v1/auth/login`。旧网页迁移、结构化实体查询、反馈 HTTP 与中文质量评测属于下一步。接口、服务端权限映射、清单迁移与 PowerShell 示例见 [P0 运行说明](docs/designs/7_p0_query_ingestion_runbook.md)；实际契约见 [Knowledge API](docs/designs/core_knowledge.openapi.json)。
+
+2026-10-03 追加现有 HR 文档与真实 DeepSeek 验证已通过：本地 Qwen3 召回 18 个 raw 候选，最终 5 个候选、2 条核验引用，raw 与回答真实保存。当前网页操作步骤、已验证项目和旧链路误答问题见 [网页验证指引](docs/reports/2026-10-03_web_validation.md)。
+
+下一阶段以 [P1-0 至 P1-4 修订计划](docs/designs/12_p1_delivery_plan.md) 为准：核心契约、四模块网页、新核心 QA、逐条 ChainProfile 来源事实链、反馈/审计/标签、结构化只读查询及语义/来源链评测与备份隔离恢复。信用/风险决策系统与 workflow/rollback 待其他模块完善后实现；保留边界说明，不作为当前核心依赖。设计已记录，DTO/API 扩展和网页待实施，见 [ChainProfile](docs/designs/13_chain_profile.md)、[架构模式边界](docs/designs/14_architecture_patterns.md) 与 [模块化网页](docs/designs/11_modular_web_plan.md)。
+
+Confluence 基准入库入口为 `scripts/ingest-confluence-benchmark.py`，读取 `data/EnterpriseRAG-Bench/confluence`，默认只预览；`--apply --stage-only` 保存原文和 chunk，`--apply --index-only` 批量生成本地 Qwen3 ONNX 向量并恢复中断进度。默认使用独立租户 `enterprise-rag-bench`，保留原始 dsid 与相对路径，并把版本清单保存到 PostgreSQL。命令、来源映射和验收方式见 [Confluence 基准入库说明](docs/designs/8_enterprise_rag_benchmark_ingestion.md)。
 
 ## 生产部署
 

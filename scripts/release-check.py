@@ -20,6 +20,17 @@ QUICK_EXTRA_TEST_FILES = [
     "backend/tests/test_storage_backup.py",
     "backend/tests/test_core_providers.py",
     "backend/tests/test_postgres_migration.py",
+    "backend/tests/test_raw_retrieval.py",
+    "backend/tests/test_raw_postgres_integration.py",
+    "backend/tests/test_p0_core.py",
+    "backend/tests/test_p0_fail_closed.py",
+    "backend/tests/test_p0_query_acceptance.py",
+    "backend/tests/test_benchmark_ingestion.py",
+    "backend/tests/test_onnx_embedding.py",
+    "backend/tests/test_p1_evidence.py",
+    "backend/tests/test_identity_boundary.py",
+    "backend/tests/test_security_boundary.py",
+    "backend/tests/test_dataops_assets.py",
 ]
 
 
@@ -62,6 +73,9 @@ def main() -> None:
             backend_command.append("backend/tests")
         backend_command.append("-q")
         steps.append(CheckStep("backend tests", backend_command, repo_root))
+        for script in ("export-core-openapi.py", "export-evidence-example.py"):
+            steps.append(CheckStep(script, [python_command, "scripts/"+script, "--check"], repo_root))
+        steps.append(CheckStep("module boundaries", [python_command, "scripts/check-module-boundaries.py"], repo_root))
         steps.append(
             CheckStep(
                 "storage backup dry-run",
@@ -164,7 +178,10 @@ def sanitized_compose_env() -> dict[str, str]:
             "ORIONSTACK_EXTRACTION_API_KEY": "",
             "TYPESAFE_API_KEY": "",
             "DEEPSEEK_API_KEY": "",
+            "CF_API_TOKEN": "",
+            "CF_ACCOUNT_ID": "",
             "ORIONSTACK_DATABASE_URL": "",
+            "ORIONSTACK_OIDC_CLIENT_SECRET": "",
             "ORIONSTACK_ADMIN_PASSWORD": "replace-with-a-strong-password",
             "ORIONSTACK_ADMIN_TOKEN_SECRET": "replace-with-at-least-24-random-characters",
         }

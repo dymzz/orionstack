@@ -1,0 +1,254 @@
+[
+  {
+    "id": "admin-faq-001",
+    "title": "会议室怎么预订？",
+    "question": "会议室怎么预订？",
+    "answer": "会议室通常可通过会议室预订系统或企业办公入口进行预订。请选择会议时间、会议室和参会信息后提交，预订结果以系统显示为准。",
+    "keywords": [
+      "会议室",
+      "预订",
+      "办公入口",
+      "会议时间",
+      "系统"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-001",
+    "snippet": "会议室通常可通过会议室预订系统或企业办公入口进行预订。"
+  },
+  {
+    "id": "admin-faq-002",
+    "title": "访客来访需要怎么登记？",
+    "question": "访客来访需要怎么登记？",
+    "answer": "访客来访通常需要在访客登记入口提交来访人信息、到访时间和被访人信息。登记成功后，按现场要求完成身份核验或前台确认。",
+    "keywords": [
+      "访客",
+      "来访",
+      "登记",
+      "前台",
+      "身份核验"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-002",
+    "snippet": "访客来访通常需要在访客登记入口提交来访人信息。"
+  },
+  {
+    "id": "admin-faq-003",
+    "title": "门禁权限怎么申请？",
+    "question": "门禁权限怎么申请？",
+    "answer": "如需开通门禁权限，可通过行政或园区服务入口提交申请，并填写通行区域、申请原因和使用期限。开通结果以审批和系统配置完成情况为准。",
+    "keywords": [
+      "门禁",
+      "权限",
+      "申请",
+      "园区服务",
+      "审批"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-003",
+    "snippet": "如需开通门禁权限，可通过行政或园区服务入口提交申请。"
+  },
+  {
+    "id": "admin-faq-004",
+    "title": "办公用品怎么申领？",
+    "question": "办公用品怎么申领？",
+    "answer": "办公用品通常可通过行政服务入口或固定申领流程提交申请。请按要求选择用品类型、数量和用途，审批或发放结果以系统通知为准。",
+    "keywords": [
+      "办公用品",
+      "申领",
+      "行政服务",
+      "数量",
+      "通知"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-004",
+    "snippet": "办公用品通常可通过行政服务入口或固定申领流程提交申请。"
+  },
+  {
+    "id": "admin-faq-005",
+    "title": "工位怎么申请或调整？",
+    "question": "工位怎么申请或调整？",
+    "answer": "如需申请新工位或调整工位，可通过行政服务入口提交申请，并说明所在部门、人员信息和调整原因。最终安排以行政确认结果为准。",
+    "keywords": [
+      "工位",
+      "申请",
+      "调整",
+      "部门",
+      "行政确认"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-005",
+    "snippet": "如需申请新工位或调整工位，可通过行政服务入口提交申请。"
+  },
+  {
+    "id": "admin-faq-006",
+    "title": "工牌丢了怎么补办？",
+    "question": "工牌丢了怎么补办？",
+    "answer": "工牌遗失后，应按流程尽快提交补办申请，并根据要求完成身份确认或费用处理。补办完成时间和领取方式以行政通知为准。",
+    "keywords": [
+      "工牌",
+      "丢失",
+      "补办",
+      "身份确认",
+      "行政通知"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-006",
+    "snippet": "工牌遗失后，应按流程尽快提交补办申请。"
+  },
+  {
+    "id": "admin-faq-007",
+    "title": "快递收发在哪里处理？",
+    "question": "快递收发在哪里处理？",
+    "answer": "公司快递的收发通常按前台、收发室或园区指定流程处理。具体收件地点、寄件要求和领取方式以公司行政通知为准。",
+    "keywords": [
+      "快递",
+      "收发",
+      "前台",
+      "收发室",
+      "领取"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-007",
+    "snippet": "公司快递的收发通常按前台、收发室或园区指定流程处理。"
+  },
+  {
+    "id": "admin-faq-008",
+    "title": "停车位怎么申请？",
+    "question": "停车位怎么申请？",
+    "answer": "如需申请停车位，可通过行政或园区服务入口提交停车申请，并填写车牌、使用期限和申请原因。审核结果以系统或行政通知为准。",
+    "keywords": [
+      "停车位",
+      "申请",
+      "车牌",
+      "园区服务",
+      "审核"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-008",
+    "snippet": "如需申请停车位，可通过行政或园区服务入口提交停车申请。"
+  },
+  {
+    "id": "admin-faq-009",
+    "title": "办公区设备报修怎么提？",
+    "question": "办公区设备报修怎么提？",
+    "answer": "办公区设备如空调、照明、门锁或公共设施出现问题时，可通过行政报修入口提交工单，并填写位置、故障现象和联系方式。处理进度以工单状态为准。",
+    "keywords": [
+      "报修",
+      "设备",
+      "空调",
+      "工单",
+      "进度"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-009",
+    "snippet": "办公区设备出现问题时，可通过行政报修入口提交工单。"
+  },
+  {
+    "id": "admin-faq-010",
+    "title": "名片怎么申请？",
+    "question": "名片怎么申请？",
+    "answer": "如需申请名片，可通过行政服务入口提交申请，并按模板填写姓名、职位、联系方式等信息。制作和领取时间以行政安排为准。",
+    "keywords": [
+      "名片",
+      "申请",
+      "模板",
+      "职位",
+      "行政服务"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-010",
+    "snippet": "如需申请名片，可通过行政服务入口提交申请。"
+  },
+  {
+    "id": "admin-faq-011",
+    "title": "前台电话或服务入口在哪里看？",
+    "question": "前台电话或服务入口在哪里看？",
+    "answer": "前台电话、行政服务入口或办公支持方式通常可在企业通讯录、员工门户或行政服务页面查看。若页面信息缺失，可联系直属行政同事确认。",
+    "keywords": [
+      "前台",
+      "电话",
+      "服务入口",
+      "通讯录",
+      "员工门户"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-011",
+    "snippet": "前台电话或行政服务入口通常可在企业通讯录或员工门户查看。"
+  },
+  {
+    "id": "admin-faq-012",
+    "title": "办公室搬迁或座位变更通知在哪里看？",
+    "question": "办公室搬迁或座位变更通知在哪里看？",
+    "answer": "办公室搬迁、座位调整或办公区变更通知通常通过企业公告、邮件通知或行政服务页面发布。具体执行时间与安排以最新正式通知为准。",
+    "keywords": [
+      "办公室搬迁",
+      "座位变更",
+      "通知",
+      "企业公告",
+      "邮件"
+    ],
+    "business_domain": "admin",
+    "document_type": "faq",
+    "source_type": "manual_faq",
+    "lifecycle_status": "active",
+    "access_scope": "internal",
+    "source_label": "Admin FAQ",
+    "source_locator": "admin_faq_seed_v1#admin-faq-012",
+    "snippet": "办公室搬迁或座位变更通知通常通过企业公告或邮件通知发布。"
+  }
+]

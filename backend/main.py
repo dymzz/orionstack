@@ -1,19 +1,25 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import tomllib
+from uuid import uuid4
 
 from elasticsearch import Elasticsearch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.identity import router as identity_router
+from app.api.routes.core_knowledge import router as core_knowledge_router
+from app.api.routes.workbench import router as workbench_router
+from app.api.routes.audit_feedback import router as audit_feedback_router
+from app.api.routes.dataops import router as dataops_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.extraction import router as extraction_router
 from app.api.routes.health import router as health_router
 from app.config.settings import settings
 from app.indexing.elastic_indexer import ElasticIndexer
-from app.observability.logging import configure_logging, get_logger, log_request
+from app.observability.logging import configure_logging, get_logger, log_request, trace_id_ctx
 from app.storage.repositories.chunk_repo import ChunkRepository
 from app.storage.repositories.extracted_faq_repo import ExtractedFaqRepo
 from app.storage.repositories.faq_repo import FAQRepository
@@ -31,6 +37,8 @@ async def lifespan(app: FastAPI):
     app.state.elastic_indexing_error = None
 
     settings.assert_production_safe()
+    from app.account.settings import IdentitySettings
+    IdentitySettings().validate()
     logger.info(
         "startup_begin app_mode=%s search_backend=%s planner_provider=%s dynamic_query_adapter=%s",
         settings.app_mode,
@@ -95,16 +103,33 @@ app.add_middleware(
     allow_origins=list(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "X-CSRF-Token"],
+    expose_headers=["X-Request-ID", "X-Core-Request-ID", "X-Retrieval-Event-ID"],
 )
 
 
 @app.middleware("http")
 async def access_log_middleware(request, call_next):
-    return await log_request(request, call_next)
+    request_id = str(uuid4())
+    token = trace_id_ctx.set(request_id)
+    try:
+        response = await log_request(request, call_next)
+        response.headers["X-Request-ID"] = request_id
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+    finally:
+        trace_id_ctx.reset(token)
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(identity_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
 app.include_router(extraction_router)
+app.include_router(core_knowledge_router)
+from app.api.routes.conversation import router as conversation_router
+app.include_router(conversation_router)
+app.include_router(workbench_router)
+app.include_router(audit_feedback_router)
+app.include_router(dataops_router)

@@ -20,6 +20,7 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("ORIONSTACK_SEARCH_BACKEND", "local")
 os.environ.setdefault("ORIONSTACK_ENABLE_QUERY_PLANNER", "false")
 os.environ.setdefault("ORIONSTACK_ENABLE_FAST_TRACK", "false")
+os.environ.setdefault('ORIONSTACK_ENABLE_LEGACY_DOCUMENT_UPLOAD', 'true')
 
 TEST_TMP_ROOT = BACKEND_ROOT.parent / f"pytest-cache-files-{uuid.uuid4().hex}"
 TEST_TMP_ROOT.mkdir(exist_ok=True)
@@ -76,7 +77,14 @@ def fixture_case(case_name: str) -> dict:
 @lru_cache(maxsize=1)
 def seed_fixture_paths() -> tuple[Path, ...]:
     fixture_dir = Path(__file__).resolve().parent / "fixtures"
-    paths = tuple(sorted(fixture_dir.glob("domain_*_faq_seed_*.md")))
+    generated = TEST_TMP_ROOT / 'faq-inputs'
+    generated.mkdir(exist_ok=True)
+    paths = []
+    for fixture in sorted(fixture_dir.glob('faq_*.json')):
+        path = generated / (fixture.stem + '.md')
+        path.write_text('```json\n' + fixture.read_text(encoding='utf-8') + '\n```\n',encoding='utf-8')
+        paths.append(path)
+    paths = tuple(paths)
     if not paths:
         raise AssertionError("failed to locate FAQ seed fixture files")
     return paths

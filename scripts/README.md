@@ -10,6 +10,18 @@ python scripts/<script_name>.py
 
 本地普通配置可使用 `.env`；部署时核心连接串与密钥由进程环境注入，优先于 `.env`。
 
+当前 P1 检查：`check-module-boundaries.py`、`export-core-openapi.py --check`、`export-evidence-example.py --check`。
+
+`validate-feedback-audit-http.py` 默认只预览；显式 `--live` 经本地网页 proxy/BFF/PostgreSQL/Cedar 读取既有真实运行并追加三类 `automated_test` 待复核反馈。要求 demo 模式且 test 服务端绑定验证租户，不调整身份、不调用模型。验证 actor/event/candidate、CSRF、幂等、另一主体拒绝、分页和 raw/answer 不变；保存 `.runtime/workbench/feedback-audit-http.json` 并撤销自己的验证会话。每次 live 会追加测试记录；不要把它们当作真实用户评价或已确认训练标签。见 [验收范围](../docs/reports/2026-10-04_feedback_audit_acceptance.md)。
+
+`validate-dataops-http.py` 默认预览；`--live` 只访问本地 demo 后端，验证 cookie/CSRF、真实 Cedar 拒绝、待配置状态、诊断脱敏、一个固定合成空检索及运行版本的数据库回读。不上传业务文件或调用外部模型；最后撤销自己的验证会话，报告默认写入 `.runtime/dataops/http-acceptance.json`。
+
+`validate-workbench-http.py` 默认预览；显式 `--live` 才经本地网页 proxy/BFF 调用真实 DeepSeek 普通聊天、上下文追问和服务端已授权的 Confluence 验证原文。要求 demo 模式且 test 显式绑定 enterprise-rag-bench-validation，不自动调整身份。验证 CSRF、调用方不能提供身份、独立聊天审计、逐字引用、空召回跳过、owner-only 回执，保存 `.runtime/workbench/modes-http-acceptance.json` 并撤销自己的验证会话。运行记录会追加到 PostgreSQL，不改写 raw。
+
+旧 `validate-p1-http.py --live` 验证历史固定合成文档路径，需要显式本地兼容开关 `ORIONSTACK_ENABLE_LEGACY_DOCUMENT_UPLOAD=true`，不可用于生产且不可替代 Assets 隔离验收。企业 OIDC 参数与 OpenBao 注入见 [身份与运维边界](../docs/designs/15_security_identity_operations.md)。
+
+正式 schema upgrade 由 Alembic 执行，预览仍可用 `migrate-postgres.py --schema-only`，应用用 `--apply`；不在代码中改写已安装迁移 SQL。旧 SchemaMigrator 的 apply 仅用于隔离 SQL 测试兼容。
+
 ## 单库迁移与模型检查（M1）
 
 先运行 `uv sync` 更新依赖。新核心读取 `ORIONSTACK_DATABASE_URL`、`TYPESAFE_API_KEY`、`DEEPSEEK_API_KEY`，没有硬编码密钥或旧 provider key 回退。
@@ -23,6 +35,26 @@ python scripts/<script_name>.py
 默认只输出配置存在性或文件迁移预览。schema/导入实际执行加 `--apply`，须目标库具备 pgvector；迁移脚本和批次均幂等，错误回滚整批。`--storage-root` 指定恢复目录，`--tenant-id` 仅为缺少 tenant 的记录提供默认值，`--no-seed` 排除内置 FAQ。孤立来源、非法状态等预览错误会阻断全部导入。
 
 真实 API 检查使用虚构测试材料并产生少量调用费用，分别运行 `scripts/check-core-providers.py --live-jev` 或 `--live-deepseek`。当前四个新 API 仍是草案，完整边界与联调限制见 [M1 运行说明](../docs/designs/5_core_foundation_runbook.md)。
+
+以上为 M1 阶段说明。当前认证 `/api/query` 和文档生命周期已接入，见 [P0 运行说明](../docs/designs/7_p0_query_ingestion_runbook.md)。
+
+## Confluence 基准语料
+
+```powershell
+.venv\Scripts\python.exe scripts/ingest-confluence-benchmark.py --preview
+.venv\Scripts\python.exe scripts/ingest-confluence-benchmark.py --apply --stage-only
+.venv\Scripts\python.exe scripts/ingest-confluence-benchmark.py --apply --index-only --embedding-provider onnx --workers 1
+```
+
+默认读取 `data/EnterpriseRAG-Bench/confluence`，只预览；实际写入需 `--apply`，默认独立租户 `enterprise-rag-bench`。固定清单记录原始 dsid、文件/chunk hash 和来源路径，已提交的匹配向量在重跑时复用。`--provider-timeout` 只调整这次批量作业；`--max-batches` 可显式限制调用，未完整向量化时报告 partial。来源映射、数据库验收和 raw 查询见 [基准运行说明](../docs/designs/8_enterprise_rag_benchmark_ingestion.md)。
+
+默认 embedding 为本地 Qwen3 ONNX；Cloudflare 需显式选择。数据库向量一致性检查：
+
+```powershell
+.venv\Scripts\python.exe scripts/compare-postgres-embeddings.py --tenant-id default --sample-size 94 --batch-size 8
+```
+
+配置、模型签名与偏移判断见 [本地 Qwen3 说明](../docs/designs/9_local_qwen3_embeddings.md)。
 
 ---
 
@@ -419,3 +451,9 @@ npm --prefix frontend run build
 
 - `ORIONSTACK_CHAT_RECORD_MAX_COUNT=200`
 - `ORIONSTACK_FEEDBACK_RECORD_MAX_COUNT=200`
+
+## P0-3/4 查询与证据回答验收
+
+`validate-p0-query.py` 默认只检查配置。`--live --failure-check` 验证真实认证、本地 Qwen3 和 PostgreSQL，回答层使用进程内桩。增加 `--synthetic` 使用固定虚构材料调用真实 DeepSeek，测试租户整体回滚。明确授权现有材料外传后，可用 `--live --live-deepseek --document-id <id>`；该模式强制限定文档范围，出网前再次检查候选来源，raw 和回答真实保存。两种真实模型模式不能同时启用。支持 `--report` 保存脱敏结果。
+
+命令与边界见 [P0 运行说明](../docs/designs/7_p0_query_ingestion_runbook.md)，结果见 [验收报告](../docs/reports/2026-10-03_p0_3_4_acceptance.md)。
