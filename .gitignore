@@ -19,6 +19,7 @@ node_modules/
 # Local runtime artifacts
 .runtime/
 data/
+data
 
 # Environment files
 .env
